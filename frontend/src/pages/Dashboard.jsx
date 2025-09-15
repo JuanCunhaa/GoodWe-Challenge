@@ -1,7 +1,7 @@
 import Rentabilidade from '../components/cards/Rentabilidade.jsx'
-import Geradores from '../components/cards/Geradores.jsx'
+import ResumoEnergia from '../components/cards/ResumoEnergia.jsx'
+import ClimaTempo from '../components/cards/ClimaTempo.jsx'
 import Baterias from '../components/cards/Baterias.jsx'
-import CarregadoresVeiculos from '../components/cards/CarregadoresVeiculos.jsx'
 import Alexa from '../components/cards/Alexa.jsx'
 
 export default function Dashboard() {
@@ -10,17 +10,14 @@ export default function Dashboard() {
       <div className="lg:col-span-12">
         <Rentabilidade />
       </div>
+      <div className="lg:col-span-12">
+        <ResumoEnergia />
+      </div>
       <div className="sm:col-span-6 lg:col-span-6">
-        <Geradores />
+        <ClimaTempo />
       </div>
       <div className="sm:col-span-6 lg:col-span-6">
         <Baterias />
-      </div>
-      <div className="sm:col-span-6 lg:col-span-6">
-        <CarregadoresVeiculos />
-      </div>
-      <div className="sm:col-span-6 lg:col-span-6">
-        <Alexa />
       </div>
     </section>
   )

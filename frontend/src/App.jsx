@@ -14,11 +14,22 @@ import Admin from './pages/Admin.jsx'
 import Auditoria from './pages/Auditoria.jsx'
 import Configuracoes from './pages/Configuracoes.jsx'
 import Perfil from './pages/Perfil.jsx'
+// Auth pages (new)
+import Login from './pages/Login.jsx'
+import Register from './pages/Register.jsx'
 
 export default function App(){
+  function RequireAuth({ children }){
+    const token = localStorage.getItem('token');
+    if (!token) return <Navigate to="/login" replace />;
+    return children;
+  }
   return (
     <Routes>
-      <Route element={<Layout/>}>
+      {/* Auth routes (no Layout) */}
+      <Route path="/login" element={<Login/>} />
+      <Route path="/register" element={<Register/>} />
+      <Route element={<RequireAuth><Layout/></RequireAuth>}>
         <Route path="/" element={<Dashboard/>} />
         <Route path="/live" element={<Live/>} />
         <Route path="/fluxo" element={<Fluxo/>} />

@@ -1,0 +1,16 @@
+node_modules/
+.env
+*.log
+dist/
+build/
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+*.sqlite
+*.db
+temp/
+*.mp3
+*.wav
+.idea/
+# Para arquivos

@@ -13,6 +13,7 @@ import { AlertBadge, AlertsPanel } from "../ui/Alerts.jsx";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore } from "../../state/AppStore.jsx";
 import BatteryBar from "./BatteryBar.jsx";
+import { goodweApi } from "../../services/goodweApi.js";
 
 const springIn = { type: "spring", stiffness: 260, damping: 22 };
 const exitUp = { y: -8, opacity: 0, transition: { duration: 0.18 } };
@@ -46,6 +47,12 @@ export default function CarregadoresVeiculos() {
   const selectedVehicle =
     view.group === "vehicle" && view.index != null ? vehiclesSafe[view.index] : null;
 
+  // ---- SEMS powerflow / EV chargers ----
+  const [evCount, setEvCount] = useState(null);
+  const [powerflow, setPowerflow] = useState(null);
+  const [loadingSem, setLoadingSem] = useState(false);
+  const [errorSem, setErrorSem] = useState("");
+
   useEffect(() => {
     if (view.type === "charger-detail" && view.index != null) {
       refreshChargerAlerts(view.index);
@@ -54,6 +61,27 @@ export default function CarregadoresVeiculos() {
       refreshVehicleAlerts(view.index);
     }
   }, [view, refreshChargerAlerts, refreshVehicleAlerts]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!token || !user?.powerstation_id) return;
+    (async () => {
+      setLoadingSem(true); setErrorSem("");
+      try {
+        const pf = await goodweApi.powerflow(token, user.powerstation_id);
+        if (pf && String(pf.code) === '0') setPowerflow(pf.data || pf);
+        const ec = await goodweApi.evChargerCount(token, user.powerstation_id);
+        if (ec && String(ec.code) === '0') setEvCount(ec.data ?? 0);
+      } catch (e) {
+        setErrorSem(String(e.message || e));
+      } finally { setLoadingSem(false); }
+    })();
+  }, []);
+
+  const evIntegrated = Boolean(powerflow?.data?.isEvCharge ?? powerflow?.isEvCharge);
+  const evObj = Boolean(powerflow?.data?.evCharge ?? powerflow?.evCharge);
+  const semHasAny = (Number(evCount) > 0) || evIntegrated || evObj;
 
   return (
     <div className="relative card p-6 rounded-2xl border border-purple-200 bg-purple-50 shadow overflow-hidden">
@@ -78,7 +106,31 @@ export default function CarregadoresVeiculos() {
             <motion.div key="main" initial={{ opacity: 1 }} exit={exitUp} className="space-y-6">
               {/* ---- Lista de Carregadores ---- */}
               <section>
-                <h4 className="mb-2 text-sm font-semibold text-purple-900/80">Carregadores</h4>
+                <h4 className="mb-2 text-sm font-semibold text-purple-100">Carregadores</h4>
+                {/* Resumo SEMS (mostra apenas quando houver dados reais) */}
+                {false && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                    {semHasAny && (
+                      <div className="panel h-20 flex flex-col items-center justify-center">
+                        <div className="text-[11px] uppercase tracking-wide muted">Qtd. Carregadores</div>
+                        <div className="mt-1 font-semibold text-gray-100">{loadingSem ? '...' : evCount}</div>
+                      </div>
+                    )}
+                    {semHasAny && (
+                      <div className="panel h-20 flex flex-col items-center justify-center">
+                        <div className="text-[11px] uppercase tracking-wide muted">Integração EV</div>
+                        <div className="mt-1 font-semibold text-gray-100">Ativa</div>
+                      </div>
+                    )}
+                    {semHasAny && (
+                      <div className="panel h-20 flex flex-col items-center justify-center">
+                        <div className="text-[11px] uppercase tracking-wide muted">Status EV</div>
+                        <div className="mt-1 font-semibold text-gray-100">Disponível</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {errorSem && <div className="text-xs text-red-300 mb-2">{errorSem}</div>}
                 <div className="space-y-3">
                   {chargersSafe.map((c, i) => (
                     <motion.button
@@ -218,7 +270,18 @@ export default function CarregadoresVeiculos() {
                 <div className="text-xs text-gray-600">Potência Máxima</div>
               </div>
 
-              <AlertsPanel items={chargerAlerts?.[view.index] || []} />
+                {/* Integração SEMS (mostra apenas quando houver dados reais) */}
+                {semHasAny && (
+                  <div className="rounded-xl bg-white/85 p-4">
+                    <div className="font-semibold text-gray-800 mb-2">Integração SEMS</div>
+                    <div className="grid grid-cols-2 gap-y-2 text-sm">
+                      {evIntegrated && <><span className="text-gray-600">Powerflow EV:</span><span className="text-right font-semibold text-gray-800">Ativo</span></>}
+                      {Number(evCount) > 0 && <><span className="text-gray-600">Carregadores (contagem):</span><span className="text-right font-semibold text-gray-800">{evCount}</span></>}
+                    </div>
+                  </div>
+                )}
+
+                <AlertsPanel items={chargerAlerts?.[view.index] || []} />
 
               {/* Deletar */}
               <div className="pt-1 flex justify-center">

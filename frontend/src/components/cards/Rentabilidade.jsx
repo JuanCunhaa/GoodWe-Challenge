@@ -1,7 +1,8 @@
 import { TrendingUp, Calculator, ArrowLeft } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore } from "../../state/AppStore.jsx";
+import { goodweApi, convertToBRL } from "../../services/goodweApi.js";
 
 const springIn = { type: "spring", stiffness: 260, damping: 22 };
 const exitUp   = { y: -8, opacity: 0, transition: { duration: 0.18 } };
@@ -21,15 +22,51 @@ export default function Rentabilidade() {
   const [view, setView] = useState("main"); // 'main' | 'detail'
   const { generators, totals } = useAppStore();
 
-  // “valor que já possui (R$)” = soma dos R$ / mês de todos os geradores
-  const credits = totals.totalRMes;           // <- soma rMes
-  const roiTarget = 45000;                    // alvo de retorno (exemplo)
+  // SEMS incomes (BRL)
+  const [edayIncomeBRL, setEdayIncomeBRL] = useState(null);
+  const [edayRaw, setEdayRaw] = useState({ value: null, currency: 'BRL' });
+  const [totalIncomeBRL, setTotalIncomeBRL] = useState(null);
+  const [totalRaw, setTotalRaw] = useState({ value: null, currency: 'BRL' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!token || !user?.powerstation_id) return;
+    (async () => {
+      setLoading(true); setError('');
+      try {
+        // Daily income (monitor)
+        const mon = await goodweApi.monitor(token, user.powerstation_id);
+        if (String(mon?.code) !== '0') throw new Error(mon?.msg || 'Falha ao consultar monitor');
+        const it = mon?.data?.list?.[0] || {};
+        const dIncome = Number(it.eday_income || 0);
+        const dCur = String(it.currency || 'BRL');
+        setEdayRaw({ value: dIncome, currency: dCur });
+        setEdayIncomeBRL(Math.round((convertToBRL(dIncome, dCur) || 0) * 100) / 100);
+
+        // Total income (plant detail)
+        const det = await goodweApi.plantDetail(token, user.powerstation_id);
+        if (String(det?.code) !== '0') throw new Error(det?.msg || 'Falha ao consultar plant detail');
+        const tIncome = Number(det?.data?.kpi?.total_income || 0);
+        const tCur = String(det?.data?.kpi?.currency || dCur);
+        setTotalRaw({ value: tIncome, currency: tCur });
+        setTotalIncomeBRL(Math.round((convertToBRL(tIncome, tCur) || 0) * 100) / 100);
+      } catch (e) {
+        setError(String(e.message || e));
+      } finally { setLoading(false); }
+    })();
+  }, []);
+
+  // For ROI mock
+  const credits = totalIncomeBRL ?? 0;
+  const roiTarget = 45000; // exemplo
   const monthsLeft = useMemo(() => {
-    // estimativa simplificada: alvo / (R$/mês) -> meses restantes
-    const perMonth = totals.totalRMes || 1;   // evita divisão por zero
-    return Math.max(0, Math.ceil((roiTarget - credits) / perMonth));
+    const perMonth = totals.totalRMes || 1;
+    return Math.max(0, Math.ceil((roiTarget - (credits || 0)) / perMonth));
   }, [roiTarget, credits, totals.totalRMes]);
-  const percent = (credits / roiTarget) * 100;
+  const percent = ((credits || 0) / roiTarget) * 100;
 
   return (
     <div className="relative card p-6 rounded-2xl border border-green-200 bg-green-50 shadow overflow-hidden">
@@ -48,34 +85,27 @@ export default function Rentabilidade() {
         <span className="text-lg font-bold">Rentabilidade</span>
       </div>
 
-      <div className="relative mt-4 min-h-[220px]">
+      <div className="relative mt-4 min-h-[120px]">
         <AnimatePresence mode="wait">
           {view === "main" ? (
             /* ------ VISÃO RESUMIDA ------ */
             <motion.div key="main" initial={{ y: 0, opacity: 1 }} exit={exitUp} className="space-y-4">
               <div>
                 <div className="text-3xl font-bold text-green-600">
-                  R$ {credits.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  {loading ? '...' : `R$ ${Number(credits||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </div>
-                <div className="text-sm text-gray-600">Acúmulo mensal (soma dos geradores)</div>
+                <div className="text-sm text-gray-600">Renda total</div>
+
+                {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
               </div>
 
               <div className="rounded-xl bg-white/80 p-4 flex items-center justify-between">
-                <span className="text-black">Economia Estimada (dia)</span>
+                <span className="text-black">Renda do Dia:</span>
                 <span className="font-semibold text-green-700">
-                  R$ {totals.totalRDia.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  {loading ? '...' : `R$ ${Number(edayIncomeBRL||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                 </span>
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20, mass: 0.2 }}
-                onClick={() => setView("detail")}
-                className="w-full h-12 rounded-xl bg-green-600 text-white font-medium active:scale-[.99] inline-flex items-center justify-center gap-2"
-              >
-                <Calculator className="w-5 h-5" />
-                Ver Detalhes
-              </motion.button>
             </motion.div>
           ) : (
             /* ------ DETALHES (ROI + LISTA) ------ */
@@ -94,13 +124,13 @@ export default function Rentabilidade() {
                 </div>
                 <Progress value={percent} />
                 <div className="mt-2 grid grid-cols-3 text-xs text-gray-600">
-                  <div>R$ {credits.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
+                  <div>R$ {Number(credits||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   <div className="text-center">{monthsLeft} meses restantes</div>
-                  <div className="text-right">R$ {roiTarget.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</div>
+                  <div className="text-right">R$ {roiTarget.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
               </div>
 
-              {/* Produção por gerador — espelha *exatamente* os geradores do outro card */}
+              {/* Produção por Gerador (mock atual) */}
               <div className="space-y-3">
                 <h4 className="text-sm font-semibold text-gray-700">Produção por Gerador</h4>
 
@@ -113,10 +143,10 @@ export default function Rentabilidade() {
                     <div className="text-right">
                       <div className="text-sm text-gray-700">{g.kwp} kWp</div>
                       <div className="text-xs text-green-700 font-semibold">
-                        R$ {g.rDia.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} / dia
+                        R$ {g.rDia.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / dia
                       </div>
                       <div className="text-xs text-green-700 font-semibold">
-                        R$ {g.rMes.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} / mês
+                        R$ {g.rMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / mês
                       </div>
                     </div>
                   </div>
@@ -129,3 +159,4 @@ export default function Rentabilidade() {
     </div>
   );
 }
+

@@ -1,0 +1,1253 @@
+https://eu.semsportal.com/api/warning/PowerstationWarningsQuery
+Body: pw_id
+
+{
+  "hasError": false,
+  "code": 0,
+  "msg": "Successful",
+  "data": {
+    "pw_id": "b8f29159-70b6-414c-8782-d485da704238",
+    "date_format": "dd.MM.yyyy",
+    "list": [
+      {
+        "sn": "75000ESN333WV001",
+        "sn_name": "75000ESN333WV001",
+        "warning": []
+      }
+    ]
+  },
+  "translationCode": "code_0",
+  "components": {
+    "para": null,
+    "langVer": 286,
+    "timeSpan": 0,
+    "api": "http://eu.semsportal.com:85/api/warning/PowerstationWarningsQuery",
+    "msgSocketAdr": ""
+  }
+}
+
+https://eu.semsportal.com/api/v2/PowerStation/GetPowerflow
+BOdy: PowerStationId
+
+{
+  "language": "en",
+  "function": null,
+  "hasError": false,
+  "msg": "操作成功",
+  "code": "0",
+  "data": {
+    "hasGenset": false,
+    "hasMicroGrid": false,
+    "hasMoreInverter": true,
+    "hasPowerflow": true,
+    "powerflow": {
+      "pv": "",
+      "pvStatus": 0,
+      "bettery": "",
+      "betteryStatus": 0,
+      "betteryStatusStr": null,
+      "load": "",
+      "loadStatus": 0,
+      "grid": "",
+      "soc": 0,
+      "socText": "",
+      "hasEquipment": true,
+      "gridStatus": 0,
+      "isHomKit": false,
+      "isBpuAndInverterNoBattery": false,
+      "isMoreBettery": false,
+      "genset": "",
+      "gensetStatus": 1,
+      "gridGensetStatus": 0,
+      "microGrid": "",
+      "microGridStatus": 1
+    },
+    "hasGridLoad": false,
+    "isStored": true,
+    "isParallelInventers": false,
+    "isMixedParallelInventers": false,
+    "isEvCharge": false,
+    "evCharge": null,
+    "is3rdEms": false
+  },
+  "components": {
+    "para": "{\"model\":{\"PowerStationId\":\"b8f29159-70b6-414c-8782-d485da704238\"}}",
+    "langVer": 286,
+    "timeSpan": 1695,
+    "api": "http://eu.semsportal.com:85/api/v2/PowerStation/GetPowerflow",
+    "msgSocketAdr": null
+  }
+}
+
+https://eu.semsportal.com/api/PowerStation/GetPowerStationMsReCallSn
+Body: powerstation_id e recall_type
+
+{
+  "hasError": false,
+  "code": 0,
+  "msg": "Successful",
+  "data": false,
+  "translationCode": "code_0",
+  "components": {
+    "para": null,
+    "langVer": 286,
+    "timeSpan": 0,
+    "api": "http://eu.semsportal.com:82/api/PowerStation/GetPowerStationMsReCallSn",
+    "msgSocketAdr": ""
+  }
+}
+
+https://eu.semsportal.com/api/v4/EvCharger/GetEvChargerCountByPwId
+Body: PowerStationId
+
+{
+  "language": "en",
+  "function": null,
+  "hasError": false,
+  "msg": "操作成功",
+  "code": "0",
+  "data": null,
+  "components": {
+    "para": "{\"inverterMoreModel\":{\"PowerStationId\":\"b8f29159-70b6-414c-8782-d485da704238\"}}",
+    "langVer": 286,
+    "timeSpan": 1,
+    "api": "http://eu.semsportal.com:85/api/v4/EvCharger/GetEvChargerCountByPwId",
+    "msgSocketAdr": null
+  }
+}
+
+https://eu.semsportal.com/api/v3/PowerStation/GetPlantDetailByPowerstationId
+Body: powerStationId
+
+{
+  "language": "en",
+  "function": null,
+  "hasError": false,
+  "msg": "操作成功",
+  "code": "0",
+  "data": {
+    "info": {
+      "powerstation_id": "b8f29159-70b6-414c-8782-d485da704238",
+      "time": "09/15/2025 00:05:20",
+      "date_format_ym": "MM.yyyy",
+      "stationname": "Energy Storage Demo Plant2",
+      "address": "RX9M+69G, Terbol, Lebanon",
+      "battery_capacity": 4.0,
+      "create_time": "12/13/2023 16:15:50",
+      "capacity": 5.0,
+      "powerstation_type": "Battery Storage",
+      "status": -1,
+      "is_stored": true,
+      "only_bps": false,
+      "only_bpu": false,
+      "time_span": -3.0,
+      "org_code": "GW000000",
+      "org_name": "Goodwe",
+      "local_date": "2025-09-15 00:05:20"
+    },
+    "kpi": {
+      "month_generation": 110.0,
+      "pac": 0.0,
+      "power": 0.0,
+      "total_power": 6909.0,
+      "day_income": 0.0,
+      "total_income": 1519.98,
+      "yield_rate": 0.22,
+      "currency": "EUR"
+    },
+    "isEvcharge": false,
+    "isTigo": false,
+    "isPowerflow": true,
+    "isSec": false,
+    "isGenset": false,
+    "isMicroGrid": false,
+    "isMicroInverter": false,
+    "hasLayout": false,
+    "layout_id": "",
+    "isMeter": false,
+    "isEnvironmental": false,
+    "powercontrol_status": 0,
+    "chartsTypesByPlant": [
+      {
+        "date": "2025-09-15",
+        "typeName": "",
+        "chartIndices": [
+          {
+            "indexName": "ONE_POWER",
+            "indexLabel": "Power",
+            "chartIndexId": "1",
+            "dateRange": [
+              {
+                "text": "Today",
+                "value": "DAY",
+                "type": "2",
+                "now": "2025-09-15",
+                "dateFormater": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2025-09-15",
+        "typeName": "Generation&Income",
+        "chartIndices": [
+          {
+            "indexName": "TWO_YIELD_REVENUE",
+            "indexLabel": "Generation&Income",
+            "chartIndexId": "3",
+            "dateRange": [
+              {
+                "text": "Day",
+                "value": "DAY",
+                "type": "2",
+                "now": "2025-09-14",
+                "dateFormater": null
+              },
+              {
+                "text": "Month",
+                "value": "MONTH",
+                "type": "3",
+                "now": "2025-09",
+                "dateFormater": null
+              },
+              {
+                "text": "Year",
+                "value": "YEAR",
+                "type": "4",
+                "now": "2025",
+                "dateFormater": null
+              }
+            ]
+          },
+          {
+            "indexName": "TWO_YIELD_SELFUSERATIO",
+            "indexLabel": "Self-use Ratio",
+            "chartIndexId": "5",
+            "dateRange": [
+              {
+                "text": "Day",
+                "value": "DAY",
+                "type": "2",
+                "now": "2025-09-14",
+                "dateFormater": null
+              },
+              {
+                "text": "Month",
+                "value": "MONTH",
+                "type": "3",
+                "now": "2025-09",
+                "dateFormater": null
+              },
+              {
+                "text": "Year",
+                "value": "YEAR",
+                "type": "4",
+                "now": "2025",
+                "dateFormater": null
+              }
+            ]
+          },
+          {
+            "indexName": "TWO_YIELD_ContriRatio",
+            "indexLabel": "contriRatio",
+            "chartIndexId": "8",
+            "dateRange": [
+              {
+                "text": "Day",
+                "value": "DAY",
+                "type": "2",
+                "now": "2025-09-14",
+                "dateFormater": null
+              },
+              {
+                "text": "Month",
+                "value": "MONTH",
+                "type": "3",
+                "now": "2025-09",
+                "dateFormater": null
+              },
+              {
+                "text": "Year",
+                "value": "YEAR",
+                "type": "4",
+                "now": "2025",
+                "dateFormater": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2025-09-15",
+        "typeName": "energy_statistics",
+        "chartIndices": [
+          {
+            "indexName": "THREE_ENERGYSTATISTICS",
+            "indexLabel": "energy_statistics",
+            "chartIndexId": "7",
+            "dateRange": [
+              {
+                "text": "Day",
+                "value": "DAY",
+                "type": "2",
+                "now": "2025-09-14",
+                "dateFormater": null
+              },
+              {
+                "text": "Month",
+                "value": "MONTH",
+                "type": "3",
+                "now": "2025-09",
+                "dateFormater": null
+              },
+              {
+                "text": "Year",
+                "value": "YEAR",
+                "type": "4",
+                "now": "2025",
+                "dateFormater": null
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "soc": [
+      {
+        "sn": "75000ESN333WV001",
+        "battery_sn": "",
+        "power": 32.0,
+        "status": 0,
+        "local": 1,
+        "statusText": null,
+        "warning_bms": null
+      }
+    ],
+    "industrySoc": [],
+    "isSec1000EtPlant": false
+  },
+  "components": {
+    "para": "{\"model\":{\"PowerStationId\":\"b8f29159-70b6-414c-8782-d485da704238\"}}",
+    "langVer": 286,
+    "timeSpan": 6,
+    "api": "http://eu.semsportal.com:85/api/v3/PowerStation/GetPlantDetailByPowerstationId",
+    "msgSocketAdr": null
+  }
+}
+
+https://eu.semsportal.com/api/v3/PowerStation/GetInverterAllPoint
+Body: powerStationId
+
+{
+  "language": "en",
+  "function": null,
+  "hasError": false,
+  "msg": "操作成功",
+  "code": "0",
+  "data": {
+    "count": 1,
+    "inverterPoints": [
+      {
+        "sn": "75000ESN333WV001",
+        "dict": {
+          "left": [
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "dmDeviceType",
+              "value": "GW5000-ES-20",
+              "unit": "",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "serialNum",
+              "value": "75000ESN333WV001",
+              "unit": "",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "laCheckcode",
+              "value": "004863",
+              "unit": "",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "innerTemp",
+              "value": "0",
+              "unit": "℃",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "DeviceParameter_capacity",
+              "value": "5",
+              "unit": "kW",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "ouptputPower",
+              "value": "0",
+              "unit": "W",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "outputV",
+              "value": "0/0/0",
+              "unit": "V",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "bakupOutput",
+              "value": "0",
+              "unit": "W",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            }
+          ],
+          "right": [
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "dcVandC1",
+              "value": "0.0/0.0",
+              "unit": "V/A",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "dcVandC2",
+              "value": "0.0/0.0",
+              "unit": "V/A",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "StatusOfBattery",
+              "value": "0/0/0",
+              "unit": "V/A/W",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "batteryStatus",
+              "value": "",
+              "unit": "",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "warnBMS",
+              "value": "--",
+              "unit": "",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "chargeClimitBMS",
+              "value": "0",
+              "unit": "A",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "dischargeClimitBMS",
+              "value": "0",
+              "unit": "A",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "SOH",
+              "value": "96",
+              "unit": "%",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "verBMS",
+              "value": "0",
+              "unit": "",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            },
+            {
+              "isHT": false,
+              "isStoreSkip": false,
+              "key": "firmwareVersion",
+              "value": "405",
+              "unit": "",
+              "isFaultMsg": 0,
+              "faultMsgCode": 0
+            }
+          ]
+        },
+        "points": [
+          {
+            "target_index": 1,
+            "target_name": "Vpv1",
+            "display": "Vpv1(V)",
+            "unit": "V",
+            "target_key": "Vpv1",
+            "text_cn": "直流电压1",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 2,
+            "target_name": "Vpv2",
+            "display": "Vpv2(V)",
+            "unit": "V",
+            "target_key": "Vpv2",
+            "text_cn": "直流电压2",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 5,
+            "target_name": "Ipv1",
+            "display": "Ipv1(A)",
+            "unit": "A",
+            "target_key": "Ipv1",
+            "text_cn": "直流电流1",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 6,
+            "target_name": "Ipv2",
+            "display": "Ipv2(A)",
+            "unit": "A",
+            "target_key": "Ipv2",
+            "text_cn": "直流电流2",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 9,
+            "target_name": "Ua",
+            "display": "Ua(V)",
+            "unit": "V",
+            "target_key": "Vac1",
+            "text_cn": "交流电压1",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 12,
+            "target_name": "Iac1",
+            "display": "Iac1(A)",
+            "unit": "A",
+            "target_key": "Iac1",
+            "text_cn": "交流电流1",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 15,
+            "target_name": "Fac1",
+            "display": "Fac1(Hz)",
+            "unit": "Hz",
+            "target_key": "Fac1",
+            "text_cn": "频率1",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 18,
+            "target_name": "Power",
+            "display": "Power(W)",
+            "unit": "W",
+            "target_key": "Pac",
+            "text_cn": "功率",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 19,
+            "target_name": "WorkMode",
+            "display": "WorkMode",
+            "unit": "",
+            "target_key": "WorkMode",
+            "text_cn": "工作模式",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 20,
+            "target_name": "Temperature",
+            "display": "Temperature(℃)",
+            "unit": "℃",
+            "target_key": "Tempperature",
+            "text_cn": "温度",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 23,
+            "target_name": "HTotal",
+            "display": "HTotal(h)",
+            "unit": "h",
+            "target_key": "HTotal",
+            "text_cn": "工作时长",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 37,
+            "target_name": "PV Generation",
+            "display": "PV Generation(kWh)",
+            "unit": "kWh",
+            "target_key": "pv_etotal_l+pv_etotal_h*65536",
+            "text_cn": "光伏发电量",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 38,
+            "target_name": "Pmeter",
+            "display": "Pmeter(W)",
+            "unit": "W",
+            "target_key": "Pmeter",
+            "text_cn": "电表功率",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 39,
+            "target_name": "Pbackup",
+            "display": "Pbackup(W)",
+            "unit": "W",
+            "target_key": "Pbackup",
+            "text_cn": "后备输出功率",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 40,
+            "target_name": "Vbackup",
+            "display": "Vbackup(V)",
+            "unit": "V",
+            "target_key": "Vload",
+            "text_cn": "后备输出电压1",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 41,
+            "target_name": "Ibackup",
+            "display": "Ibackup(A)",
+            "unit": "A",
+            "target_key": "Iload",
+            "text_cn": "后备输出电流1",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 42,
+            "target_name": "Vbat",
+            "display": "Vbat(V)",
+            "unit": "V",
+            "target_key": "VBattery1",
+            "text_cn": "电池电压",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 43,
+            "target_name": "Ibat",
+            "display": "Ibat(A)",
+            "unit": "A",
+            "target_key": "IBattery1",
+            "text_cn": "电池电流",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 44,
+            "target_name": "SOC",
+            "display": "SOC(%)",
+            "unit": "%",
+            "target_key": "Cbattery1",
+            "text_cn": "电池电量",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 45,
+            "target_name": "SOH",
+            "display": "SOH(%)",
+            "unit": "%",
+            "target_key": "SOH",
+            "text_cn": "电池健康度",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 46,
+            "target_name": "BMS_Temperature",
+            "display": "BMS_Temperature(℃)",
+            "unit": "℃",
+            "target_key": "BMS_Temperature",
+            "text_cn": "电池温度",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 47,
+            "target_name": "BMS_Charge_I_Max",
+            "display": "BMS_Charge_I_Max(A)",
+            "unit": "A",
+            "target_key": "BMS_Charge_I_Max",
+            "text_cn": "电池充电最大电流",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 48,
+            "target_name": "BMS_Discharge_I_Max",
+            "display": "BMS_Discharge_I_Max(A)",
+            "unit": "A",
+            "target_key": "BMS_Discharge_I_Max",
+            "text_cn": "电池放电最大电流",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 50,
+            "target_name": "Total Output",
+            "display": "Total Output(kWh)",
+            "unit": "kWh",
+            "target_key": "ETotal_EXP_1",
+            "text_cn": "总输出电量",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 400,
+            "target_name": "BMS Version",
+            "display": "BMS Version",
+            "unit": "",
+            "target_key": "BMSSoftwareVersion",
+            "text_cn": "BMS版本",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 409,
+            "target_name": "e_charge",
+            "display": "e_charge(kWh)",
+            "unit": "kWh",
+            "target_key": "EBatteryCharge",
+            "text_cn": "电池充电",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 410,
+            "target_name": "e_discharge",
+            "display": "e_discharge(kWh)",
+            "unit": "kWh",
+            "target_key": "EBatteryDischarge",
+            "text_cn": "电池放电",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 439,
+            "target_name": "bms1_max_cell_temp",
+            "display": "bms1_max_cell_temp(℃)",
+            "unit": "℃",
+            "target_key": "Maximumcelltemperature",
+            "text_cn": "BMS1最高电芯温度",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 440,
+            "target_name": "bms1_min_cell_temp",
+            "display": "bms1_min_cell_temp(℃)",
+            "unit": "℃",
+            "target_key": "Minimumcelltemperature",
+            "text_cn": "BMS1最低电芯温度",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          },
+          {
+            "target_index": 407,
+            "target_name": "PF",
+            "display": "PF",
+            "unit": "",
+            "target_key": "PF",
+            "text_cn": "功率因素",
+            "target_sn_six": null,
+            "target_sn_seven": null,
+            "target_type": null,
+            "storage_name": null
+          }
+        ],
+        "is_stored": true,
+        "name": "75000ESN333WV001",
+        "in_pac": 0.0,
+        "out_pac": 0.0,
+        "eday": 0.0,
+        "emonth": 110.0,
+        "etotal": 6909.0,
+        "status": -1,
+        "soc": "32%",
+        "hTotal": 20005.0,
+        "last_refresh_time": "06/23/2025 08:53:45",
+        "vbattery1": 0.0,
+        "ibattery1": 0.0,
+        "master": -1,
+        "is_showOutput": false,
+        "local_date": "2025-09-15 00:05:20",
+        "gridConnStatus": "",
+        "is_microgrid": false
+      }
+    ]
+  },
+  "components": {
+    "para": "{\"model\":{\"PowerStationId\":\"b8f29159-70b6-414c-8782-d485da704238\"}}",
+    "langVer": 286,
+    "timeSpan": 10,
+    "api": "http://eu.semsportal.com:82/api/v3/PowerStation/GetInverterAllPoint",
+    "msgSocketAdr": null
+  }
+}
+
+https://eu.semsportal.com/api/v3/PowerStation/GetWeather
+Body: powerStationId
+
+{
+  "language": "en",
+  "function": null,
+  "hasError": false,
+  "msg": "操作成功",
+  "code": "0",
+  "data": {
+    "weather": {
+      "HeWeather6": [
+        {
+          "basic": {
+            "cid": null,
+            "location": null,
+            "parent_city": null,
+            "admin_area": null,
+            "cnty": null,
+            "lat": null,
+            "lon": null,
+            "tz": null
+          },
+          "update": {
+            "loc": null,
+            "utc": null
+          },
+          "status": "ok",
+          "daily_forecast": [
+            {
+              "cond_code_d": "100",
+              "cond_code_n": "150",
+              "cond_txt_d": "Sunny",
+              "cond_txt_n": "Clear",
+              "date": "2025-09-14",
+              "hum": "63",
+              "pcpn": "0.0",
+              "pop": "0",
+              "pres": "877",
+              "tmp_max": "32",
+              "tmp_min": "14",
+              "uv_index": "8",
+              "vis": "4",
+              "wind_deg": "226",
+              "wind_dir": "SW",
+              "wind_sc": "1-3",
+              "wind_spd": "4"
+            },
+            {
+              "cond_code_d": "100",
+              "cond_code_n": "153",
+              "cond_txt_d": "Sunny",
+              "cond_txt_n": "Partly Cloudy",
+              "date": "2025-09-15",
+              "hum": "78",
+              "pcpn": "0.0",
+              "pop": "1",
+              "pres": "876",
+              "tmp_max": "31",
+              "tmp_min": "13",
+              "uv_index": "7",
+              "vis": "6",
+              "wind_deg": "233",
+              "wind_dir": "SW",
+              "wind_sc": "1-3",
+              "wind_spd": "6"
+            },
+            {
+              "cond_code_d": "100",
+              "cond_code_n": "151",
+              "cond_txt_d": "Sunny",
+              "cond_txt_n": "Cloudy",
+              "date": "2025-09-16",
+              "hum": "78",
+              "pcpn": "0.0",
+              "pop": "2",
+              "pres": "874",
+              "tmp_max": "29",
+              "tmp_min": "12",
+              "uv_index": "7",
+              "vis": "4",
+              "wind_deg": "242",
+              "wind_dir": "WSW",
+              "wind_sc": "1-3",
+              "wind_spd": "4"
+            },
+            {
+              "cond_code_d": "102",
+              "cond_code_n": "150",
+              "cond_txt_d": "Few Clouds",
+              "cond_txt_n": "Clear",
+              "date": "2025-09-17",
+              "hum": "76",
+              "pcpn": "0.0",
+              "pop": "2",
+              "pres": "875",
+              "tmp_max": "28",
+              "tmp_min": "12",
+              "uv_index": "7",
+              "vis": "2",
+              "wind_deg": "247",
+              "wind_dir": "WSW",
+              "wind_sc": "1-3",
+              "wind_spd": "2"
+            },
+            {
+              "cond_code_d": "100",
+              "cond_code_n": "150",
+              "cond_txt_d": "Sunny",
+              "cond_txt_n": "Clear",
+              "date": "2025-09-18",
+              "hum": "55",
+              "pcpn": "0.0",
+              "pop": "1",
+              "pres": "874",
+              "tmp_max": "29",
+              "tmp_min": "15",
+              "uv_index": "7",
+              "vis": "2",
+              "wind_deg": "245",
+              "wind_dir": "WSW",
+              "wind_sc": "1-3",
+              "wind_spd": "2"
+            },
+            {
+              "cond_code_d": "100",
+              "cond_code_n": "150",
+              "cond_txt_d": "Sunny",
+              "cond_txt_n": "Clear",
+              "date": "2025-09-19",
+              "hum": "60",
+              "pcpn": "0.0",
+              "pop": "1",
+              "pres": "875",
+              "tmp_max": "28",
+              "tmp_min": "16",
+              "uv_index": "7",
+              "vis": "4",
+              "wind_deg": "249",
+              "wind_dir": "WSW",
+              "wind_sc": "1-3",
+              "wind_spd": "4"
+            },
+            {
+              "cond_code_d": "100",
+              "cond_code_n": "150",
+              "cond_txt_d": "Sunny",
+              "cond_txt_n": "Clear",
+              "date": "2025-09-20",
+              "hum": "35",
+              "pcpn": "0.0",
+              "pop": "1",
+              "pres": "875",
+              "tmp_max": "27",
+              "tmp_min": "10",
+              "uv_index": "7",
+              "vis": "2",
+              "wind_deg": "217",
+              "wind_dir": "SW",
+              "wind_sc": "1-3",
+              "wind_spd": "2"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "components": {
+    "para": "{\"model\":{\"PowerStationId\":\"b8f29159-70b6-414c-8782-d485da704238\"}}",
+    "langVer": 286,
+    "timeSpan": 2,
+    "api": "http://eu.semsportal.com:82/api/v3/PowerStation/GetWeather",
+    "msgSocketAdr": null
+  }
+}
+
+https://eu.semsportal.com/api/v3/PowerStation/GetSmuggleInfo
+Body: powerStationId
+
+{
+  "language": "en",
+  "function": null,
+  "hasError": false,
+  "msg": "操作成功",
+  "code": "0",
+  "data": {
+    "smuggleInfo": {
+      "isAllSmuggle": false,
+      "isSmuggle": false,
+      "descriptionText": null,
+      "sns": []
+    }
+  },
+  "components": {
+    "para": "{\"model\":{\"PowerStationId\":\"b8f29159-70b6-414c-8782-d485da704238\"}}",
+    "langVer": 286,
+    "timeSpan": 0,
+    "api": "http://eu.semsportal.com:85/api/v3/PowerStation/GetSmuggleInfo",
+    "msgSocketAdr": null
+  }
+}
+
+https://eu.semsportal.com/api/v2/Charts/GetPlantPowerChart
+Body: id(Mesma coisa do pw_id e PowerStatioId), date(YYYY-MM-DD) e full_script
+
+{
+  "language": "en",
+  "function": null,
+  "hasError": false,
+  "msg": "操作成功",
+  "code": "0",
+  "data": {
+    "generateData": [
+      {
+        "key": "Generation",
+        "value": 0.0,
+        "unit_Key": "kWh"
+      },
+      {
+        "key": "Income",
+        "value": 0.0,
+        "unit_Key": "EUR"
+      }
+    ],
+    "lines": [
+      {
+        "key": "PCurve_Power_PV",
+        "unit": "W",
+        "frontColor": "#03bbd6",
+        "isActive": true,
+        "axis": 0,
+        "sort": 1,
+        "type": "2",
+        "xy": [
+          {
+            "x": "00:00",
+            "y": 0.0,
+            "z": null
+          },
+          {
+            "x": "00:05",
+            "y": 0.0,
+            "z": null
+          }
+        ]
+      },
+      {
+        "key": "PCurve_Power_Battery",
+        "unit": "W",
+        "frontColor": "#a387e2",
+        "isActive": true,
+        "axis": 0,
+        "sort": 2,
+        "type": "2",
+        "xy": [
+          {
+            "x": "00:00",
+            "y": 240.58,
+            "z": null
+          },
+          {
+            "x": "00:05",
+            "y": 240.58,
+            "z": null
+          }
+        ]
+      },
+      {
+        "key": "PCurve_Power_Meter",
+        "unit": "W",
+        "frontColor": "#fbb03b",
+        "isActive": true,
+        "axis": 0,
+        "sort": 3,
+        "type": "2",
+        "xy": [
+          {
+            "x": "00:00",
+            "y": 0.0,
+            "z": null
+          },
+          {
+            "x": "00:05",
+            "y": 0.0,
+            "z": null
+          }
+        ]
+      },
+      {
+        "key": "PCurve_Power_Load",
+        "unit": "W",
+        "frontColor": "#F1E000",
+        "isActive": true,
+        "axis": 0,
+        "sort": 4,
+        "type": "2",
+        "xy": [
+          {
+            "x": "00:00",
+            "y": 240.58,
+            "z": null
+          },
+          {
+            "x": "00:05",
+            "y": 240.58,
+            "z": null
+          }
+        ]
+      },
+      {
+        "key": "PCurve_Power_SOC",
+        "unit": "%",
+        "frontColor": "#8cc44d",
+        "isActive": true,
+        "axis": 1,
+        "sort": 5,
+        "type": "2",
+        "xy": [
+          {
+            "x": "00:00",
+            "y": 37.0,
+            "z": null
+          },
+          {
+            "x": "00:05",
+            "y": 37.0,
+            "z": null
+          }
+        ]
+      }
+    ]
+  },
+  "components": {
+    "para": "{\"model\":{\"id\":\"b8f29159-70b6-414c-8782-d485da704238\",\"date\":\"2025-09-15T00:00:00+08:00\",\"full_script\":false}}",
+    "langVer": 286,
+    "timeSpan": 301,
+    "api": "http://eu.semsportal.com:85/api/v2/Charts/GetPlantPowerChart",
+    "msgSocketAdr": null
+  }
+}
+
