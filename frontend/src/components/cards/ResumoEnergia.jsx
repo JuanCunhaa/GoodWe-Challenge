@@ -81,6 +81,48 @@ export default function ResumoEnergia(){
     })()
   },[])
 
+  // Auto-refresh interval
+  useEffect(()=>{
+    const token = localStorage.getItem('token')
+    const user = JSON.parse(localStorage.getItem('user') || 'null')
+    if (!token || !user?.powerstation_id) return
+    let cancelled = false
+    const run = async()=>{
+      try{
+        // Powerflow
+        try{
+          const pf = await goodweApi.powerflow(token, user.powerstation_id)
+          const p = pf?.data?.powerflow || pf?.data?.powerFlow || pf?.powerflow
+          if (p && !cancelled){
+            setLoadW(toNum(p.load))
+            setGridW(toNum(p.grid))
+          }
+        }catch{}
+        // Inverters
+        try{
+          const inv = await goodweApi.inverters(token, user.powerstation_id)
+          const list = inv?.data?.inverterPoints || []
+          const totalPv = list.reduce((acc, it)=> acc + (parseInverterPower(it) || 0), 0)
+          if (!cancelled) setPvW(Number.isFinite(totalPv) ? totalPv : null)
+          const firstBatt = list.map(parseBatteryW).find(v => v!=null)
+          if (firstBatt!=null && !cancelled) setBattW(firstBatt)
+        }catch{}
+        // Currency
+        try{
+          const det = await goodweApi.plantDetail(token, user.powerstation_id)
+          const cur = String(det?.data?.kpi?.currency || '').toUpperCase()
+          if (cur && !cancelled) setCurrency(cur)
+        }catch{}
+      }catch{}
+    }
+    const base = Number(import.meta.env.VITE_REFRESH_MS || 5000)
+    const ms = Number(import.meta.env.VITE_REFRESH_MS_ENERGY || base)
+    const id = setInterval(run, Math.max(1000, ms))
+    const onFocus = ()=> run()
+    window.addEventListener('focus', onFocus)
+    return ()=>{ cancelled = true; clearInterval(id); window.removeEventListener('focus', onFocus) }
+  },[])
+
   // Deriva grid se vier ausente mas houver pv/batt/load
   const gridDerived = useMemo(()=>{
     if (gridW!=null) return gridW
@@ -135,8 +177,8 @@ export default function ResumoEnergia(){
   }, [battW, tariffBRL]);
 
   return (
-    <div className="relative card p-6 rounded-2xl border border-teal-200 bg-teal-50 shadow overflow-hidden">
-      <div className="-mx-6 -mt-6 px-6 py-3 bg-teal-600 text-white rounded-t-2xl flex items-center gap-2">
+    <div className="relative card p-6 rounded-2xl border border-orange-200 bg-orange-50 shadow overflow-hidden">
+      <div className="-mx-6 -mt-6 px-6 py-3 bg-orange-600 text-white rounded-t-2xl flex items-center gap-2">
         <Gauge className="w-5 h-5"/>
         <span className="text-lg font-bold">Resumo de Energia</span>
         {loading && <span className="ml-auto text-xs">Atualizando…</span>}

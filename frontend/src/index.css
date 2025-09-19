@@ -54,3 +54,16 @@
 .burger-2[aria-expanded="true"] span:nth-child(1) { top: 13px; transform: rotate(45deg); }
 .burger-2[aria-expanded="true"] span:nth-child(2) { top: 13px; transform: rotate(-45deg); }
 
+/* === Global shadow overrides (remove all shadows) === */
+/* Neutralize Tailwind shadow utilities */
+.shadow, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl, .shadow-2xl, .shadow-inner, .shadow-none { box-shadow: none !important; }
+/* Neutralize custom shadow utilities from theme */
+.shadow-soft, .shadow-ring, .shadow-glow, .shadow-neon { box-shadow: none !important; }
+/* Neutralize hover variants explicitly used */
+.hover\:shadow-neon:hover { box-shadow: none !important; }
+/* Neutralize drop-shadow utilities (they use CSS filter) */
+.drop-shadow, .drop-shadow-sm, .drop-shadow-md, .drop-shadow-lg, .drop-shadow-xl, .drop-shadow-2xl, .drop-shadow-none { filter: none !important; }
+/* Neutralize custom ring that relies on box-shadow */
+.ring-brand { box-shadow: none !important; }
+/* Ensure common components don’t render shadows */
+.card, .panel, .dock, .btn, .btn-primary, .btn-danger, .btn-ghost { box-shadow: none !important; filter: none !important; }

@@ -55,6 +55,16 @@ export default function Baterias() {
   const b = view.index != null ? items[view.index] : null;
   const health = b ? healthMeta(Number(b.soh || 90)) : healthMeta(0);
   const tmeta = b ? tempMeta(Number(b.temp_c || 0)) : tempMeta(0);
+  useEffect(() => {
+    const run = () => { try { refresh(); } catch {} };
+    run();
+    const base = Number(import.meta.env.VITE_REFRESH_MS || 10000);
+    const ms = Number(import.meta.env.VITE_REFRESH_MS_BATTERY || base);
+    const id = setInterval(run, Math.max(5000, ms));
+    const onFocus = () => run();
+    window.addEventListener('focus', onFocus);
+    return () => { clearInterval(id); window.removeEventListener('focus', onFocus); };
+  }, []);
   async function refresh() {
     const token = localStorage.getItem("token");
     const user = JSON.parse(localStorage.getItem("user") || "null");

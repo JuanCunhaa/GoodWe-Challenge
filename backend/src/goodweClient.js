@@ -29,6 +29,10 @@ export class GoodWeClient {
     language = DEFAULT_LANG,
     tokenCachePath = '.cache/goodwe_token.json',
     timeoutMs = 30000,
+    // tuning knobs
+    authTtlMs = 15 * 60 * 1000,
+    maxConcurrent = 3,
+    minIntervalMs = 150,
   }) {
     if (!globalThis.fetch) {
       throw new Error('Node 18+ required (global fetch).');
@@ -40,6 +44,16 @@ export class GoodWeClient {
     this.language = language;
     this.timeoutMs = timeoutMs;
     this.tokenCachePath = tokenCachePath;
+    this.authTtlMs = authTtlMs;
+
+    // throttling / caching / inflight dedupe
+    this._activeCalls = 0;
+    this._lastStartAt = 0;
+    this.maxConcurrent = maxConcurrent;
+    this.minIntervalMs = minIntervalMs;
+    this._inflight = new Map();
+    this._cache = new Map();
+    this._loginInflight = null;
 
     this.auth = null; // { uid, token, timestamp, api, client, version, language }
     this.cookies = {}; // simple jar: name -> value (for *.semsportal.com)
@@ -65,6 +79,7 @@ export class GoodWeClient {
   }
 
   async crossLogin() {
+    if (this._loginInflight) return this._loginInflight;
     const minimalToken = JSON.stringify({ client: this.client, version: this.version, language: this.language });
     const body = { account: this.account, pwd: this.password };
 
@@ -122,6 +137,63 @@ export class GoodWeClient {
     return base + endpoint.replace(/^\//, '');
   }
 
+  async ensureAuthFresh() {
+    const now = Date.now();
+    const ts = Number(this.auth?.timestamp || 0);
+    if (this.auth && now - ts < this.authTtlMs) return;
+    if (this._loginInflight) return this._loginInflight;
+    this._loginInflight = this.crossLogin().finally(() => { this._loginInflight = null; });
+    return this._loginInflight;
+  }
+
+  // ---------- Throttle / cache / inflight helpers ----------
+  _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  async _throttleStart() {
+    while (this._activeCalls >= this.maxConcurrent) {
+      await this._sleep(10);
+    }
+    const now = Date.now();
+    const gap = now - this._lastStartAt;
+    if (gap < this.minIntervalMs) await this._sleep(this.minIntervalMs - gap);
+    this._activeCalls++;
+    this._lastStartAt = Date.now();
+  }
+  _throttleEnd() {
+    this._activeCalls = Math.max(0, this._activeCalls - 1);
+  }
+
+  _endpointTtl(endpointOrUrl) {
+    const s = String(endpointOrUrl || '');
+    const p = (() => {
+      try { return s.startsWith('http') ? new URL(s).pathname.replace(/^\/+/, '') : s.replace(/^\/+/, ''); } catch { return s; }
+    })();
+    const map = new Map([
+      ['v2/PowerStation/GetPowerflow', 5_000],
+      ['v3/PowerStation/GetInverterAllPoint', 15_000],
+      ['v3/PowerStation/GetPlantDetailByPowerstationId', 60_000],
+      ['v2/Charts/GetChartByPlant', 120_000],
+      ['v2/Charts/GetPlantPowerChart', 60_000],
+      ['warning/PowerstationWarningsQuery', 30_000],
+      ['v4/EvCharger/GetEvChargerCountByPwId', 60_000],
+      ['PowerStationMonitor/QueryPowerStationMonitor', 30_000],
+    ]);
+    for (const [k, ttl] of map.entries()) {
+      if (p.endsWith(k)) return ttl;
+    }
+    return 0;
+  }
+
+  _cacheGet(key) {
+    const it = this._cache.get(key);
+    if (!it) return null;
+    if (Date.now() >= it.exp) { this._cache.delete(key); return null; }
+    return it.data;
+  }
+  _cacheSet(key, data, ttlMs) {
+    if (ttlMs > 0) this._cache.set(key, { data, exp: Date.now() + ttlMs });
+  }
+
   // Returns raw SEMS CrossLogin JSON (no auth state change guaranteed)
   async crossLoginRaw({ version = 'auto' } = {}) {
     const minimalToken = JSON.stringify({ client: this.client, version: this.version, language: this.language });
@@ -165,9 +237,17 @@ export class GoodWeClient {
 
   async postJson(endpoint, body) {
     // CrossLogin em toda chamada para garantir sessão válida
-    await this.crossLogin();
+    await this.ensureAuthFresh();
+    const url = this.baseUrlJoin(endpoint);
+    const payload = JSON.stringify(body || {});
+    const key = `POST|${url}|${payload}`;
+    const ttl = this._endpointTtl(endpoint);
+    const cached = this._cacheGet(key);
+    if (cached) return cached;
+    if (this._inflight.has(key)) return this._inflight.get(key);
     const doCall = async () => {
       const url = this.baseUrlJoin(endpoint);
+      await this._throttleStart();
       const r = await fetch(url, {
         method: 'POST',
         headers: {
@@ -181,28 +261,44 @@ export class GoodWeClient {
           'Referer': 'https://www.semsportal.com/',
           ...(this._cookieHeaderForUrl(url) ? { 'Cookie': this._cookieHeaderForUrl(url) } : {}),
         },
-        body: JSON.stringify(body),
+        body: payload,
         signal: AbortSignal.timeout(this.timeoutMs)
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) { this._throttleEnd(); throw new Error(`HTTP ${r.status}`); }
       this._updateCookiesFromResponse(r);
-      return r.json();
+      const j = await r.json();
+      this._throttleEnd();
+      return j;
     };
-    let j = await doCall();
-    if (j && (String(j.code) === '100001' || j.msg?.toLowerCase().includes('log in'))) {
-      // token expirado/invalidado -> reloga e tenta 1x
-      await this.crossLogin();
-      j = await doCall();
-    }
-    return j;
+    const promise = (async () => {
+      let j = await doCall();
+      if (j && (String(j.code) === '100001' || j.msg?.toLowerCase().includes('log in'))) {
+        await this.crossLogin();
+        j = await doCall();
+      }
+      this._cacheSet(key, j, ttl);
+      return j;
+    })().finally(() => this._inflight.delete(key));
+    this._inflight.set(key, promise);
+    return promise;
   }
 
   async postForm(endpoint, form) {
-    await this.crossLogin();
+    await this.ensureAuthFresh();
+    const url = this.baseUrlJoin(endpoint);
+    const params = new URLSearchParams();
+    Object.entries(form || {}).forEach(([k, v]) => params.append(k, v ?? ''));
+    const payload = params.toString();
+    const key = `POST|${url}|${payload}`;
+    const ttl = this._endpointTtl(endpoint);
+    const cached = this._cacheGet(key);
+    if (cached) return cached;
+    if (this._inflight.has(key)) return this._inflight.get(key);
     const doCall = async () => {
       const url = this.baseUrlJoin(endpoint);
       const params = new URLSearchParams();
       Object.entries(form || {}).forEach(([k, v]) => params.append(k, v ?? ''));
+      await this._throttleStart();
       const r = await fetch(url, {
         method: 'POST',
         headers: {
@@ -219,16 +315,23 @@ export class GoodWeClient {
         body: params.toString(),
         signal: AbortSignal.timeout(this.timeoutMs)
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) { this._throttleEnd(); throw new Error(`HTTP ${r.status}`); }
       this._updateCookiesFromResponse(r);
-      return r.json();
+      const j = await r.json();
+      this._throttleEnd();
+      return j;
     };
-    let j = await doCall();
-    if (j && (String(j.code) === '100001' || j.msg?.toLowerCase().includes('log in'))) {
-      await this.crossLogin();
-      j = await doCall();
-    }
-    return j;
+    const promise = (async () => {
+      let j = await doCall();
+      if (j && (String(j.code) === '100001' || j.msg?.toLowerCase().includes('log in'))) {
+        await this.crossLogin();
+        j = await doCall();
+      }
+      this._cacheSet(key, j, ttl);
+      return j;
+    })().finally(() => this._inflight.delete(key));
+    this._inflight.set(key, promise);
+    return promise;
   }
 
   // ---------- Cookie helpers ----------
@@ -259,8 +362,15 @@ export class GoodWeClient {
   }
 
   async postAbsoluteJson(url, body) {
-    await this.crossLogin();
+    await this.ensureAuthFresh();
+    const payload = JSON.stringify(body || {});
+    const key = `POST|${url}|${payload}`;
+    const ttl = this._endpointTtl(url);
+    const cached = this._cacheGet(key);
+    if (cached) return cached;
+    if (this._inflight.has(key)) return this._inflight.get(key);
     const doCall = async () => {
+      await this._throttleStart();
       const r = await fetch(url, {
         method: 'POST',
         headers: {
@@ -274,26 +384,42 @@ export class GoodWeClient {
           'Referer': 'https://www.semsportal.com/',
           ...(this._cookieHeaderForUrl(url) ? { 'Cookie': this._cookieHeaderForUrl(url) } : {}),
         },
-        body: JSON.stringify(body),
+        body: payload,
         signal: AbortSignal.timeout(this.timeoutMs)
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) { this._throttleEnd(); throw new Error(`HTTP ${r.status}`); }
       this._updateCookiesFromResponse(r);
-      return r.json();
+      const j = await r.json();
+      this._throttleEnd();
+      return j;
     };
-    let j = await doCall();
-    if (j && (String(j.code) === '100001' || j.msg?.toLowerCase().includes('log in'))) {
-      await this.crossLogin();
-      j = await doCall();
-    }
-    return j;
+    const promise = (async () => {
+      let j = await doCall();
+      if (j && (String(j.code) === '100001' || j.msg?.toLowerCase().includes('log in'))) {
+        await this.crossLogin();
+        j = await doCall();
+      }
+      this._cacheSet(key, j, ttl);
+      return j;
+    })().finally(() => this._inflight.delete(key));
+    this._inflight.set(key, promise);
+    return promise;
   }
 
   async postAbsoluteForm(url, form) {
-    await this.crossLogin();
+    await this.ensureAuthFresh();
+    const params = new URLSearchParams();
+    Object.entries(form || {}).forEach(([k, v]) => params.append(k, v ?? ''));
+    const payload = params.toString();
+    const key = `POST|${url}|${payload}`;
+    const ttl = this._endpointTtl(url);
+    const cached = this._cacheGet(key);
+    if (cached) return cached;
+    if (this._inflight.has(key)) return this._inflight.get(key);
     const doCall = async () => {
       const params = new URLSearchParams();
       Object.entries(form || {}).forEach(([k, v]) => params.append(k, v ?? ''));
+      await this._throttleStart();
       const r = await fetch(url, {
         method: 'POST',
         headers: {
@@ -310,15 +436,22 @@ export class GoodWeClient {
         body: params.toString(),
         signal: AbortSignal.timeout(this.timeoutMs)
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) { this._throttleEnd(); throw new Error(`HTTP ${r.status}`); }
       this._updateCookiesFromResponse(r);
-      return r.json();
+      const j = await r.json();
+      this._throttleEnd();
+      return j;
     };
-    let j = await doCall();
-    if (j && (String(j.code) === '100001' || j.msg?.toLowerCase().includes('log in'))) {
-      await this.crossLogin();
-      j = await doCall();
-    }
-    return j;
+    const promise = (async () => {
+      let j = await doCall();
+      if (j && (String(j.code) === '100001' || j.msg?.toLowerCase().includes('log in'))) {
+        await this.crossLogin();
+        j = await doCall();
+      }
+      this._cacheSet(key, j, ttl);
+      return j;
+    })().finally(() => this._inflight.delete(key));
+    this._inflight.set(key, promise);
+    return promise;
   }
 }

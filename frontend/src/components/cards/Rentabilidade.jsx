@@ -59,6 +59,45 @@ export default function Rentabilidade() {
     })();
   }, []);
 
+  // Auto-refresh incomes
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!token || !user?.powerstation_id) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        // Daily income
+        try {
+          const mon = await goodweApi.monitor(token, user.powerstation_id);
+          const it = mon?.data?.list?.[0] || {};
+          const dIncome = Number(it.eday_income || 0);
+          const dCur = String(it.currency || 'BRL');
+          if (!cancelled) {
+            setEdayRaw({ value: dIncome, currency: dCur });
+            setEdayIncomeBRL(Math.round((convertToBRL(dIncome, dCur) || 0) * 100) / 100);
+          }
+        } catch {}
+        // Total income
+        try {
+          const det = await goodweApi.plantDetail(token, user.powerstation_id);
+          const tIncome = Number(det?.data?.kpi?.total_income || 0);
+          const tCur = String(det?.data?.kpi?.currency || 'BRL');
+          if (!cancelled) {
+            setTotalRaw({ value: tIncome, currency: tCur });
+            setTotalIncomeBRL(Math.round((convertToBRL(tIncome, tCur) || 0) * 100) / 100);
+          }
+        } catch {}
+      } catch {}
+    };
+    const base = Number(import.meta.env.VITE_REFRESH_MS || 15000);
+    const ms = Number(import.meta.env.VITE_REFRESH_MS_INCOME || base);
+    const id = setInterval(run, Math.max(5000, ms));
+    const onFocus = () => run();
+    window.addEventListener('focus', onFocus);
+    return () => { cancelled = true; clearInterval(id); window.removeEventListener('focus', onFocus); };
+  }, []);
+
   // For ROI mock
   const credits = totalIncomeBRL ?? 0;
   const roiTarget = 45000; // exemplo
@@ -159,4 +198,3 @@ export default function Rentabilidade() {
     </div>
   );
 }
-
