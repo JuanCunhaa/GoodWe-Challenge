@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { GoodWeClient } from './goodweClient.js';
 import * as dbApi from './db.js';
 import { createRoutes } from './routes.js';
+import openapi from './openapi.js';
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -35,6 +36,77 @@ app.use((req, res, next) => {
 });
 
 app.use('/api', createRoutes(gw, dbApi));
+
+// OpenAPI JSON
+app.get('/api/openapi.json', (req, res) => {
+  res.json(openapi);
+});
+
+// Swagger UI (served via CDN, no extra npm deps) - Dark theme
+app.get('/api/docs', (req, res) => {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>GoodWe API Docs</title>
+      <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+      <style>
+        :root {
+          color-scheme: dark;
+        }
+        body { margin: 0; background: #0b1220; color: #e2e8f0; }
+        .swagger-ui .topbar { display: none; }
+        .swagger-ui, .swagger-ui .wrapper, .swagger-ui .information-container, .scheme-container,
+        .models, .opblock, .opblock-tag-section, .responses-inner, .response, .model-container {
+          background-color: #0b1220 !important;
+          color: #e2e8f0 !important;
+        }
+        .opblock-summary, .opblock-summary-method, .opblock-tag, .model-title, .tab li, .markdown p,
+        .model .property.primitive, .model .model-title__text, .parameters-col_description, .response-col_description {
+          color: #e2e8f0 !important;
+        }
+        .opblock { border-color: #1f2937 !important; }
+        .opblock .opblock-summary { background: #0f172a !important; border-color: #1f2937 !important; }
+        .opblock .opblock-summary .opblock-summary-method { color: #111827 !important; }
+        .opblock.opblock-get .opblock-summary-method { background: #22c55e !important; }
+        .opblock.opblock-post .opblock-summary-method { background: #60a5fa !important; }
+        .opblock.opblock-put .opblock-summary-method { background: #f59e0b !important; }
+        .opblock.opblock-delete .opblock-summary-method { background: #ef4444 !important; }
+        .info .title, .info .base-url, .scheme-container .schemes-title { color: #e2e8f0 !important; }
+        .btn, .button { background: #1f2937 !important; color: #e2e8f0 !important; border-color: #374151 !important; }
+        .btn[disabled], .button[disabled] { opacity: 0.6; }
+        input, select, textarea { background: #0f172a !important; color: #e2e8f0 !important; border-color: #374151 !important; }
+        .prop-type { color: #60a5fa !important; }
+        code, pre { background: #111827 !important; color: #e5e7eb !important; }
+        a, a:visited { color: #93c5fd !important; }
+      </style>
+    </head>
+    <body>
+      <div id="swagger-ui"></div>
+      <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+      <script>
+        window.onload = () => {
+          window.ui = SwaggerUIBundle({
+            url: '/api/openapi.json',
+            dom_id: '#swagger-ui',
+            presets: [SwaggerUIBundle.presets.apis],
+            layout: 'BaseLayout',
+            deepLinking: true,
+            docExpansion: 'list',
+            tagsSorter: 'alpha',
+            operationsSorter: 'alpha',
+            defaultModelsExpandDepth: -1,
+            tryItOutEnabled: true,
+            persistAuthorization: true,
+          });
+        };
+      </script>
+    </body>
+  </html>`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
 
 app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);

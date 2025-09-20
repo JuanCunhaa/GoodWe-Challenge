@@ -1,7 +1,7 @@
 {
   "uid": "e1c3414f-c9a3-4e4a-b4a6-afc30b682057",
   "token": "BAC20C32-B5D2-4894-AECB-D9799987ADD9",
-  "timestamp": 1758320284796,
+  "timestamp": 1758330715210,
   "api_base": "https://eu.semsportal.com/api/",
   "client": "web",
   "version": "v2.1.0",
