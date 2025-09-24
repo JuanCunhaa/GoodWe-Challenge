@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { goodweApi, convertToBRL } from '../services/goodweApi.js'
 import { energyService } from '../services/energyService.js'
 import { Calendar, Download, RefreshCw, Zap, PlugZap, Eye, EyeOff } from 'lucide-react'
@@ -131,8 +131,7 @@ export default function Geracao(){
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [series, setSeries] = useState([])
-  const [backfilling, setBackfilling] = useState(false)
-  const [backfillInfo, setBackfillInfo] = useState({ completed: 0, total: 0, date: '' })
+  // removed prefetch/backfill UI state
   const [agg, setAgg] = useState([])
   const [totals, setTotals] = useState({ gen:0, load:0, batt:0, grid:0 })
   const [revenueBRL, setRevenueBRL] = useState(0)
@@ -182,6 +181,28 @@ export default function Geracao(){
         setRevenueBRL(estimateRevenueBRL(energy.gridExp))
         setAgg([])
       } else if (mode==='WEEK'){
+        // Semana baseada no mesmo carregamento do mês: últimos 7 dias até hoje (inclusive)
+        try {
+          const end = toDateStr(new Date())
+          const start = addDays(end, -6)
+          const d0 = new Date(start + 'T00:00:00')
+          let list = []
+          let sum = { gen:0, load:0, batt:0, grid:0, gridExp:0 }
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(d0); d.setDate(d0.getDate() + i)
+            const ds = d.toISOString().slice(0,10)
+            try {
+              const { energy } = await energyService.getDayAggregatesCached(token, user.powerstation_id, ds)
+              list.push({ label: d.toLocaleDateString('pt-BR', { weekday: 'short' }), ds, gen: energy.pv||0, load: energy.load||0, batt: energy.batt||0, grid: energy.grid||0 })
+              sum = { gen: sum.gen + (energy.pv||0), load: sum.load + (energy.load||0), batt: sum.batt + (energy.batt||0), grid: sum.grid + (energy.grid||0), gridExp: sum.gridExp + (energy.gridExp||0) }
+            } catch {}
+          }
+          setAgg(list)
+          setTotals({ gen:sum.gen, load:sum.load, batt:sum.batt, grid:sum.grid })
+          setSeries([])
+          setRevenueBRL(estimateRevenueBRL(sum.gridExp))
+          return; // não executar lógica antiga abaixo
+        } catch {}
         // Usa ChartByPlant (range=2) e recorta seg..dom por string (YYYY-MM-DD)
         const { start, end } = weekBounds(date)
         let list=[]; let sum={gen:0,load:0,batt:0,grid:0,gridExp:0}
@@ -444,9 +465,9 @@ export default function Geracao(){
   function estimateRevenueBRL(exportKWh){ const t=feedinTariffBRL(); return (exportKWh||0) * t }
 
   const summary = useMemo(()=>[
-    { label:'GeraÃ§Ã£o', value: totals.gen, icon: Zap, cls:'text-emerald-700', key:'PV' },
+    { label:'Geração', value: totals.gen, icon: Zap, cls:'text-emerald-700', key:'PV' },
     { label:'Consumo', value: totals.load, icon: PlugZap, cls:'text-amber-700', key:'Load' },
-    { label:'Rede (|kWh|)', value: totals.grid, icon: PlugZap, cls:'text-rose-700', key:'Grid' },
+    { label:'Rede', value: totals.grid, icon: PlugZap, cls:'text-rose-700', key:'Grid' },
   ], [totals])
 
   // ConstrÃ³i sÃ©ries de linhas para agregados (mÃªs/ano) a partir de agg
@@ -478,30 +499,17 @@ export default function Geracao(){
     return []
   }, [mode, date, series, agg])
 
-  async function handleBackfill(){
-    const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || 'null');
-    if (!token || !user?.powerstation_id) return;
-    setBackfilling(true);
-    setBackfillInfo({ completed: 0, total: 0, date: '' });
-    try{
-      const days = Number(import.meta.env.VITE_BACKFILL_SEED_DAYS || import.meta.env.VITE_BACKFILL_DAYS || 365);
-      await energyService.backfillDays({ token, plantId: user.powerstation_id, days, onProgress: (p)=> setBackfillInfo(p) });
-      await energyService.ensureSeeded({ token, plantId: user.powerstation_id });
-      // Hide button next renders
-      try { const meta = energyService.getBackfillMeta(user.powerstation_id); if (meta?.seeded) setSeeded(true); } catch {}
-    } finally { setBackfilling(false); }
-  }
+  // removed handleBackfill UI (preload via Layout now)
 
   return (
     <section className="grid gap-6">
       <div className="card">
         <div className="flex items-center justify-between mb-3">
-          <div className="h2">GeraÃ§Ã£o de Energia</div>
+          <div className="h2">Geração de Energia</div>
           <div className="flex items-center gap-2">
             <button className={`btn ${mode==='DAY'?'btn-primary':''}`} onClick={()=>setMode('DAY')}>Dia</button>
             <button className={`btn ${mode==='WEEK'?'btn-primary':''}`} onClick={()=>setMode('WEEK')}>Semana</button>
-            <button className={`btn ${mode==='MONTH'?'btn-primary':''}`} onClick={()=>setMode('MONTH')}>MÃªs</button>
+            <button className={`btn ${mode==='MONTH'?'btn-primary':''}`} onClick={()=>setMode('MONTH')}>Mês</button>
             {/* Removido Ano */}
             <div className="panel flex items-center gap-2 py-1"><Calendar className="w-4 h-4 muted"/><input type="date" className="outline-none" value={date} onChange={e=>setDate(e.target.value)} /></div>
             <button className="btn" onClick={refresh}><RefreshCw className="w-4 h-4"/></button>
@@ -511,7 +519,7 @@ export default function Geracao(){
               const token = localStorage.getItem('token');
               const user = JSON.parse(localStorage.getItem('user') || 'null');
               const meta = user?.powerstation_id ? energyService.getBackfillMeta(user.powerstation_id) : {};
-              if (meta?.seeded) return null;
+              return null;
               return (
                 <button className="btn" onClick={handleBackfill} disabled={backfilling} title="Pré-carregar últimos dias no cache local">
                   <Download className="w-4 h-4"/>

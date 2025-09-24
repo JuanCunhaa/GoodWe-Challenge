@@ -4,6 +4,41 @@ import crypto from 'node:crypto';
 export function createRoutes(gw, dbApi) {
   const router = Router();
 
+  // -------- Helpers (dedupe token + params) --------
+  const getBearerToken = (req) => {
+    const auth = String(req.headers['authorization'] || '');
+    return auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  };
+  const tryGetUser = (req) => {
+    try {
+      const token = getBearerToken(req);
+      if (!token) return null;
+      const sess = dbApi.getSession(token);
+      if (!sess) return null;
+      const user = dbApi.getUserById(sess.user_id);
+      return user || null;
+    } catch { return null; }
+  };
+  const requireUser = (req, res) => {
+    const token = getBearerToken(req);
+    if (!token) { res.status(401).json({ ok:false, error:'missing token' }); return null; }
+    const sess = dbApi.getSession(token);
+    if (!sess) { res.status(401).json({ ok:false, error:'invalid token' }); return null; }
+    const user = dbApi.getUserById(sess.user_id);
+    if (!user) { res.status(401).json({ ok:false, error:'invalid token' }); return null; }
+    return user;
+  };
+  const getPsId = (req) => {
+    const user = tryGetUser(req);
+    return (
+      req.query.powerStationId ||
+      req.query.powerstation_id ||
+      req.query.pw_id ||
+      user?.powerstation_id ||
+      ''
+    );
+  };
+
   // Health
   router.get('/health', (req, res) => res.json({ ok: true }));
 
@@ -44,13 +79,7 @@ export function createRoutes(gw, dbApi) {
       const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY || '';
       if (!OPENAI_API_KEY) return res.status(501).json({ ok: false, error: 'assistant unavailable: missing OPENAI_API_KEY' });
 
-      const auth = String(req.headers['authorization'] || '');
-      const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-      if (!token) return res.status(401).json({ ok: false, error: 'missing token' });
-      const sess = dbApi.getSession(token);
-      if (!sess) return res.status(401).json({ ok: false, error: 'invalid token' });
-      const user = dbApi.getUserById(sess.user_id);
-      if (!user) return res.status(401).json({ ok: false, error: 'invalid token' });
+      const user = requireUser(req, res); if (!user) return;
 
       const input = String(req.body?.input || '').trim();
       const prev = Array.isArray(req.body?.messages) ? req.body.messages : [];
@@ -409,26 +438,14 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   });
 
   router.get('/auth/me', (req, res) => {
-    const auth = String(req.headers['authorization'] || '');
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-    if (!token) return res.status(401).json({ ok: false, error: 'missing token' });
-    const sess = dbApi.getSession(token);
-    if (!sess) return res.status(401).json({ ok: false, error: 'invalid token' });
-    const user = dbApi.getUserById(sess.user_id);
-    if (!user) return res.status(401).json({ ok: false, error: 'invalid token' });
+    const user = requireUser(req, res); if (!user) return;
     res.json({ ok: true, user: { id: user.id, email: user.email, powerstation_id: user.powerstation_id } });
   });
 
   // Change password (requires Bearer token)
   router.post('/auth/change-password', (req, res) => {
     try {
-      const auth = String(req.headers['authorization'] || '');
-      const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-      if (!token) return res.status(401).json({ ok: false, error: 'missing token' });
-      const sess = dbApi.getSession(token);
-      if (!sess) return res.status(401).json({ ok: false, error: 'invalid token' });
-      const user = dbApi.getUserById(sess.user_id);
-      if (!user) return res.status(401).json({ ok: false, error: 'invalid token' });
+      const user = requireUser(req, res); if (!user) return;
 
       const { old_password, new_password } = req.body || {};
       if (!old_password || !new_password) return res.status(400).json({ ok: false, error: 'old_password and new_password required' });
@@ -473,7 +490,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   // QueryPowerStationMonitor (JSON)
   router.get('/monitor', async (req, res) => {
     const body = {
-      powerstation_id: req.query.powerstation_id || req.query.pw_id || req.query.pwid || '',
+      powerstation_id: getPsId(req),
       key: req.query.key || '',
       orderby: req.query.orderby || '',
       powerstation_type: req.query.powerstation_type || '',
@@ -494,7 +511,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // GetInverterAllPoint (form)
   router.get('/inverters', async (req, res) => {
-    const psId = req.query.powerStationId || req.query.powerstation_id || req.query.pw_id || '';
+    const psId = getPsId(req);
     try {
       const j = await gw.postForm('v3/PowerStation/GetInverterAllPoint', { powerStationId: psId });
       res.json(j);
@@ -529,7 +546,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // GetWeather (form)
   router.get('/weather', async (req, res) => {
-    const psId = req.query.powerStationId || req.query.powerstation_id || req.query.pw_id || '';
+    const psId = getPsId(req);
     try {
       const j = await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: psId });
       res.json(j);
@@ -540,7 +557,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // Powerflow (JSON)
   router.get('/powerflow', async (req, res) => {
-    const psId = req.query.powerStationId || req.query.powerstation_id || req.query.pw_id || '';
+    const psId = getPsId(req);
     try {
       const j = await gw.postJson('v2/PowerStation/GetPowerflow', { PowerStationId: psId });
       res.json(j);
@@ -551,7 +568,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // EV Chargers - count by PowerStation (JSON)
   router.get('/evchargers/count', async (req, res) => {
-    const psId = req.query.powerStationId || req.query.powerstation_id || req.query.pw_id || '';
+    const psId = getPsId(req);
     try {
       const j = await gw.postJson('v4/EvCharger/GetEvChargerCountByPwId', { PowerStationId: psId });
       res.json(j);
@@ -562,7 +579,8 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // Charts/GetChartByPlant (JSON) -> agregados rápidos (dia/semana/mês/ano)
   router.get('/chart-by-plant', async (req, res) => {
-    const id = req.query.id || req.query.plant_id || '';
+    const user = tryGetUser(req);
+    const id = req.query.id || req.query.plant_id || user?.powerstation_id || '';
     const date = req.query.date || '';
     const range = req.query.range || '2'; // 1: day/rolling? 2: month, 4: year (observado)
     const chartIndexId = req.query.chartIndexId || '8'; // energy statistics
@@ -577,7 +595,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // GetPlantDetailByPowerstationId (form) -> total_income, currency, KPIs
   router.get('/plant-detail', async (req, res) => {
-    const psId = req.query.powerStationId || req.query.powerstation_id || req.query.pw_id || '';
+    const psId = getPsId(req);
     try {
       const j = await gw.postForm('v3/PowerStation/GetPlantDetailByPowerstationId', { powerStationId: psId });
       res.json(j);
@@ -588,7 +606,8 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // GetPlantPowerChart (JSON) — support day/week/month aggregation client-side later if needed
   router.get('/power-chart', async (req, res) => {
-    const id = req.query.plant_id || req.query.id || '';
+    const user = tryGetUser(req);
+    const id = req.query.plant_id || req.query.id || user?.powerstation_id || '';
     const date = req.query.date || '';
     const full_script = String(req.query.full_script || 'true') === 'true';
     const payload = { id, date, full_script };
@@ -602,7 +621,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // PowerstationWarningsQuery (form) -> alerts per inverter
   router.get('/warnings', async (req, res) => {
-    const pwId = req.query.powerStationId || req.query.powerstation_id || req.query.pw_id || '';
+    const pwId = getPsId(req);
     try {
       // Try region-aware first
       let j = await gw.postForm('warning/PowerstationWarningsQuery', { pw_id: pwId });

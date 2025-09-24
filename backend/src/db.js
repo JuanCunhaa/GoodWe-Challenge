@@ -2,8 +2,23 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DATA_DIR = path.join(process.cwd(), 'backend', 'data');
-const DB_PATH = path.join(DATA_DIR, 'app.db');
+// Prefer ./data (clean path). Fallback to ./backend/data if existing DB is there
+const CWD = process.cwd();
+const PRIMARY_DIR = path.join(CWD, 'data');
+const PRIMARY_DB = path.join(PRIMARY_DIR, 'app.db');
+const LEGACY_DIR = path.join(CWD, 'backend', 'data');
+const LEGACY_DB = path.join(LEGACY_DIR, 'app.db');
+
+let DATA_DIR = PRIMARY_DIR;
+let DB_PATH = PRIMARY_DB;
+try {
+  const legacyExists = fs.existsSync(LEGACY_DB);
+  const primaryExists = fs.existsSync(PRIMARY_DB);
+  if (!primaryExists && legacyExists) {
+    DATA_DIR = LEGACY_DIR;
+    DB_PATH = LEGACY_DB;
+  }
+} catch {}
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 

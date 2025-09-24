@@ -7,6 +7,7 @@ import AssistantPanel from './AssistantPanel.jsx'
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 import { goodweApi } from '../services/goodweApi.js'
+import { energyService } from '../services/energyService.js'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -63,6 +64,34 @@ export default function Layout(){
         setWarningCount(null)
       }
     })()
+  }, [])
+
+  // Prefetch month daily aggregates into local cache and refresh today every 10 min
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    const user = JSON.parse(localStorage.getItem('user') || 'null')
+    if (!token || !user?.powerstation_id) return
+    const plantId = user.powerstation_id
+    const today = new Date()
+    const day = today.getDate()
+    const daysToBackfill = Math.max(0, day - 1)
+    ;(async () => {
+      try {
+        if (daysToBackfill > 0) {
+          await energyService.backfillDays({ token, plantId, days: daysToBackfill })
+        }
+        const todayStr = new Date().toISOString().slice(0,10)
+        await energyService.getDayAggregatesCached(token, plantId, todayStr)
+      } catch {}
+    })()
+    const intervalMs = Number(import.meta.env.VITE_INCREMENTAL_INTERVAL_MS || 600000)
+    const id = setInterval(async () => {
+      try {
+        const todayStr = new Date().toISOString().slice(0,10)
+        await energyService.getDayAggregatesCached(token, plantId, todayStr)
+      } catch {}
+    }, Math.max(60000, intervalMs))
+    return () => clearInterval(id)
   }, [])
 
   return (
@@ -140,3 +169,4 @@ export default function Layout(){
     </div>
   )
 }
+

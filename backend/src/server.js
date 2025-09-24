@@ -6,6 +6,7 @@ import { GoodWeClient } from './goodweClient.js';
 import * as dbApi from './db.js';
 import { createRoutes } from './routes.js';
 import openapi from './openapi.js';
+import compression from 'compression';
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -21,6 +22,8 @@ const gw = new GoodWeClient({
 });
 
 const app = express();
+// HTTP compression (gzip/deflate)
+app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 // CORS (dynamic headers to satisfy preflight)
 app.use((req, res, next) => {
@@ -108,6 +111,23 @@ app.get('/api/docs', (req, res) => {
   res.send(html);
 });
 
-app.listen(PORT, () => {
-  console.log(`API listening on http://localhost:${PORT}`);
+// ---------- Static frontend (single-port serving) ----------
+// Serve built frontend if present (default path: ../frontend/dist)
+const FRONT_DIST = process.env.FRONT_DIST || path.resolve(process.cwd(), '../frontend/dist');
+if (fs.existsSync(FRONT_DIST)) {
+  app.use(express.static(FRONT_DIST, { index: false }));
+  app.get(['/', '/index.html'], (req, res) => {
+    res.sendFile(path.join(FRONT_DIST, 'index.html'));
+  });
+  // SPA fallback: any non-API route serves index.html
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(FRONT_DIST, 'index.html'));
+  });
+} else {
+  console.warn(`[server] Frontend build not found at ${FRONT_DIST}. Only API will be served.`);
+}
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`API listening on http://0.0.0.0:${PORT}`);
 });

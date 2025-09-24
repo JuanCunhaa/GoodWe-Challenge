@@ -9,7 +9,6 @@ function toNum(v){
 }
 
 function parseInverterPower(item){
-  // Prefer it.out_pac; fallback to dict.ouptputPower (typo do SEMS)
   const dict = item?.dict || {}; const left = dict.left || []; const right = dict.right || [];
   const kv = (k)=> ([...left, ...right].find((e)=>e?.key===k)?.value);
   const outPac = toNum(item?.out_pac);
@@ -18,7 +17,6 @@ function parseInverterPower(item){
 }
 
 function parseBatteryW(item){
-  // StatusOfBattery: "V/A/W" -> pega W (positivo: descarregando, negativo: carregando)
   try {
     const dict = item?.dict || {}; const left = dict.left || []; const right = dict.right || [];
     const kv = (k)=> ([...left, ...right].find((e)=>e?.key===k)?.value);
@@ -35,7 +33,7 @@ export default function ResumoEnergia(){
   const [battW, setBattW] = useState(null)
   const [loadW, setLoadW] = useState(null)
   const [gridW, setGridW] = useState(null)
-  const [currency, setCurrency] = useState(null) // moeda da conta/planta (ex.: BRL, USD, EUR)
+  const [currency, setCurrency] = useState(null)
 
   useEffect(()=>{
     const token = localStorage.getItem('token')
@@ -44,7 +42,7 @@ export default function ResumoEnergia(){
     ;(async()=>{
       setLoading(true); setError('')
       try{
-        // 1) Powerflow (para load/grid quando disponíveis)
+        // 1) Powerflow
         try{
           const pf = await goodweApi.powerflow(token, user.powerstation_id)
           const p = pf?.data?.powerflow || pf?.data?.powerFlow || pf?.powerflow
@@ -53,24 +51,21 @@ export default function ResumoEnergia(){
             setGridW(toNum(p.grid))
           }
         }catch{}
-        // 2) Inversores (para PV e Bateria)
+        // 2) Inversores
         try{
           const inv = await goodweApi.inverters(token, user.powerstation_id)
           const list = inv?.data?.inverterPoints || []
           const totalPv = list.reduce((acc, it)=> acc + (parseInverterPower(it) || 0), 0)
           setPvW(Number.isFinite(totalPv) ? totalPv : null)
-          // pega o primeiro com info de bateria válida
           const firstBatt = list.map(parseBatteryW).find(v => v!=null)
           if (firstBatt!=null) setBattW(firstBatt)
         }catch{}
-
-        // 3) Moeda/preço por região a partir do SEMS (plant detail preferencialmente)
+        // 3) Moeda
         try{
           const det = await goodweApi.plantDetail(token, user.powerstation_id)
           const cur = String(det?.data?.kpi?.currency || '').toUpperCase()
           if (cur) setCurrency(cur)
           else {
-            // fallback: monitor
             const mon = await goodweApi.monitor(token, user.powerstation_id)
             const cur2 = String(mon?.data?.list?.[0]?.currency || '').toUpperCase()
             if (cur2) setCurrency(cur2)
@@ -89,7 +84,6 @@ export default function ResumoEnergia(){
     let cancelled = false
     const run = async()=>{
       try{
-        // Powerflow
         try{
           const pf = await goodweApi.powerflow(token, user.powerstation_id)
           const p = pf?.data?.powerflow || pf?.data?.powerFlow || pf?.powerflow
@@ -98,7 +92,6 @@ export default function ResumoEnergia(){
             setGridW(toNum(p.grid))
           }
         }catch{}
-        // Inverters
         try{
           const inv = await goodweApi.inverters(token, user.powerstation_id)
           const list = inv?.data?.inverterPoints || []
@@ -107,7 +100,6 @@ export default function ResumoEnergia(){
           const firstBatt = list.map(parseBatteryW).find(v => v!=null)
           if (firstBatt!=null && !cancelled) setBattW(firstBatt)
         }catch{}
-        // Currency
         try{
           const det = await goodweApi.plantDetail(token, user.powerstation_id)
           const cur = String(det?.data?.kpi?.currency || '').toUpperCase()
@@ -123,7 +115,6 @@ export default function ResumoEnergia(){
     return ()=>{ cancelled = true; clearInterval(id); window.removeEventListener('focus', onFocus) }
   },[])
 
-  // Deriva grid se vier ausente mas houver pv/batt/load
   const gridDerived = useMemo(()=>{
     if (gridW!=null) return gridW
     if (loadW==null && pvW==null && battW==null) return null
@@ -197,14 +188,14 @@ export default function ResumoEnergia(){
           <div className="text-xs text-gray-500">Bateria</div>
           <div className="text-xl font-extrabold text-purple-700">{fmtW(battW)}</div>
           {batterySavingsPerHourBRL!=null && (
-            <div className="text-[11px] text-gray-600 mt-0.5">Economia: ≈ R$ {batterySavingsPerHourBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h</div>
+            <div className="text-[11px] text-gray-600 mt-0.5">Economia: R$ {batterySavingsPerHourBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h</div>
           )}
         </div>
         <div className="panel text-center">
           <div className="text-xs text-gray-500">Rede</div>
           <div className="text-xl font-extrabold text-rose-700">{fmtW(gridDerived)}</div>
           {costPerHourBRL!=null && (
-            <div className="text-[11px] text-gray-600 mt-0.5">Gasto: ≈ R$ {costPerHourBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h</div>
+            <div className="text-[11px] text-gray-600 mt-0.5">Gasto: R$ {costPerHourBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h</div>
           )}
         </div>
       </div>
@@ -225,3 +216,4 @@ export default function ResumoEnergia(){
     </div>
   )
 }
+

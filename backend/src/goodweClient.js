@@ -172,7 +172,7 @@ export class GoodWeClient {
       ['v2/PowerStation/GetPowerflow', 5_000],
       ['v3/PowerStation/GetInverterAllPoint', 15_000],
       ['v3/PowerStation/GetPlantDetailByPowerstationId', 60_000],
-      ['v2/Charts/GetChartByPlant', 120_000],
+      ['v2/Charts/GetChartByPlant', 600_000],
       ['v2/Charts/GetPlantPowerChart', 60_000],
       ['warning/PowerstationWarningsQuery', 30_000],
       ['v4/EvCharger/GetEvChargerCountByPwId', 60_000],

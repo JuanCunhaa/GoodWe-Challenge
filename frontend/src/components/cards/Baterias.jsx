@@ -1,23 +1,11 @@
 // src/components/cards/Baterias.jsx
-import { Battery, Zap, Thermometer, ArrowLeft } from "lucide-react";
+import { Battery, Zap, ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import BatteryBar from "./BatteryBar.jsx";
 import { goodweApi } from "../../services/goodweApi.js";
 const springIn = { type: "spring", stiffness: 260, damping: 22 };
 const exitUp = { y: -8, opacity: 0, transition: { duration: 0.18 } };
-function healthMeta(pct) {
-  const v = Number(pct || 0);
-  if (v >= 85) return { label: "Excelente", textClass: "text-green-600", chipBg: "bg-green-50", chipText: "text-green-700" };
-  if (v >= 70) return { label: "Moderada", textClass: "text-yellow-600", chipBg: "bg-yellow-50", chipText: "text-yellow-700" };
-  return { label: "Decadente", textClass: "text-red-600", chipBg: "bg-red-50", chipText: "text-red-700" };
-}
-function tempMeta(c) {
-  const v = Number(c || 0);
-  if (v >= 45) return { textClass: "text-red-600", iconClass: "text-red-600" };
-  if (v >= 35) return { textClass: "text-orange-600", iconClass: "text-orange-600" };
-  return { textClass: "text-blue-600", iconClass: "text-blue-600" };
-}
 function toPctFrac(soc) {
   const n = parseFloat(String(soc).replace("%", ""));
   if (!isFinite(n)) return 0;
@@ -53,8 +41,15 @@ export default function Baterias() {
   const [socStats, setSocStats] = useState({ min: null, max: null });
   const [batPeak, setBatPeak] = useState({ value: null, time: null }); // pico PCurve_Power_Battery
   const b = view.index != null ? items[view.index] : null;
-  const health = b ? healthMeta(Number(b.soh || 90)) : healthMeta(0);
-  const tmeta = b ? tempMeta(Number(b.temp_c || 0)) : tempMeta(0);
+  const ShowHealthTemp = false;
+  const batteryChips = (() => {
+    const chips = [];
+    const w = Number(b?.batt_w ?? 0);
+    if (w < -100) chips.push({ label: 'Carregando Bateria', cls: 'bg-indigo-600/20 text-indigo-300 border-indigo-500/30' });
+    if (w > 100) chips.push({ label: 'Usando Bateria', cls: 'bg-purple-600/20 text-purple-300 border-purple-500/30' });
+    if (chips.length === 0) chips.push({ label: 'Bateria inativa', cls: 'bg-gray-600/10 text-gray-300 border-gray-500/20' });
+    return chips;
+  })();
   useEffect(() => {
     const run = () => { try { refresh(); } catch {} };
     run();
@@ -197,6 +192,7 @@ export default function Baterias() {
                 </div>
               </div>
               {/* Health / Temp */}
+              {ShowHealthTemp && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-white/85 p-4 text-center">
                   <div className={`text-2xl font-extrabold ${health.textClass}`}>{b?.soh ?? "—"}%</div>
@@ -211,6 +207,7 @@ export default function Baterias() {
                   <div className="text-xs text-gray-600">Temperatura</div>
                 </div>
               </div>
+              )}
               {/* Bateria */}
               <div className="rounded-xl bg-white/85 p-4">
                 <div className="font-semibold text-gray-800 mb-2">Bateria</div>
