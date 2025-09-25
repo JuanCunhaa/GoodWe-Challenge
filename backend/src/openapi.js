@@ -145,6 +145,35 @@ const openapi = {
     '/assistant/ping': {
       get: { tags: ['Assistant'], summary: 'Ping + auth status', responses: { '200': { description: 'OK' } } },
     },
+    '/tts': {
+      post: {
+        tags: ['Assistant'],
+        summary: 'Text to Speech (audio)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+              example: { text: 'Olá! Esta é uma voz neutra.' },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'WAV audio', content: { 'audio/wav': { schema: { type: 'string', format: 'binary' } } } },
+          '501': { description: 'TTS not configured' },
+        },
+      },
+      get: {
+        tags: ['Assistant'],
+        summary: 'Text to Speech (debug via query)',
+        parameters: [ { name: 'text', in: 'query', schema: { type: 'string' }, required: true } ],
+        responses: {
+          '200': { description: 'WAV audio', content: { 'audio/wav': { schema: { type: 'string', format: 'binary' } } } },
+          '400': { description: 'Missing text' },
+          '501': { description: 'TTS not configured' },
+        },
+      },
+    },
 
     // Auth
     '/auth/register': {

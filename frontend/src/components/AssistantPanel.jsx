@@ -8,7 +8,6 @@ export default function AssistantPanel(){
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [listening, setListening] = useState(false)
-  const [autoSpeak, setAutoSpeak] = useState(true)
   const scrollRef = useRef(null)
   const inputRef = useRef(null)
   const recognitionRef = useRef(null)
@@ -17,27 +16,64 @@ export default function AssistantPanel(){
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages, loading])
 
-  // Fala a resposta do assistente (TTS)
-  function speak(text) {
-    if (!window.speechSynthesis) return
-    const utter = new window.SpeechSynthesisUtterance(text)
-    const voices = window.speechSynthesis.getVoices()
-    utter.voice = voices.find(v => v.lang === 'pt-BR' && v.name.toLowerCase().includes('female')) ||
-                  voices.find(v => v.lang === 'pt-BR') ||
-                  voices[0]
-    utter.rate = 1
-    window.speechSynthesis.speak(utter)
+  // Fala a resposta do assistente (TTS via backend, com fallback Web Speech)
+  async function speak(text) {
+    const base = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'
+    // 1) Tenta back-end TTS em chunks (resposta mais rápida para frases longas)
+    try {
+      const chunks = splitTextForTTS(text)
+      for (let i = 0; i < chunks.length; i++){
+        const r = await fetch(`${base}/tts`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: chunks[i] })
+        })
+        if (!r.ok || !(r.headers.get('content-type')||'').includes('audio')) throw new Error('bad audio')
+        const blob = await r.blob()
+        await playBlob(blob)
+      }
+      return
+    } catch {}
+
+    // 2) Fallback: Web Speech API (pode variar de voz entre máquinas)
+    try {
+      if (!window.speechSynthesis) return
+      const utter = new window.SpeechSynthesisUtterance(text)
+      const voices = window.speechSynthesis.getVoices()
+      utter.voice = voices.find(v => v.lang === 'pt-BR') || voices[0]
+      utter.rate = 1
+      window.speechSynthesis.speak(utter)
+    } catch {}
   }
 
-  // Fala automaticamente a resposta do assistente
-  useEffect(() => {
-    if (!autoSpeak) return
-    if (messages.length > 0 && messages[messages.length-1].role === 'assistant') {
-      speak(messages[messages.length-1].content)
+  function splitTextForTTS(s){
+    const txt = String(s||'').trim()
+    if (!txt) return []
+    // Primeiro tenta quebrar por sentenças
+    const parts = txt.split(/(?<=[\.!?…])\s+/g).filter(Boolean)
+    // Unir pedaços muito curtos e limitar comprimento ~ 220 chars
+    const chunks = []
+    let cur = ''
+    for (const p of parts){
+      if ((cur + ' ' + p).trim().length <= 220) cur = (cur ? cur + ' ' : '') + p
+      else { if (cur) chunks.push(cur); cur = p }
     }
-  }, [messages, autoSpeak])
+    if (cur) chunks.push(cur)
+    // Fallback se nada dividir
+    if (chunks.length === 0) chunks.push(txt)
+    return chunks
+  }
 
-  async function send(text){
+  function playBlob(blob){
+    return new Promise((resolve)=>{
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      audio.onended = () => { URL.revokeObjectURL(url); resolve() }
+      audio.onerror = () => { URL.revokeObjectURL(url); resolve() }
+      audio.play().catch(()=>{ URL.revokeObjectURL(url); resolve() })
+    })
+  }
+
+  // Envia mensagem; se source === 'voice', responder também em áudio
+  async function send(text, { source } = {}){
     const content = text?.trim() || input.trim()
     if (!content) return
     setError('')
@@ -51,7 +87,11 @@ export default function AssistantPanel(){
       })
       if (!r.ok){ const t = await r.json().catch(()=>null); throw new Error(t?.error || `HTTP ${r.status}`) }
       const j = await r.json()
-      setMessages((prev)=> [...prev, { role:'assistant', content: String(j?.answer||'') }])
+      const answer = String(j?.answer||'')
+      setMessages((prev)=> [...prev, { role:'assistant', content: answer }])
+      if (source === 'voice' && answer) {
+        try{ await speak(answer) }catch{}
+      }
     }catch(e){ setError(String(e.message || e)) }
     finally{ setLoading(false); inputRef.current?.focus() }
   }
@@ -76,7 +116,7 @@ export default function AssistantPanel(){
       setListening(false)
       inputRef.current?.focus()
       // Envia automaticamente ao terminar de falar
-      setTimeout(() => send(transcript), 100)
+      setTimeout(() => send(transcript, { source: 'voice' }), 100)
     }
     recognition.onerror = () => setListening(false)
     recognition.onend = () => setListening(false)
@@ -89,6 +129,20 @@ export default function AssistantPanel(){
     recognitionRef.current?.stop()
     setListening(false)
   }
+
+  // Atalho de teclado: Ctrl+M para alternar escuta de voz
+  useEffect(() => {
+    function onKey(e){
+      const isMod = e.ctrlKey || e.metaKey
+      if (isMod && e.key.toLowerCase() === 'm'){
+        e.preventDefault()
+        if (listening) stopListening(); else startListening()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listening])
 
   return (
     <div className="card overflow-hidden">
@@ -129,21 +183,12 @@ export default function AssistantPanel(){
                 type="button"
                 className={`btn ${listening ? 'bg-red-600 text-white' : ''}`}
                 onClick={listening ? stopListening : startListening}
-                aria-label={listening ? "Parar gravação" : "Falar"}
+                aria-label={listening ? 'Parar gravação' : 'Falar'}
                 disabled={loading}
               >
                 {listening ? <MicOff className="w-4 h-4"/> : <Mic className="w-4 h-4"/>}
               </button>
             </div>
-            <label className="flex items-center gap-2 text-xs cursor-pointer select-none mt-1">
-              <input
-                type="checkbox"
-                checked={autoSpeak}
-                onChange={e => setAutoSpeak(e.target.checked)}
-                className="accent-brand"
-              />
-              Ouvir resposta em voz alta
-            </label>
           </div>
         </div>
       )}

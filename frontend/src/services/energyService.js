@@ -124,3 +124,51 @@ energyService.incrementalUpdate = async ({ token, plantId }) => {
   dayCache.setMeta(plantId, meta);
   return { completed };
 };
+
+// ---------- Prewarm (login/bootstrap) ----------
+// Prepara cache para: hoje (curvas), semana (últimos 7 dias), mês (últimos 30 dias)
+// Sem bloquear a UI; usa pequena concorrência para acelerar sem sobrecarregar
+
+async function runPool(items, limit, worker){
+  let i = 0; const results = [];
+  const run = async () => {
+    const idx = i++; if (idx >= items.length) return;
+    try { results[idx] = await worker(items[idx], idx); } catch { results[idx] = null }
+    return run();
+  };
+  const runners = Array.from({ length: Math.max(1, limit) }, run);
+  await Promise.all(runners);
+  return results;
+}
+
+energyService.prewarm = async ({ token, plantId, weekDays = 7, monthDays = 30, concurrency = 3 }) => {
+  try {
+    const today = toDateStr(new Date());
+    // 1) Hoje (curvas + energia)
+    try { await energyService.getDayCurvesCached(token, plantId, today) } catch {}
+
+    // 2) Semana: últimos (weekDays-1) dias + hoje
+    const w = Math.max(1, Number(weekDays||7));
+    const start = addDays(today, -(w-1));
+    const weekList = []; {
+      const base = new Date(start+'T00:00:00');
+      for (let k=0;k<w;k++){ const d=new Date(base); d.setDate(base.getDate()+k); weekList.push(d.toISOString().slice(0,10)) }
+    }
+    await runPool(weekList, concurrency, async (ds)=> {
+      const has = dayCache.getEnergy(plantId, ds);
+      if (!has) { try { await energyService.getDayAggregatesCached(token, plantId, ds) } catch {} }
+    });
+
+    // 3) Mês: últimos monthDays
+    const M = Math.max(1, Number(monthDays||30));
+    const monthList = []; {
+      const base = new Date(today+'T00:00:00');
+      for (let k=1;k<=M;k++){ const d=new Date(base); d.setDate(base.getDate()-k); monthList.push(d.toISOString().slice(0,10)) }
+    }
+    await runPool(monthList, concurrency, async (ds)=> {
+      const has = dayCache.getEnergy(plantId, ds);
+      if (!has) { try { await energyService.getDayAggregatesCached(token, plantId, ds) } catch {} }
+    });
+    return { ok: true };
+  } catch (e) { return { ok:false, error: String(e) } }
+};

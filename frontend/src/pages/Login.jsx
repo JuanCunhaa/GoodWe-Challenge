@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { authApi, saveSession, loadSession } from '../services/authApi.js'
+import { energyService } from '../services/energyService.js'
 
 export default function Login(){
   const nav = useNavigate();
@@ -21,6 +22,8 @@ export default function Login(){
       const resp = await authApi.login(email, password);
       if (!resp?.ok) throw new Error(resp?.error || 'Falha no login');
       saveSession(resp.token, resp.user);
+      // Prewarm caches (day/week/month) em background, sem bloquear navegação
+      try { const { token, user } = { token: resp.token, user: resp.user }; setTimeout(()=>{ energyService.prewarm({ token, plantId: user.powerstation_id }).catch(()=>{}) }, 50) } catch {}
       nav('/', { replace:true });
     }catch(err){
       setError(String(err.message || err));
@@ -53,4 +56,3 @@ export default function Login(){
     </div>
   )
 }
-

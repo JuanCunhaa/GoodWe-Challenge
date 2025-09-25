@@ -66,22 +66,15 @@ export default function Layout(){
     })()
   }, [])
 
-  // Prefetch month daily aggregates into local cache and refresh today every 10 min
+  // Prefetch caches (day/week/month) logo após carregar o layout
   useEffect(() => {
     const token = localStorage.getItem('token')
     const user = JSON.parse(localStorage.getItem('user') || 'null')
     if (!token || !user?.powerstation_id) return
     const plantId = user.powerstation_id
-    const today = new Date()
-    const day = today.getDate()
-    const daysToBackfill = Math.max(0, day - 1)
     ;(async () => {
       try {
-        if (daysToBackfill > 0) {
-          await energyService.backfillDays({ token, plantId, days: daysToBackfill })
-        }
-        const todayStr = new Date().toISOString().slice(0,10)
-        await energyService.getDayAggregatesCached(token, plantId, todayStr)
+        await energyService.prewarm({ token, plantId, weekDays: 7, monthDays: 30, concurrency: 3 })
       } catch {}
     })()
     const intervalMs = Number(import.meta.env.VITE_INCREMENTAL_INTERVAL_MS || 600000)
