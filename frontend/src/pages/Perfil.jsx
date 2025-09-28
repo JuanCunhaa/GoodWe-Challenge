@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi, loadSession } from '../services/authApi.js'
 import { integrationsApi } from '../services/integrationsApi.js'
@@ -58,9 +58,9 @@ export default function Perfil(){
     setPwErr(''); setPwOk('')
     if (!pw.old || !pw.n1 || !pw.n2){ setPwErr('Preencha todos os campos.'); return }
     if (pw.n1.length < 6){ setPwErr('A nova senha deve ter ao menos 6 caracteres.'); return }
-    if (pw.n1 !== pw.n2){ setPwErr('As senhas não coincidem.'); return }
+    if (pw.n1 !== pw.n2){ setPwErr('As senhas nÃ£o coincidem.'); return }
     const { token } = loadSession()
-    if (!token){ setPwErr('Sessão expirada. Entre novamente.'); return }
+    if (!token){ setPwErr('SessÃ£o expirada. Entre novamente.'); return }
     setPwLoading(true)
     try{
       const resp = await authApi.changePassword(token, pw.old, pw.n1)
@@ -88,7 +88,7 @@ export default function Perfil(){
   async function stSync(){
     setSt(prev=> ({ ...prev, syncing:true, error:'' }))
     try{
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const { token } = loadSession(); if (!token) throw new Error('SessÃ£o expirada')
       const j = await integrationsApi.stDevices(token)
       const ts = Date.now(); localStorage.setItem('st_last_sync', String(ts))
       setSt(prev=> ({ ...prev, count: Number(j?.total||0), lastSync: ts }))
@@ -98,7 +98,7 @@ export default function Perfil(){
   async function stUnlink(){
     setSt(prev=> ({ ...prev, syncing:true, error:'' }))
     try{
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const { token } = loadSession(); if (!token) throw new Error('SessÃ£o expirada')
       await integrationsApi.stUnlink(token)
       setSt({ connected:false, syncing:false, error:'', count:null, lastSync:null })
     }catch(e){ setSt(prev=> ({ ...prev, syncing:false, error:String(e.message||e) })) }
@@ -195,13 +195,13 @@ export default function Perfil(){
         </div>
       </div>
       <div className="card">
-        <div className="h2 mb-2">Conexões</div>
+        <div className="h2 mb-2">ConexÃµes</div>
         <div className="grid gap-2">
-          <button className="btn btn-ghost w-fit" onClick={checkConnections}>Testar conexões</button>
+          <button className="btn btn-ghost w-fit" onClick={checkConnections}>Testar conexÃµes</button>
           <div className="text-sm">API: {apiHealth==null ? '-' : (apiHealth ? 'OK' : 'Falha')}</div>
           <div className="text-sm">Assistant: {assistantPing?.ok ? 'OK' : (assistantPing==null ? '-' : 'Falha')}</div>
           {assistantPing?.ok && (
-            <div className="muted text-xs">GoodWe auth: {assistantPing.hasAuth ? 'OK' : 'Sem autenticação'} {assistantPing.api_base ? `• ${assistantPing.api_base}` : ''}</div>
+            <div className="muted text-xs">GoodWe auth: {assistantPing.hasAuth ? 'OK' : 'Sem autenticaÃ§Ã£o'} {assistantPing.api_base ? `â€¢ ${assistantPing.api_base}` : ''}</div>
           )}
         </div>
       </div>
@@ -211,7 +211,7 @@ export default function Perfil(){
           <div className="panel">
             <div className="font-semibold mb-1">SmartThings</div>
             <div className="muted text-sm mb-2">Status: {st.connected ? 'Conectado' : 'Desconectado'}</div>
-            {st.lastSync && <div className="muted text-xs mb-1">Último sync: {new Date(st.lastSync).toLocaleString()}</div>}
+            {st.lastSync && <div className="muted text-xs mb-1">Ãšltimo sync: {new Date(st.lastSync).toLocaleString()}</div>}
             {st.count!=null && <div className="muted text-xs mb-2">Dispositivos: {st.count}</div>}
             {st.error && <div className="text-red-600 text-xs mb-1">{st.error}</div>}
             <div className="flex gap-2">
@@ -223,12 +223,12 @@ export default function Perfil(){
           <div className="panel opacity-60" title="Em breve">
             <div className="font-semibold mb-1">Philips Hue</div>
             <div className="muted text-sm mb-2">Em breve</div>
-            <div className="flex gap-2"><button className="btn" disabled>Conectar</button></div>
+            
           </div>
           <div className="panel opacity-60" title="Em breve">
             <div className="font-semibold mb-1">eWeLink</div>
             <div className="muted text-sm mb-2">Em breve</div>
-            <div className="flex gap-2"><button className="btn" disabled>Conectar</button></div>
+            
           </div>
         </div>
       </div>
