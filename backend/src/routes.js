@@ -1236,13 +1236,33 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     const user = await requireUser(req, res); if (!user) return;
     try {
       const token = await ensureStAccess(user);
-      const { deviceId, commands, component, capability, command, arguments: args } = req.body || {};
+      let { deviceId, commands, component, capability, command, arguments: args, action } = req.body || {};
       const id = String(deviceId||'').trim();
       if (!id) return res.status(400).json({ ok:false, error:'deviceId is required' });
+      // Auto-map: if action is 'on'/'off' infer switch + correct component
+      if (!commands && !capability && (action==='on' || action==='off')){
+        const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
+        const rDev = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}`, { headers:{ 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+        const dev = await rDev.json().catch(()=>null);
+        const comps = Array.isArray(dev?.components) ? dev.components : [];
+        let compId = 'main';
+        for (const c of comps){ const caps=(c?.capabilities||[]).map(x=>x?.id||x?.capability||''); if (caps.includes('switch')) { compId = c?.id || 'main'; break; } }
+        capability = 'switch'; command = action; component = compId;
+      }
       let payload = { commands: [] };
       if (Array.isArray(commands) && commands.length) payload.commands = commands;
-      else if (capability && command) payload.commands = [{ component: String(component||'main'), capability, command, arguments: Array.isArray(args)? args : (args!=null? [args] : []) }];
-      else return res.status(400).json({ ok:false, error:'commands array or capability/command required' });
+      else if (capability && command) {
+        let comp = String(component||'main');
+        if (String(capability)==='switch' && (!component || component==='main')){
+          // try to detect correct component automatically
+          const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
+          const rDev = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}`, { headers:{ 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+          const dev = await rDev.json().catch(()=>null);
+          const comps = Array.isArray(dev?.components) ? dev.components : [];
+          for (const c of comps){ const caps=(c?.capabilities||[]).map(x=>x?.id||x?.capability||''); if (caps.includes('switch')) { comp = c?.id || 'main'; break; } }
+        }
+        payload.commands = [{ component: comp, capability, command, arguments: Array.isArray(args)? args : (args!=null? [args] : []) }];
+      } else return res.status(400).json({ ok:false, error:'commands array or capability/command or action (on/off) required' });
 
       const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
       const r = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}/commands`, {

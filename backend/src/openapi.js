@@ -406,9 +406,15 @@ const openapi = {
     '/smartthings/commands': {
       post: {
         tags: ['SmartThings'], summary: 'Envia comandos ao device', security:[{ bearerAuth:[] }],
-        requestBody: { required:true, content: { 'application/json': { schema: { type:'object', properties: { deviceId:{type:'string'}, commands:{ type:'array', items:{ type:'object' } }, component:{type:'string'}, capability:{type:'string'}, command:{type:'string'}, arguments:{ type:'array' } }, required:['deviceId'] } } } },
+        requestBody: { required:true, content: { 'application/json': { schema: { type:'object', properties: { deviceId:{type:'string'}, commands:{ type:'array', items:{ type:'object' } }, component:{type:'string'}, capability:{type:'string'}, command:{type:'string'}, arguments:{ type:'array' }, action:{ type:'string', enum:['on','off'] } }, required:['deviceId'] } } } },
         responses: { '200': { description:'OK' }, '401': { description:'Unauthorized' }, '422': { description:'Invalid payload' }, '409': { description:'Conflict (device state)' } }
       }
+    },
+    '/smartthings/device/{id}/off': {
+      post: { tags:['SmartThings'], summary:'Desliga (auto component)', security:[{ bearerAuth:[] }], parameters:[{ name:'id',in:'path',required:true,schema:{type:'string'}}], responses:{ '200':{description:'OK'}, '401':{description:'Unauthorized'} } }
+    },
+    '/smartthings/device/{id}/on': {
+      post: { tags:['SmartThings'], summary:'Liga (auto component)', security:[{ bearerAuth:[] }], parameters:[{ name:'id',in:'path',required:true,schema:{type:'string'}}], responses:{ '200':{description:'OK'}, '401':{description:'Unauthorized'} } }
     },
 
     // Tuya Cloud (dev/test)
