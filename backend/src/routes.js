@@ -977,6 +977,31 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     res.json({ ok:true, hasAuth: !!auth, api_base: auth?.api_base || null, ts: Date.now() });
   });
 
+  // ---------- SmartThings WebHook (SmartApp lifecycle) ----------
+  // Used only when you register a WebHook SmartApp in the Developer Workspace.
+  // Verification flow: ST sends POST { lifecycle: 'CONFIRMATION', confirmationData: { confirmationUrl } }
+  // We must HTTP GET the provided confirmationUrl and return { statusCode: 200 }.
+  router.post('/integrations/st/webhook', async (req, res) => {
+    try {
+      const lifecycle = String(req.body?.lifecycle || '');
+      if (lifecycle === 'CONFIRMATION') {
+        const url = String(req.body?.confirmationData?.confirmationUrl || '');
+        if (url) {
+          try { await fetch(url, { method: 'GET', signal: AbortSignal.timeout(15000) }); } catch {}
+        }
+        return res.json({ statusCode: 200 });
+      }
+      if (lifecycle === 'PING') {
+        return res.json({ statusCode: 200 });
+      }
+      // For other lifecycles (INSTALL/UPDATE/UNINSTALL/EVENT), just acknowledge for now
+      return res.json({ statusCode: 200 });
+    } catch (e) {
+      // Always acknowledge to let SmartThings retry if needed
+      return res.json({ statusCode: 200 });
+    }
+  });
+
   // ========== SmartThings OAuth2 + Devices ==========
   function getEncKey(){
     const hex = String(process.env.INTEGRATIONS_ENC_KEY||'').trim();

@@ -207,10 +207,10 @@ export default function Perfil(){
       </div>
       <div className="card">
         <div className="h2 mb-2">Integrações de automação</div>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3">
           <div className="panel">
             <div className="font-semibold mb-1">SmartThings</div>
-            <div className="muted text-sm mb-2">Status: {st.connected ? 'Conectado' : 'Desconectado'}</div>
+            <div className="muted text-xs">Status: {st.connected ? 'Conectado' : 'Desconectado'}</div>
             {st.lastSync && <div className="muted text-xs mb-1">Ãšltimo sync: {new Date(st.lastSync).toLocaleString()}</div>}
             {st.count!=null && <div className="muted text-xs mb-2">Dispositivos: {st.count}</div>}
             {st.error && <div className="text-red-600 text-xs mb-1">{st.error}</div>}
@@ -222,12 +222,12 @@ export default function Perfil(){
           </div>
           <div className="panel opacity-60" title="Em breve">
             <div className="font-semibold mb-1">Philips Hue</div>
-            <div className="muted text-sm mb-2">Em breve</div>
+            <div className="muted text-xs">Em breve</div>
             
           </div>
           <div className="panel opacity-60" title="Em breve">
             <div className="font-semibold mb-1">eWeLink</div>
-            <div className="muted text-sm mb-2">Em breve</div>
+            <div className="muted text-xs">Em breve</div>
             
           </div>
         </div>
