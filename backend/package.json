@@ -1,23 +1,23 @@
-{
-  "name": "goodwe-backend",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
-    "seed": "node src/seed.js",
-    "build:frontend": "npm --prefix ../frontend run build",
-    "start:all": "npm run build:frontend && node src/server.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "dependencies": {
-    "better-sqlite3": "^9.4.3",
-    "compression": "^1.8.1",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "mqtt": "^5.10.0"
-  }
+﻿{
+    "name":  "goodwe-backend",
+    "version":  "0.1.0",
+    "private":  true,
+    "type":  "module",
+    "scripts":  {
+                    "dev":  "node --watch src/server.js",
+                    "start":  "node src/server.js",
+                    "seed":  "node src/seed.js",
+                    "build:frontend":  "npm --prefix ../frontend run build",
+                    "start:all":  "npm run build:frontend \u0026\u0026 node src/server.js"
+                },
+    "engines":  {
+                    "node":  "\u003e=18"
+                },
+    "dependencies":  {
+                         "better-sqlite3":  "^9.4.3",
+                         "compression":  "^1.8.1",
+                         "dotenv":  "^16.4.5",
+                         "express":  "^4.19.2",
+                         "mqtt":  "^5.10.0"
+                     }
 }

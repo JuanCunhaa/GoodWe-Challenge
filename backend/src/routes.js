@@ -1094,9 +1094,21 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const scopes = String(tok.scope||process.env.ST_SCOPES||'');
       if (!access || !refresh) throw new Error('missing tokens');
       dbApi.upsertLinkedAccount({ user_id: st.user_id, vendor:'smartthings', access_token: enc(access), refresh_token: enc(refresh), expires_at, scopes, meta: { obtained_at: Date.now() } });
-      const to = (process.env.FRONT_REDIRECT_SUCCESS || '/perfil');
+      // Redirect to frontend (Vercel) after success
+      const frontOrigin = (process.env.FRONT_ORIGIN || process.env.CORS_ORIGIN || '').replace(/\/$/, '');
+      const toPath = String(process.env.FRONT_REDIRECT_SUCCESS || '/perfil');
+      const toUrl = frontOrigin ? (frontOrigin + (toPath.startsWith('/') ? toPath : ('/' + toPath))) : toPath;
       res.set('Content-Type','text/html; charset=utf-8');
-      res.send(`<html><body>Conectado com sucesso. <script>setTimeout(function(){ window.opener && window.opener.postMessage('st:linked','*'); window.location.href='${to}'; }, 400);</script></body></html>`);
+      res.send(`<!doctype html><meta charset="utf-8"/><title>SmartThings</title>
+        <body style="font-family:system-ui,Segoe UI,Roboto,Arial;padding:24px;background:#0b1220;color:#e2e8f0">
+          Conectado com sucesso.
+          <script>
+            (function(){
+              try { if (window.opener) window.opener.postMessage('st:linked','*'); } catch(e){}
+              setTimeout(function(){ location.href = ${JSON.stringify(toUrl)}; }, 300);
+            })();
+          </script>
+        </body>`);
     } catch (e) { res.status(500).send('Falha ao conectar SmartThings'); }
   });
 
@@ -1153,6 +1165,55 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     } catch (e) {
       if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
       res.status(500).json({ ok:false, error:'failed to fetch devices' });
+    }
+  });
+
+  // Single SmartThings device status
+  router.get('/smartthings/device/:id/status', async (req, res) => {
+    const user = requireUser(req, res); if (!user) return;
+    try {
+      const token = await ensureStAccess(user);
+      const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
+      const id = encodeURIComponent(String(req.params.id||''));
+      const r = await fetch(`${apiBase}/devices/${id}/status`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000))
+      });
+      const j = await r.json();
+      if (!r.ok) return res.status(r.status).json(j);
+      res.json({ ok:true, status:j, ts: Date.now() });
+    } catch (e) {
+      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
+      res.status(500).json({ ok:false, error:'failed to fetch status' });
+    }
+  });
+
+  // Send commands to a SmartThings device
+  router.post('/smartthings/commands', async (req, res) => {
+    const user = requireUser(req, res); if (!user) return;
+    try {
+      const token = await ensureStAccess(user);
+      const { deviceId, commands, component, capability, command, arguments: args } = req.body || {};
+      const id = String(deviceId||'').trim();
+      if (!id) return res.status(400).json({ ok:false, error:'deviceId is required' });
+      let payload = { commands: [] };
+      if (Array.isArray(commands) && commands.length) payload.commands = commands;
+      else if (capability && command) payload.commands = [{ component: String(component||'main'), capability, command, arguments: Array.isArray(args)? args : (args!=null? [args] : []) }];
+      else return res.status(400).json({ ok:false, error:'commands array or capability/command required' });
+
+      const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
+      const r = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}/commands`, {
+        method:'POST',
+        headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000))
+      });
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok) return res.status(r.status).json(j);
+      res.json({ ok:true, result:j });
+    } catch (e) {
+      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
+      res.status(500).json({ ok:false, error:'failed to send command' });
     }
   });
 
