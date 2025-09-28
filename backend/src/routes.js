@@ -1582,6 +1582,27 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     }
   });
 
+  // Toggle Hue on/off (auto: light/smart_plug via kind query)
+  router.post('/hue/device/:rid/:action', async (req, res) => {
+    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const { token, appKey } = await getHueContext(user);
+      if (!appKey) return res.status(400).json({ ok:false, error:'missing app key' });
+      const rid = String(req.params.rid||'');
+      const action = String(req.params.action||'').toLowerCase();
+      const kind = String(req.query.kind||'light');
+      if (!rid || (action!=='on' && action!=='off')) return res.status(400).json({ ok:false, error:'rid and action(on|off) required' });
+      const apiBase = (process.env.HUE_API_BASE||'https://api.meethue.com/route/clip/v2').replace(/\/$/, '');
+      const hdrs = { 'Authorization': `Bearer ${token}`, 'hue-application-key': appKey, 'Content-Type':'application/json' };
+      const body = { on: { on: action==='on' } };
+      const r = await fetch(`${apiBase}/resource/${encodeURIComponent(kind)}/${encodeURIComponent(rid)}`, { method:'PUT', headers: hdrs, body: JSON.stringify(body), signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+      const j = await r.json().catch(()=>null);
+      if (!r.ok) return res.status(r.status).json({ ok:false, error:'hue toggle failed', details:j });
+      res.json({ ok:true });
+    } catch (e) { res.status(500).json({ ok:false, error:String(e) }); }
+  });
+
   // Try to generate/store Hue application key (user must press bridge button during this call)
   router.post('/auth/hue/appkey', async (req, res) => {
     if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
@@ -1612,6 +1633,56 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
       res.status(500).json({ ok:false, error:String(e) });
     }
+  });
+
+  // Tuya helpers for status/toggle
+  async function tuyaGetStatus(deviceId, token){
+    const path = `/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/status`;
+    const { status, json } = await tuyaSignAndFetch(path, { method:'GET', accessToken: token });
+    if (status!==200 || json?.success!==true) throw new Error('tuya status failed');
+    return Array.isArray(json.result) ? json.result : [];
+  }
+  async function tuyaFindSwitchCode(deviceId, token){
+    const { status, json } = await tuyaSignAndFetch(`/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/functions`, { method:'GET', accessToken: token });
+    if (status!==200 || json?.success!==true) return '';
+    const list = Array.isArray(json?.result) ? json.result : [];
+    const codes = list.map(f=> String(f?.code||'')).filter(Boolean);
+    const order = ['switch_led','switch_main','switch_1','switch','switch_usb1'];
+    for (const c of order) if (codes.includes(c)) return c;
+    return codes.find(c=> c.startsWith('switch')) || '';
+  }
+
+  // Tuya: status (on/off + mapa bruto)
+  router.get('/tuya/device/:id/status', async (req, res) => {
+    try {
+      const user = await requireUser(req, res); if (!user) return;
+      await ensureTuyaLinkedUser(user);
+      const token = await tuyaEnsureAppToken();
+      const id = String(req.params.id||'');
+      const list = await tuyaGetStatus(id, token);
+      const map = Object.fromEntries(list.map(it=> [it.code, it.value]));
+      const code = await tuyaFindSwitchCode(id, token);
+      const on = code ? !!map[code] : null;
+      res.json({ ok:true, on, status: map, code });
+    } catch (e) { res.status(500).json({ ok:false, error:String(e) }); }
+  });
+
+  // Tuya: toggle on/off (auto-detect switch code)
+  router.post('/tuya/device/:id/:action', async (req, res) => {
+    try {
+      const user = await requireUser(req, res); if (!user) return;
+      await ensureTuyaLinkedUser(user);
+      const token = await tuyaEnsureAppToken();
+      const id = String(req.params.id||'');
+      const action = String(req.params.action||'off').toLowerCase();
+      const code = await tuyaFindSwitchCode(id, token);
+      if (!code) return res.status(400).json({ ok:false, error:'no switch code found for this device' });
+      const payload = { commands: [{ code, value: action==='on' }] };
+      const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/commands`;
+      const { status, json } = await tuyaSignAndFetch(path, { method:'POST', bodyObj: payload, accessToken: token });
+      if (status!==200 || json?.success!==true) return res.status(status).json(json||{ ok:false });
+      res.json({ ok:true, result: json.result, code });
+    } catch (e) { res.status(500).json({ ok:false, error:String(e) }); }
   });
 
   return router;
