@@ -1216,7 +1216,12 @@ Exemplo: " US$ 10 = R$ 55,00"`;
         signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000))
       });
       const j = await r.json().catch(()=>({}));
-      if (!r.ok) return res.status(r.status).json(j);
+      if (!r.ok) {
+        if (r.status === 401 || r.status === 403) {
+          return res.status(r.status).json({ ok:false, error:'SmartThings recusou comandos (401/403). Verifique o vínculo e o escopo devices:commands na conexão.', details: j });
+        }
+        return res.status(r.status).json({ ok:false, error:`SmartThings HTTP ${r.status}`, details:j });
+      }
       res.json({ ok:true, result:j });
     } catch (e) {
       if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });

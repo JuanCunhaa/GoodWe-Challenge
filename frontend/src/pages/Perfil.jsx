@@ -78,7 +78,9 @@ export default function Perfil(){
     try{
       const { token } = loadSession(); if (!token) return;
       const s = await integrationsApi.stStatus(token);
-      setSt(prev => ({ ...prev, connected: !!s?.connected, error:'' }))
+      const scopesStr = String(s?.scopes||'');
+      const canControl = /\bdevices:commands\b/.test(scopesStr);
+      setSt(prev => ({ ...prev, connected: !!s?.connected, scopes: scopesStr, canControl, error:'' }))
     }catch(e){ setSt(prev=> ({ ...prev, connected:false, error:String(e.message||e) })) }
   }
 
@@ -214,6 +216,9 @@ export default function Perfil(){
           <div className="panel">
             <div className="font-semibold mb-1">SmartThings</div>
             <div className="muted text-xs">Status: {st.connected ? 'Conectado' : 'Desconectado'}</div>
+            {st.connected && (
+              <div className="muted text-xs">Permissões: {st.canControl ? 'Comandos habilitados' : 'Somente leitura'}{st.scopes? ` (scopes: ${st.scopes})` : ''}</div>
+            )}
             {st.lastSync && <div className="muted text-xs mb-1">Ãšltimo sync: {new Date(st.lastSync).toLocaleString()}</div>}
             {st.count!=null && <div className="muted text-xs mb-2">Dispositivos: {st.count}</div>}
             {st.error && <div className="text-red-600 text-xs mb-1">{st.error}</div>}
@@ -221,6 +226,9 @@ export default function Perfil(){
               <button className="btn btn-primary" onClick={stConnect} disabled={st.syncing}>Conectar</button>
               <button className="btn" onClick={stSync} disabled={st.syncing || !st.connected}>{st.syncing ? 'Sincronizando...' : 'Sincronizar'}</button>
               <button className="btn btn-danger" onClick={stUnlink} disabled={!st.connected || st.syncing}>Desconectar</button>
+              {!st.canControl && st.connected && (
+                <button className="btn btn-primary" onClick={stConnect} disabled={st.syncing}>Re-conectar com comandos</button>
+              )}
             </div>
           </div>
           <div className="panel opacity-60" title="Em breve">

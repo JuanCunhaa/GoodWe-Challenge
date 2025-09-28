@@ -10,6 +10,7 @@ export default function Dispositivos(){
   const [err, setErr] = useState('')
   const [statusMap, setStatusMap] = useState({})
   const [busy, setBusy] = useState({})
+  const [canControl, setCanControl] = useState(true)
 
   async function fetchDevices(){
     setErr(''); setLoading(true)
@@ -33,6 +34,17 @@ export default function Dispositivos(){
 
   useEffect(()=>{ fetchDevices() }, [])
 
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const { token } = loadSession(); if (!token) return;
+        const s = await integrationsApi.stStatus(token)
+        const scopes = String(s?.scopes||'')
+        setCanControl(/\bdevices:commands\b/.test(scopes))
+      }catch{}
+    })()
+  }, [])
+
   async function fetchStatus(id){
     try{
       const { token } = loadSession(); if (!token) return
@@ -41,11 +53,11 @@ export default function Dispositivos(){
     }catch{}
   }
 
-  async function sendSwitch(id, on){
+  async function sendSwitch(id, on, component){
     try{
       setBusy(b => ({ ...b, [id]: true }))
       const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
-      await integrationsApi.stSendCommands(token, id, { capability:'switch', command: on ? 'on' : 'off', component:'main', arguments: [] })
+      await integrationsApi.stSendCommands(token, id, { capability:'switch', command: on ? 'on' : 'off', component: component || 'main', arguments: [] })
       await fetchStatus(id)
     }catch(e){ setErr(String(e.message||e)) }
     finally{ setBusy(b => ({ ...b, [id]: false })) }
@@ -57,6 +69,16 @@ export default function Dispositivos(){
       .filter(d => !vendor || String(d.vendor||'')===vendor)
       .filter(d => !qq || (String(d.name||'').toLowerCase().includes(qq) || String(d.id||'').includes(qq)))
   }, [items, q, vendor])
+
+  function getSwitchComponent(d){
+    const comps = Array.isArray(d.components) ? d.components : []
+    for (const c of comps){
+      const cid = c.id || c.component || 'main'
+      const caps = (c.capabilities||[]).map(x=> x.id||x.capability||'')
+      if (caps.includes('switch')) return cid
+    }
+    return 'main'
+  }
 
   return (
     <section className="grid gap-4">
@@ -83,10 +105,11 @@ export default function Dispositivos(){
         )}
         <div className="grid gap-3 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
           {list.map(d => {
-            const caps = (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
+            const caps = (Array.isArray(d.components)? d.components : []).flatMap(c => (c.capabilities||[]).map(x=> x.id||x.capability||'')).filter(Boolean)
             const st = statusMap[d.id]
             const hasSwitch = caps.includes('switch')
-            const isOn = String(st?.components?.main?.switch?.switch?.value||'').toLowerCase()==='on'
+            const comp = getSwitchComponent(d)
+            const isOn = String(st?.components?.[comp]?.switch?.switch?.value||'').toLowerCase()==='on'
             return (
               <div key={d.id} className="panel">
                 <div className="flex items-center justify-between gap-2">
@@ -101,10 +124,14 @@ export default function Dispositivos(){
                       <span className={`px-2 py-0.5 rounded text-xs ${isOn ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-gray-500/20 text-gray-600 dark:text-gray-400'}`}>
                         {isOn ? 'ON' : 'OFF'}
                       </span>
-                      {isOn ? (
-                        <button className="btn btn-danger" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,false)}>{busy[d.id]? '...' : 'Desligar'}</button>
+                      {canControl ? (
+                        isOn ? (
+                          <button className="btn btn-danger" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,false, comp)}>{busy[d.id]? '...' : 'Desligar'}</button>
+                        ) : (
+                          <button className="btn btn-primary" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true, comp)}>{busy[d.id]? '...' : 'Ligar'}</button>
+                        )
                       ) : (
-                        <button className="btn btn-primary" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true)}>{busy[d.id]? '...' : 'Ligar'}</button>
+                        <button className="btn" disabled title="Conecte o SmartThings com devices:commands na página Perfil">Comando indisponível</button>
                       )}
                     </div>
                   )}
