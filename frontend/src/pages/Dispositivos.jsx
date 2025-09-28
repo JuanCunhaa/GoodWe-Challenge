@@ -103,7 +103,7 @@ export default function Dispositivos(){
             )}
           </div>
         )}
-        <div className="grid gap-3 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {list.map(d => {
             const caps = (Array.isArray(d.components)? d.components : []).flatMap(c => (c.capabilities||[]).map(x=> x.id||x.capability||'')).filter(Boolean)
             const st = statusMap[d.id]
@@ -112,9 +112,9 @@ export default function Dispositivos(){
             const isOn = String(st?.components?.[comp]?.switch?.switch?.value||'').toLowerCase()==='on'
             return (
               <div key={d.id} className="panel">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-semibold break-words whitespace-normal" title={d.name}>{d.name||'-'}</div>
+                <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold whitespace-normal break-words" title={d.name}>{d.name||'-'}</div>
                     <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||''}>
                       {(d.deviceTypeName || d.manufacturer || 'Dispositivo')}
                     </div>
@@ -126,12 +126,12 @@ export default function Dispositivos(){
                       </span>
                       {canControl ? (
                         isOn ? (
-                          <button className="btn btn-danger" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,false, comp)}>{busy[d.id]? '...' : 'Desligar'}</button>
+                          <button className="btn btn-danger btn-sm" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,false, comp)}>{busy[d.id]? '...' : 'Desligar'}</button>
                         ) : (
-                          <button className="btn btn-primary" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true, comp)}>{busy[d.id]? '...' : 'Ligar'}</button>
+                          <button className="btn btn-primary btn-sm" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true, comp)}>{busy[d.id]? '...' : 'Ligar'}</button>
                         )
                       ) : (
-                        <button className="btn" disabled title="Conecte o SmartThings com devices:commands na página Perfil">Comando indisponível</button>
+                        <button className="btn btn-ghost btn-sm" disabled title="Conecte o SmartThings com devices:commands na página Perfil">Comando indisponível</button>
                       )}
                     </div>
                   )}
