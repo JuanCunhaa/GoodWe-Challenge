@@ -123,6 +123,41 @@ O frontend faz requisições a `/api/tts` e reproduz o áudio concatendando fras
   - `npm start` no root. O backend compila o frontend e serve estáticos de `frontend/dist`.
 
 
+## Deploy (Vercel + Render/Railway) — 100% free com Piper
+
+Recomendado: Frontend na Vercel (estático) e Backend em Render/Railway/Fly (processo longo) — mantém Piper 100% funcional.
+
+1) Backend (Render como exemplo)
+- Service → Web Service
+- Root Directory: `goodwe-app/backend`
+- Environment: Node 18
+- Build Command: `npm ci`
+- Start Command: `npm run start`
+- Env obrigatórias:
+  - `GOODWE_EMAIL`, `GOODWE_PASSWORD`
+  - `PORT=3000`
+  - `CORS_ORIGIN=https://SEU_PROJETO.vercel.app`
+  - (Opcional) `OPENAI_API_KEY` e `ASSIST_TOKEN`
+- Piper (bundled no repo):
+  - Coloque o binário/vozes em `goodwe-app/piper/` (ex.: `piper`, `voices/pt_BR.onnx`, `pt_BR.onnx.json`).
+  - O backend detecta automaticamente. Se quiser forçar: `PIPER_PATH`, `PIPER_VOICE`, `PIPER_VOICE_JSON`.
+
+2) Frontend (Vercel)
+- Project Root: `goodwe-app`
+- O arquivo `vercel.json` já está preparado para:
+  - Build: `frontend` → `frontend/dist`
+  - Rewrite: `/api/*` → seu backend. Edite `goodwe-app/vercel.json` e troque `https://SEU_BACKEND_HOST` pela URL do Render.
+- Em “Environment Variables” da Vercel, opcionalmente defina `VITE_API_BASE=/api` (ou já deixe no `.env.production`).
+
+3) Teste
+- Abra a URL da Vercel → a UI carrega do Vercel e todas as chamadas a `/api/*` são roteadas para o backend.
+- Teste `/api/tts` (se Piper/voz estiverem presentes) e `/api/docs` (Swagger).
+
+Notas
+- Se o backend hibernar (plano free), a primeira chamada pode demorar (cold start).
+- O `/api/tts` cai em fallback HTTP ou responde 501 se Piper/voz não forem encontrados. O front usa Web Speech como fallback quando recebe 501.
+
+
 ## Handler Alexa (opcional)
 - Arquivo `index.mjs` pronto para Lambda.
 - Envs: `API_BASE` (exponha seu backend com túnel/ingress), `ASSIST_TOKEN`, `PLANT_ID` (opcional), `HTTP_TIMEOUT_MS`, `HTTP_RETRIES`.

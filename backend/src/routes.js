@@ -23,6 +23,97 @@ export function createRoutes(gw, dbApi) {
     } catch { return p; }
   }
 
+  // ---------- Piper auto-detect (bundled) ----------
+  // Se PIPER_PATH/PIPER_VOICE não estiverem definidos, tenta achar em ../../piper ou vendor/piper
+  let piperDetected = null;
+  async function detectBundledPiper(){
+    if (piperDetected) return piperDetected;
+    try {
+      const here = path.dirname(fileURLToPath(import.meta.url));
+      const base = path.resolve(here, '..');
+      const repoPiperDir = path.resolve(base, '..', 'piper'); // goodwe-app/piper
+      const vendorPiperDir = path.resolve(base, 'vendor', 'piper'); // backend/vendor/piper
+      const candidateRoots = [repoPiperDir, vendorPiperDir];
+
+      // Helpers: busca recursiva limitada
+      async function findFirst(root, names, maxDepth = 3){
+        const stack = [{ dir: root, depth: 0 }];
+        const seen = new Set();
+        while (stack.length){
+          const { dir, depth } = stack.shift();
+          if (!dir || seen.has(dir)) continue; seen.add(dir);
+          let entries = [];
+          try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { continue; }
+          for (const ent of entries){
+            const full = path.join(dir, ent.name);
+            if (ent.isFile() && names.includes(ent.name)) return full;
+          }
+          if (depth < maxDepth){
+            for (const ent of entries){
+              const full = path.join(dir, ent.name);
+              if (ent.isDirectory()) stack.push({ dir: full, depth: depth + 1 });
+            }
+          }
+        }
+        return '';
+      }
+      async function collectVoices(root, maxDepth = 4){
+        const list = [];
+        const stack = [{ dir: root, depth: 0 }];
+        const seen = new Set();
+        while (stack.length){
+          const { dir, depth } = stack.shift();
+          if (!dir || seen.has(dir)) continue; seen.add(dir);
+          let entries = [];
+          try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { continue; }
+          for (const ent of entries){
+            const full = path.join(dir, ent.name);
+            if (ent.isFile() && /\.onnx$/i.test(ent.name)) list.push(full);
+          }
+          if (depth < maxDepth){
+            for (const ent of entries){
+              const full = path.join(dir, ent.name);
+              if (ent.isDirectory()) stack.push({ dir: full, depth: depth + 1 });
+            }
+          }
+        }
+        return list;
+      }
+
+      // Localiza executável e vozes em subpastas (ex.: Linux/, Windows/, voices/)
+      const exeNames = process.platform === 'win32' ? ['piper.exe', 'piper'] : ['piper', 'piper-linux', 'piper-amd64'];
+      let piperPath = '';
+      for (const root of candidateRoots){
+        if (piperPath) break;
+        piperPath = await findFirst(root, exeNames, 4);
+      }
+
+      let voicePath = '';
+      let voiceJson = '';
+      for (const root of candidateRoots){
+        const voices = await collectVoices(root, 4);
+        const preferred = voices.find(p=>/pt[_-]?br|\bpt\b/i.test(p)) || voices[0];
+        if (preferred) { voicePath = preferred; break; }
+      }
+      if (voicePath){
+        const json1 = voicePath + '.json';
+        const json2 = voicePath.replace(/\.onnx$/i, '.onnx.json');
+        try { await fs.access(json1); voiceJson = json1; } catch { try { await fs.access(json2); voiceJson = json2; } catch {} }
+      }
+
+      // Tenta garantir permissão de execução em Linux
+      if (piperPath && process.platform !== 'win32'){
+        try { await fs.chmod(piperPath, 0o755); } catch {}
+      }
+
+      piperDetected = { piperPath, voicePath, voiceJson };
+      return piperDetected;
+    } catch {
+      piperDetected = { piperPath: '', voicePath: '', voiceJson: '' };
+      return piperDetected;
+    }
+  }
+
   // -------- Helpers (dedupe token + params) --------
   const getBearerToken = (req) => {
     const auth = String(req.headers['authorization'] || '');
@@ -198,7 +289,13 @@ export function createRoutes(gw, dbApi) {
       try {
         await acquireSlot();
         await new Promise((resolve, reject) => {
-          const child = spawn(PIPER_PATH, args, { stdio: ['pipe', 'ignore', 'pipe'] });
+          const piperDir = path.dirname(PIPER_PATH);
+          const env = { ...process.env };
+          if (process.platform !== 'win32') {
+            // Ajudar o loader a encontrar as .so no mesmo diretório do binário
+            env.LD_LIBRARY_PATH = [piperDir, process.env.LD_LIBRARY_PATH || ''].filter(Boolean).join(path.delimiter);
+          }
+          const child = spawn(PIPER_PATH, args, { stdio: ['pipe', 'ignore', 'pipe'], env, cwd: piperDir });
           let stderr = '';
           child.stderr.on('data', (d) => { stderr += d.toString(); });
           child.on('error', (e) => { releaseSlot(); reject(e) });
