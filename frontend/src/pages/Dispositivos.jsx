@@ -18,41 +18,53 @@ export default function Dispositivos(){
     setErr(''); setLoading(true)
     try{
       const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
-      const j = await integrationsApi.stDevices(token)
-      const list = Array.isArray(j?.items) ? j.items : []
-      setItems(list)
-      // Load rooms mapping (best-effort)
-      try {
-        const r = await integrationsApi.stRooms(token)
-        const map = {}
-        for (const it of (r?.items||[])) { if (it?.id) map[it.id] = it.name || '' }
-        setRooms(map)
-      } catch {}
-      // Auto-carrega status para dispositivos com switch (limita a 6 em paralelo)
-      const capsFor = (d)=> (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
-      const ids = list.filter(d => capsFor(d).includes('switch')).map(d=> d.id)
-      const batch = async (arr, size=6) => {
-        for (let i=0;i<arr.length;i+=size){
-          await Promise.all(arr.slice(i,i+size).map(id => fetchStatus(id)))
+      if (vendor === 'smartthings'){
+        const j = await integrationsApi.stDevices(token)
+        const list = Array.isArray(j?.items) ? j.items : []
+        setItems(list)
+        // Load rooms mapping (best-effort)
+        try {
+          const r = await integrationsApi.stRooms(token)
+          const map = {}
+          for (const it of (r?.items||[])) { if (it?.id) map[it.id] = it.name || '' }
+          setRooms(map)
+        } catch {}
+        // Auto-carrega status para dispositivos com switch (limita a 6 em paralelo)
+        const capsFor = (d)=> (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
+        const ids = list.filter(d => capsFor(d).includes('switch')).map(d=> d.id)
+        const batch = async (arr, size=6) => {
+          for (let i=0;i<arr.length;i+=size){
+            await Promise.all(arr.slice(i,i+size).map(id => fetchStatus(id)))
+          }
         }
+        await batch(ids)
+      } else if (vendor === 'philips-hue'){
+        const j = await integrationsApi.hueDevices(token)
+        const list = Array.isArray(j?.items) ? j.items : []
+        setItems(list)
+        setRooms({})
+        setStatusMap({})
       }
-      await batch(ids)
     }catch(e){ setErr(String(e.message||e)) }
     finally{ setLoading(false) }
   }
 
-  useEffect(()=>{ fetchDevices() }, [])
+  useEffect(()=>{ fetchDevices() }, [vendor])
 
   useEffect(()=>{
     (async()=>{
       try{
         const { token } = loadSession(); if (!token) return;
-        const s = await integrationsApi.stStatus(token)
-        const scopes = String(s?.scopes||'')
-        setCanControl(scopes.includes('devices:commands') || scopes.includes('x:devices:*'))
+        if (vendor==='smartthings'){
+          const s = await integrationsApi.stStatus(token)
+          const scopes = String(s?.scopes||'')
+          setCanControl(scopes.includes('devices:commands') || scopes.includes('x:devices:*'))
+        } else {
+          setCanControl(false)
+        }
       }catch{}
     })()
-  }, [])
+  }, [vendor])
 
   async function fetchStatus(id){
     try{
@@ -102,6 +114,7 @@ export default function Dispositivos(){
           <div className="flex items-center gap-2 flex-wrap">
             <select className="panel w-full sm:w-auto" value={vendor} onChange={e=>setVendor(e.target.value)}>
               <option value="smartthings">SmartThings</option>
+              <option value="philips-hue">Philips Hue</option>
             </select>
             <select className="panel w-full sm:w-auto" value={room} onChange={e=>setRoom(e.target.value)}>
               <option value="">Todos os cômodos</option>

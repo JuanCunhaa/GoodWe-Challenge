@@ -2,6 +2,7 @@
 import { useNavigate } from 'react-router-dom'
 import { authApi, loadSession } from '../services/authApi.js'
 import { integrationsApi } from '../services/integrationsApi.js'
+import React from 'react'
 
 export default function Perfil(){
   const navigate = useNavigate()
@@ -235,11 +236,7 @@ export default function Perfil(){
             )}
             <div className="muted text-[11px] mt-1">Scopes necessários para controle: <span className="font-mono">devices:commands</span> ou <span className="font-mono">x:devices:*</span>.</div>
           </div>
-          <div className="panel opacity-60" title="Em breve">
-            <div className="font-semibold mb-1">Philips Hue</div>
-            <div className="muted text-xs">Em breve</div>
-            
-          </div>
+          <HueCard />
           <div className="panel opacity-60" title="Em breve">
             <div className="font-semibold mb-1">eWeLink</div>
             <div className="muted text-xs">Em breve</div>
@@ -248,5 +245,78 @@ export default function Perfil(){
         </div>
       </div>
     </section>
+  )
+}
+
+function HueCard(){
+  const [state, setState] = React.useState({ connected:false, syncing:false, error:'', count:null, scopes:'' })
+
+  React.useEffect(()=>{ refresh() }, [])
+
+  async function refresh(){
+    try{
+      const { token } = loadSession(); if (!token) return
+      const s = await integrationsApi.hueStatus(token)
+      setState(prev=> ({ ...prev, connected: !!s?.connected, scopes: String(s?.scopes||''), error:'' }))
+    }catch(e){ setState(prev=> ({ ...prev, connected:false, error:String(e.message||e) })) }
+  }
+  async function connect(){
+    const base = import.meta.env.VITE_API_BASE || '/api'
+    const { token } = loadSession();
+    const url = token ? `${base}/auth/hue?token=${encodeURIComponent(token)}` : `${base}/auth/hue`;
+    window.open(url, '_blank', 'noopener')
+  }
+  async function sync(){
+    setState(prev=> ({ ...prev, syncing:true, error:'' }))
+    try{
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const j = await integrationsApi.hueDevices(token)
+      setState(prev=> ({ ...prev, count: Number(j?.total||0) }))
+    }catch(e){ setState(prev=> ({ ...prev, error:String(e.message||e) })) }
+    finally{ setState(prev=> ({ ...prev, syncing:false })) }
+  }
+  async function unlink(){
+    setState(prev=> ({ ...prev, syncing:true, error:'' }))
+    try{
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      await integrationsApi.hueUnlink(token)
+      setState({ connected:false, syncing:false, error:'', count:null, scopes:'' })
+    }catch(e){ setState(prev=> ({ ...prev, syncing:false, error:String(e.message||e) })) }
+  }
+
+  React.useEffect(()=>{
+    function onMsg(e){ try{ if (String(e.data)==='hue:linked'){ refresh() } }catch{} }
+    window.addEventListener('message', onMsg)
+    return ()=> window.removeEventListener('message', onMsg)
+  },[])
+
+  return (
+    <div className="panel">
+      <div className="font-semibold mb-1">Philips Hue</div>
+      <div className="muted text-xs">Status: {state.connected ? 'Conectado' : 'Desconectado'}</div>
+      {state.connected && state.scopes && (
+        <div className="muted text-xs">Scopes: <span className="font-mono">{state.scopes}</span></div>
+      )}
+      {state.count!=null && <div className="muted text-xs mb-2">Dispositivos: {state.count}</div>}
+      {state.error && <div className="text-red-600 text-xs mb-1">{state.error}</div>}
+      <div className="flex gap-2 flex-wrap">
+        <button className="btn btn-primary" onClick={connect} disabled={state.syncing}>Conectar</button>
+        <button className="btn" onClick={sync} disabled={state.syncing || !state.connected}>{state.syncing ? 'Sincronizando...' : 'Sincronizar'}</button>
+        <button className="btn btn-danger" onClick={unlink} disabled={!state.connected || state.syncing}>Desconectar</button>
+      </div>
+      {state.connected && (
+        <div className="mt-2 grid gap-2">
+          <div className="muted text-xs">Para usar a Remote API é necessária uma Application Key do bridge.</div>
+          <button className="btn btn-ghost" onClick={async()=>{
+            try {
+              const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+              const r = await integrationsApi.hueEnsureAppKey(token)
+              alert('App Key gerada: ' + (r?.app_key || ''))
+            } catch(e){ alert(String(e.message||e)) }
+          }} title="Aperte o botão do bridge e clique aqui em até 30s">Gerar App Key (apertar botão do bridge)</button>
+        </div>
+      )}
+      <div className="muted text-[11px] mt-2">Cadastre seu app no portal Hue (Remote API v2) e defina HUE_CLIENT_ID/SECRET, HUE_APP_KEY no backend.</div>
+    </div>
   )
 }
