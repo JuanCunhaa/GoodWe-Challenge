@@ -42,6 +42,9 @@ export default function Perfil(){
     return ()=> window.removeEventListener('message', onMsg)
   },[])
 
+  // Checa status SmartThings ao carregar a página
+  useEffect(()=>{ refreshStStatus() }, [])
+
   // Load local powerstation name
   useEffect(()=>{
     (async()=>{

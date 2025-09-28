@@ -81,7 +81,7 @@ export default function Dispositivos(){
             )}
           </div>
         )}
-        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
           {list.map(d => {
             const caps = (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
             const st = statusMap[d.id]
@@ -91,7 +91,7 @@ export default function Dispositivos(){
               <div key={d.id} className="panel">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="font-semibold truncate" title={d.name}>{d.name||'-'}</div>
+                    <div className="font-semibold break-words whitespace-normal" title={d.name}>{d.name||'-'}</div>
                     <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||''}>
                       {(d.deviceTypeName || d.manufacturer || 'Dispositivo')}
                     </div>
