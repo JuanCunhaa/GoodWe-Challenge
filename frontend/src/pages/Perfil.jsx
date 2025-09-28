@@ -79,7 +79,7 @@ export default function Perfil(){
       const { token } = loadSession(); if (!token) return;
       const s = await integrationsApi.stStatus(token);
       const scopesStr = String(s?.scopes||'');
-      const canControl = /\b(devices:commands|x:devices:\*)\b/.test(scopesStr);
+      const canControl = scopesStr.includes('devices:commands') || scopesStr.includes('x:devices:*');
       setSt(prev => ({ ...prev, connected: !!s?.connected, scopes: scopesStr, canControl, error:'' }))
     }catch(e){ setSt(prev=> ({ ...prev, connected:false, error:String(e.message||e) })) }
   }
