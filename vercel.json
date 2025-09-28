@@ -3,7 +3,6 @@
   "outputDirectory": "frontend/dist",
   "framework": null,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://SEU_BACKEND_HOST/api/$1" }
+    { "source": "/api/(.*)", "destination": "https://goodwe-challenge-6rpk.onrender.com/api/$1" }
   ]
 }
-
