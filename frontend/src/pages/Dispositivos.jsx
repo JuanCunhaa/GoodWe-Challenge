@@ -16,7 +16,17 @@ export default function Dispositivos(){
     try{
       const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
       const j = await integrationsApi.stDevices(token)
-      setItems(Array.isArray(j?.items) ? j.items : [])
+      const list = Array.isArray(j?.items) ? j.items : []
+      setItems(list)
+      // Auto-carrega status para dispositivos com switch (limita a 6 em paralelo)
+      const capsFor = (d)=> (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
+      const ids = list.filter(d => capsFor(d).includes('switch')).map(d=> d.id)
+      const batch = async (arr, size=6) => {
+        for (let i=0;i<arr.length;i+=size){
+          await Promise.all(arr.slice(i,i+size).map(id => fetchStatus(id)))
+        }
+      }
+      await batch(ids)
     }catch(e){ setErr(String(e.message||e)) }
     finally{ setLoading(false) }
   }
@@ -35,7 +45,7 @@ export default function Dispositivos(){
     try{
       setBusy(b => ({ ...b, [id]: true }))
       const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
-      await integrationsApi.stSendCommands(token, id, { capability:'switch', command: on ? 'on' : 'off', component:'main' })
+      await integrationsApi.stSendCommands(token, id, { capability:'switch', command: on ? 'on' : 'off', component:'main', arguments: [] })
       await fetchStatus(id)
     }catch(e){ setErr(String(e.message||e)) }
     finally{ setBusy(b => ({ ...b, [id]: false })) }
@@ -61,7 +71,16 @@ export default function Dispositivos(){
             <button className="btn w-full sm:w-auto" onClick={fetchDevices} disabled={loading}>{loading ? 'Atualizando...' : 'Atualizar'}</button>
           </div>
         </div>
-        {err && <div className="text-red-600 text-sm mb-2">{err}</div>}
+        {err && (
+          <div className="text-red-600 text-sm mb-2">
+            {err}
+            {/not linked|missing token|401|403/i.test(err) && (
+              <span className="ml-2">
+                Verifique conexão com SmartThings na página <a className="underline" href="/perfil">Perfil</a>.
+              </span>
+            )}
+          </div>
+        )}
         <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
           {list.map(d => {
             const caps = (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
@@ -70,27 +89,28 @@ export default function Dispositivos(){
             const isOn = String(st?.components?.main?.switch?.switch?.value||'').toLowerCase()==='on'
             return (
               <div key={d.id} className="panel">
-                <div className="font-semibold truncate" title={d.name}>{d.name||'-'}</div>
-                <div className="muted text-xs break-all">ID: {d.id}</div>
-                <div className="muted text-xs">Vendor: {d.vendor||'smartthings'}</div>
-                {d.deviceTypeName && <div className="muted text-xs">Tipo: {d.deviceTypeName}</div>}
-                {d.manufacturer && <div className="muted text-xs">Fabricante: {d.manufacturer}</div>}
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {caps.slice(0,8).map(c=> (<span key={c} className="px-2 py-0.5 rounded-full text-xs bg-gray-200/60 dark:bg-gray-800/60">{c}</span>))}
-                  {caps.length===0 && <span className="muted text-xs">Sem capabilities</span>}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button className="btn btn-ghost w-full sm:w-auto" onClick={()=>fetchStatus(d.id)}>Status</button>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate" title={d.name}>{d.name||'-'}</div>
+                    <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||''}>
+                      {(d.deviceTypeName || d.manufacturer || 'Dispositivo')}
+                    </div>
+                  </div>
                   {hasSwitch && (
-                    isOn ? (
-                      <button className="btn btn-danger w-full sm:w-auto" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,false)}>{busy[d.id]? '...' : 'Desligar'}</button>
-                    ) : (
-                      <button className="btn btn-primary w-full sm:w-auto" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true)}>{busy[d.id]? '...' : 'Ligar'}</button>
-                    )
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`px-2 py-0.5 rounded text-xs ${isOn ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-gray-500/20 text-gray-600 dark:text-gray-400'}`}>
+                        {isOn ? 'ON' : 'OFF'}
+                      </span>
+                      {isOn ? (
+                        <button className="btn btn-danger" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,false)}>{busy[d.id]? '...' : 'Desligar'}</button>
+                      ) : (
+                        <button className="btn btn-primary" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true)}>{busy[d.id]? '...' : 'Ligar'}</button>
+                      )}
+                    </div>
                   )}
                 </div>
-                {st && (
-                  <pre className="mt-2 text-xs overflow-auto max-h-40 bg-gray-100 dark:bg-gray-900 p-2 rounded">{JSON.stringify(st.components?.main?.switch || st.components?.main || st, null, 2)}</pre>
+                {!hasSwitch && (
+                  <div className="mt-2 muted text-xs">Sem controle direto (switch não disponível)</div>
                 )}
               </div>
             )

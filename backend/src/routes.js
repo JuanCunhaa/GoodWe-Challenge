@@ -119,27 +119,27 @@ export function createRoutes(gw, dbApi) {
     const auth = String(req.headers['authorization'] || '');
     return auth.startsWith('Bearer ') ? auth.slice(7) : null;
   };
-  const tryGetUser = (req) => {
+  const tryGetUser = async (req) => {
     try {
       const token = getBearerToken(req);
       if (!token) return null;
-      const sess = dbApi.getSession(token);
+      const sess = await dbApi.getSession(token);
       if (!sess) return null;
-      const user = dbApi.getUserById(sess.user_id);
+      const user = await dbApi.getUserById(sess.user_id);
       return user || null;
     } catch { return null; }
   };
-  const requireUser = (req, res) => {
+  const requireUser = async (req, res) => {
     const token = getBearerToken(req);
     if (!token) { res.status(401).json({ ok:false, error:'missing token' }); return null; }
-    const sess = dbApi.getSession(token);
+    const sess = await dbApi.getSession(token);
     if (!sess) { res.status(401).json({ ok:false, error:'invalid token' }); return null; }
-    const user = dbApi.getUserById(sess.user_id);
+    const user = await dbApi.getUserById(sess.user_id);
     if (!user) { res.status(401).json({ ok:false, error:'invalid token' }); return null; }
     return user;
   };
-  const getPsId = (req) => {
-    const user = tryGetUser(req);
+  const getPsId = async (req) => {
+    const user = await tryGetUser(req);
     return (
       req.query.powerStationId ||
       req.query.powerstation_id ||
@@ -153,13 +153,14 @@ export function createRoutes(gw, dbApi) {
   router.get('/health', (req, res) => res.json({ ok: true }));
 
   // Powerstations (local DB)
-  router.get('/powerstations', (req, res) => {
-    res.json({ items: dbApi.listPowerstations() });
+  router.get('/powerstations', async (req, res) => {
+    const items = await dbApi.listPowerstations();
+    res.json({ items });
   });
-  router.post('/powerstations/:id/name', (req, res) => {
+  router.post('/powerstations/:id/name', async (req, res) => {
     const { id } = req.params;
     const { name } = req.body || {};
-    dbApi.upsertBusinessName(id, name || null);
+    await dbApi.upsertBusinessName(id, name || null);
     res.json({ ok: true });
   });
 
@@ -376,7 +377,7 @@ export function createRoutes(gw, dbApi) {
         if (!plantId) return res.status(400).json({ ok:false, error:'missing plant id (set ASSIST_PLANT_ID/PLANT_ID or pass ?powerstation_id=...)' });
         user = { id: 0, email: 'assistant@service', powerstation_id: plantId };
       } else {
-        user = requireUser(req, res); if (!user) return;
+        user = await requireUser(req, res); if (!user) return;
       }
 
       const input = String(req.body?.input || '').trim();
@@ -515,7 +516,7 @@ export function createRoutes(gw, dbApi) {
           }
         },
         async get_monitor({ page_index = 1, page_size = 14, key = '', orderby = '', powerstation_type = '', powerstation_status = '', adcode = '', org_id = '', condition = '' } = {}) {
-          const body = { powerstation_id: psId, key, orderby, powerstation_type, powerstation_status, page_index: Number(page_index), page_size: Number(page_size), adcode, org_id, condition };
+    const body = { powerstation_id: psId, key, orderby, powerstation_type, powerstation_status, page_index: Number(page_index), page_size: Number(page_size), adcode, org_id, condition };
           const j = await gw.postJson('PowerStationMonitor/QueryPowerStationMonitor', body);
           return j;
         },
@@ -564,11 +565,12 @@ export function createRoutes(gw, dbApi) {
           return j;
         },
         async list_powerstations() {
-          return { items: dbApi.listPowerstations() };
+          const items = await dbApi.listPowerstations();
+          return { items };
         },
         async set_powerstation_name({ id, name }) {
           if (!id) return { ok: false, error: 'id required' };
-          dbApi.upsertBusinessName(id, name || null);
+          await dbApi.upsertBusinessName(id, name || null);
           return { ok: true };
         },
         async debug_auth() {
@@ -699,7 +701,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
   // App Auth (register/login/me)
-  router.post('/auth/register', (req, res) => {
+  router.post('/auth/register', async (req, res) => {
     try {
       const { email, password, powerstation_id } = req.body || {};
       if (!email || !password || !powerstation_id) return res.status(400).json({ ok: false, error: 'email, password, powerstation_id required' });
@@ -707,9 +709,9 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const salt = crypto.randomBytes(16).toString('hex');
       const hash = crypto.scryptSync(password, salt, 64).toString('hex');
       const password_hash = `scrypt:${salt}:${hash}`;
-      const user = dbApi.createUser({ email, password_hash, powerstation_id });
+      const user = await dbApi.createUser({ email, password_hash, powerstation_id });
       const token = crypto.randomUUID();
-      dbApi.createSession(user.id, token);
+      await dbApi.createSession(user.id, token);
       res.json({ ok: true, token, user: { id: user.id, email: user.email, powerstation_id: user.powerstation_id } });
     } catch (e) {
       const msg = String(e).includes('UNIQUE') ? 'email already exists' : String(e);
@@ -717,33 +719,33 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     }
   });
 
-  router.post('/auth/login', (req, res) => {
+  router.post('/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body || {};
       if (!email || !password) return res.status(400).json({ ok: false, error: 'email, password required' });
-      const user = dbApi.getUserByEmail(email);
+      const user = await dbApi.getUserByEmail(email);
       if (!user) return res.status(401).json({ ok: false, error: 'invalid credentials' });
       const [scheme, salt, hash] = String(user.password_hash || '').split(':');
       if (scheme !== 'scrypt' || !salt || !hash) return res.status(500).json({ ok: false, error: 'invalid password scheme' });
       const verify = crypto.scryptSync(password, salt, 64).toString('hex');
       if (verify !== hash) return res.status(401).json({ ok: false, error: 'invalid credentials' });
       const token = crypto.randomUUID();
-      dbApi.createSession(user.id, token);
+      await dbApi.createSession(user.id, token);
       res.json({ ok: true, token, user: { id: user.id, email: user.email, powerstation_id: user.powerstation_id } });
     } catch (e) {
       res.status(500).json({ ok: false, error: String(e) });
     }
   });
 
-  router.get('/auth/me', (req, res) => {
-    const user = requireUser(req, res); if (!user) return;
+  router.get('/auth/me', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
     res.json({ ok: true, user: { id: user.id, email: user.email, powerstation_id: user.powerstation_id } });
   });
 
   // Change password (requires Bearer token)
-  router.post('/auth/change-password', (req, res) => {
+  router.post('/auth/change-password', async (req, res) => {
     try {
-      const user = requireUser(req, res); if (!user) return;
+      const user = await requireUser(req, res); if (!user) return;
 
       const { old_password, new_password } = req.body || {};
       if (!old_password || !new_password) return res.status(400).json({ ok: false, error: 'old_password and new_password required' });
@@ -757,7 +759,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const newSalt = crypto.randomBytes(16).toString('hex');
       const newHash = crypto.scryptSync(new_password, newSalt, 64).toString('hex');
       const password_hash = `scrypt:${newSalt}:${newHash}`;
-      dbApi.updateUserPassword(user.id, password_hash);
+      await dbApi.updateUserPassword(user.id, password_hash);
       res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ ok: false, error: String(e) });
@@ -788,7 +790,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   // QueryPowerStationMonitor (JSON)
   router.get('/monitor', async (req, res) => {
     const body = {
-      powerstation_id: getPsId(req),
+      powerstation_id: await getPsId(req),
       key: req.query.key || '',
       orderby: req.query.orderby || '',
       powerstation_type: req.query.powerstation_type || '',
@@ -809,7 +811,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // GetInverterAllPoint (form)
   router.get('/inverters', async (req, res) => {
-    const psId = getPsId(req);
+    const psId = await getPsId(req);
     try {
       const j = await gw.postForm('v3/PowerStation/GetInverterAllPoint', { powerStationId: psId });
       res.json(j);
@@ -844,7 +846,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // GetWeather (form)
   router.get('/weather', async (req, res) => {
-    const psId = getPsId(req);
+    const psId = await getPsId(req);
     try {
       const j = await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: psId });
       res.json(j);
@@ -855,7 +857,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // Powerflow (JSON)
   router.get('/powerflow', async (req, res) => {
-    const psId = getPsId(req);
+    const psId = await getPsId(req);
     try {
       const j = await gw.postJson('v2/PowerStation/GetPowerflow', { PowerStationId: psId });
       res.json(j);
@@ -866,7 +868,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // EV Chargers - count by PowerStation (JSON)
   router.get('/evchargers/count', async (req, res) => {
-    const psId = getPsId(req);
+    const psId = await getPsId(req);
     try {
       const j = await gw.postJson('v4/EvCharger/GetEvChargerCountByPwId', { PowerStationId: psId });
       res.json(j);
@@ -877,7 +879,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // Charts/GetChartByPlant (JSON) -> agregados rápidos (dia/semana/mês/ano)
   router.get('/chart-by-plant', async (req, res) => {
-    const user = tryGetUser(req);
+    const user = await tryGetUser(req);
     const id = req.query.id || req.query.plant_id || user?.powerstation_id || '';
     const date = req.query.date || '';
     const range = req.query.range || '2'; // 1: day/rolling? 2: month, 4: year (observado)
@@ -893,7 +895,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // GetPlantDetailByPowerstationId (form) -> total_income, currency, KPIs
   router.get('/plant-detail', async (req, res) => {
-    const psId = getPsId(req);
+    const psId = await getPsId(req);
     try {
       const j = await gw.postForm('v3/PowerStation/GetPlantDetailByPowerstationId', { powerStationId: psId });
       res.json(j);
@@ -904,7 +906,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // GetPlantPowerChart (JSON) — support day/week/month aggregation client-side later if needed
   router.get('/power-chart', async (req, res) => {
-    const user = tryGetUser(req);
+    const user = await tryGetUser(req);
     const id = req.query.plant_id || req.query.id || user?.powerstation_id || '';
     const date = req.query.date || '';
     const full_script = String(req.query.full_script || 'true') === 'true';
@@ -919,7 +921,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // PowerstationWarningsQuery (form) -> alerts per inverter
   router.get('/warnings', async (req, res) => {
-    const pwId = getPsId(req);
+    const pwId = await getPsId(req);
     try {
       // Try region-aware first
       let j = await gw.postForm('warning/PowerstationWarningsQuery', { pw_id: pwId });
@@ -1053,17 +1055,22 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     return r.json();
   }
 
-  router.get('/auth/smartthings', (req, res) => {
+  router.get('/auth/smartthings', async (req, res) => {
     // Permite token via query para abrir em nova aba: /auth/smartthings?token=...
-    let user = tryGetUser(req);
+    let user = await tryGetUser(req);
     if (!user) {
       const t = String(req.query.token||'');
-      try { if (t){ const sess = dbApi.getSession(t); if (sess) user = dbApi.getUserById(sess.user_id); } } catch {}
+      try {
+        if (t){
+          const sess = await dbApi.getSession(t);
+          if (sess) user = await dbApi.getUserById(sess.user_id);
+        }
+      } catch {}
     }
     if (!user) { res.status(401).send('missing token'); return; }
     try {
       const state = crypto.randomBytes(16).toString('hex');
-      dbApi.createOauthState({ state, vendor:'smartthings', user_id: user.id });
+      await dbApi.createOauthState({ state, vendor:'smartthings', user_id: user.id });
       const base = deriveBaseUrl(req);
       const authUrl = (process.env.ST_AUTH_URL||'https://auth-global.api.smartthings.com/oauth/authorize');
       const redirectUri = base + (process.env.ST_REDIRECT_PATH||'/api/integrations/st/callback');
@@ -1081,7 +1088,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const code = String(req.query.code||'');
       const state = String(req.query.state||'');
       if (!code || !state) return res.status(400).send('missing code/state');
-      const st = dbApi.consumeOauthState(state);
+      const st = await dbApi.consumeOauthState(state);
       if (!st || st.vendor !== 'smartthings') return res.status(400).send('invalid state');
 
       const base = deriveBaseUrl(req);
@@ -1093,7 +1100,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const expires_at = Date.now() + Math.max(0, expiresIn-30)*1000;
       const scopes = String(tok.scope||process.env.ST_SCOPES||'');
       if (!access || !refresh) throw new Error('missing tokens');
-      dbApi.upsertLinkedAccount({ user_id: st.user_id, vendor:'smartthings', access_token: enc(access), refresh_token: enc(refresh), expires_at, scopes, meta: { obtained_at: Date.now() } });
+      await dbApi.upsertLinkedAccount({ user_id: st.user_id, vendor:'smartthings', access_token: enc(access), refresh_token: enc(refresh), expires_at, scopes, meta: { obtained_at: Date.now() } });
       // Redirect to frontend (Vercel) after success
       const frontOrigin = (process.env.FRONT_ORIGIN || process.env.CORS_ORIGIN || '').replace(/\/$/, '');
       const toPath = String(process.env.FRONT_REDIRECT_SUCCESS || '/perfil');
@@ -1112,20 +1119,20 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     } catch (e) { res.status(500).send('Falha ao conectar SmartThings'); }
   });
 
-  router.post('/auth/smartthings/unlink', (req, res) => {
-    const user = requireUser(req, res); if (!user) return;
-    try { dbApi.deleteLinkedAccount(user.id, 'smartthings'); res.status(204).end(); }
+  router.post('/auth/smartthings/unlink', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try { await dbApi.deleteLinkedAccount(user.id, 'smartthings'); res.status(204).end(); }
     catch(e){ res.status(500).json({ ok:false, error:'unlink failed' }); }
   });
 
-  router.get('/auth/smartthings/status', (req, res) => {
-    const user = requireUser(req, res); if (!user) return;
-    const row = dbApi.getLinkedAccount(user.id, 'smartthings');
+  router.get('/auth/smartthings/status', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    const row = await dbApi.getLinkedAccount(user.id, 'smartthings');
     res.json({ ok:true, connected: !!row, expires_at: row?.expires_at||null, scopes: row?.scopes||'' });
   });
 
   async function ensureStAccess(user){
-    const row = dbApi.getLinkedAccount(user.id, 'smartthings');
+    const row = await dbApi.getLinkedAccount(user.id, 'smartthings');
     if (!row) throw Object.assign(new Error('not linked'), { code:'NOT_LINKED' });
     let access = dec(row.access_token||'');
     const refresh = dec(row.refresh_token||'');
@@ -1136,13 +1143,13 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const newRefresh = String(tok.refresh_token||refresh||'');
       const expiresIn = Number(tok.expires_in||0);
       const expires_at = Date.now() + Math.max(0, expiresIn-30)*1000;
-      dbApi.upsertLinkedAccount({ user_id: user.id, vendor:'smartthings', access_token: enc(access), refresh_token: enc(newRefresh), expires_at, scopes: row.scopes, meta: { refreshed_at: Date.now() } });
+      await dbApi.upsertLinkedAccount({ user_id: user.id, vendor:'smartthings', access_token: enc(access), refresh_token: enc(newRefresh), expires_at, scopes: row.scopes, meta: { refreshed_at: Date.now() } });
     }
     return access;
   }
 
   router.get('/smartthings/devices', async (req, res) => {
-    const user = requireUser(req, res); if (!user) return;
+    const user = await requireUser(req, res); if (!user) return;
     try {
       const token = await ensureStAccess(user);
       const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
@@ -1170,7 +1177,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // Single SmartThings device status
   router.get('/smartthings/device/:id/status', async (req, res) => {
-    const user = requireUser(req, res); if (!user) return;
+    const user = await requireUser(req, res); if (!user) return;
     try {
       const token = await ensureStAccess(user);
       const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
@@ -1190,7 +1197,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // Send commands to a SmartThings device
   router.post('/smartthings/commands', async (req, res) => {
-    const user = requireUser(req, res); if (!user) return;
+    const user = await requireUser(req, res); if (!user) return;
     try {
       const token = await ensureStAccess(user);
       const { deviceId, commands, component, capability, command, arguments: args } = req.body || {};

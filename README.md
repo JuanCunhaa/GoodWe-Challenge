@@ -2,7 +2,7 @@
 
 Aplicação completa para monitoramento GoodWe/SEMS com:
 - Backend Node 18+ (Express) que autentica no SEMS, expõe endpoints amigáveis, cacheia chamadas e serve a UI em produção.
-- Banco local SQLite (usuários, sessões e rótulos de powerstations).
+- Banco local SQLite (usuários, sessões e rótulos de powerstations) ou Postgres (via `DATABASE_URL`).
 - Frontend React + Vite + Tailwind com dashboard moderno, 14 páginas e painel de Assistente.
 - Assistente opcional (OpenAI) com ferramentas que consultam a API em tempo real.
 - TTS opcional (voz) via Piper local ou servidor HTTP externo.
@@ -51,6 +51,11 @@ Arquivo `backend/.env` (exemplos em `backend/.env.exemple`):
   - Ajustes finos: `PIPER_SPEAKER`, `PIPER_LENGTH_SCALE`, `PIPER_NOISE_SCALE`, `PIPER_NOISE_W`.
 - TTS (opcional, fallback HTTP):
   - `PIPER_HTTP_URL` ou `TTS_SERVER_URL` (ex.: `http://127.0.0.1:5002/tts`).
+
+- Banco de Dados:
+  - Por padrão, usa SQLite no arquivo `backend/data/app.db` (ou caminho legado `backend/backend/data`).
+  - Para Postgres (Render/Neon): defina `DATABASE_URL` (ex.: `postgresql://user:pass@host:5432/dbname?sslmode=require`).
+    O backend detecta e inicializa o schema automaticamente.
 
 Arquivo `frontend/.env` (exemplos em `frontend/.env.example`):
 - `VITE_API_BASE` — base da API (ex.: `http://localhost:3000/api`).

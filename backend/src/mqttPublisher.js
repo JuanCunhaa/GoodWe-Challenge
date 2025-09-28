@@ -12,16 +12,13 @@ export function startMqttPublisher({ gw, dbApi }) {
     return;
   }
 
-  const plantId = String(
-    process.env.MQTT_PLANT_ID ||
-    process.env.PLANT_ID ||
-    process.env.ASSIST_PLANT_ID ||
-    (dbApi.listPowerstations?.()[0]?.id || '')
-  );
-  if (!plantId) {
-    console.warn('[mqtt] No plant id (set MQTT_PLANT_ID/PLANT_ID). MQTT disabled');
-    return;
-  }
+  // Resolve plant id lazily (supports async DB)
+  const firstLocalPlantId = async () => {
+    try {
+      const list = await (dbApi.listPowerstations?.() || Promise.resolve([]));
+      return list?.[0]?.id || '';
+    } catch { return ''; }
+  };
 
   const prefix = (process.env.MQTT_PREFIX || 'goodwe').replace(/\/$/, '');
   const discPrefix = (process.env.MQTT_DISCOVERY_PREFIX || 'homeassistant').replace(/\/$/, '');
@@ -40,6 +37,17 @@ export function startMqttPublisher({ gw, dbApi }) {
   c.on('connect', async () => {
     console.log('[mqtt] connected');
     try { await gw.ensureAuth(); } catch {}
+
+    const plantId = String(
+      process.env.MQTT_PLANT_ID ||
+      process.env.PLANT_ID ||
+      process.env.ASSIST_PLANT_ID ||
+      (await firstLocalPlantId())
+    );
+    if (!plantId) {
+      console.warn('[mqtt] No plant id (set MQTT_PLANT_ID/PLANT_ID). MQTT disabled');
+      return;
+    }
 
     const dev = {
       identifiers: [plantId],
@@ -120,4 +128,3 @@ export function startMqttPublisher({ gw, dbApi }) {
     console.error('[mqtt] error', e?.message || e);
   });
 }
-
