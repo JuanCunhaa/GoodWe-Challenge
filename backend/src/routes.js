@@ -1161,6 +1161,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
         id: String(d?.deviceId||d?.device_id||''),
         name: String(d?.label||d?.name||''),
         roomId: d?.roomId || null,
+        locationId: d?.locationId || null,
         manufacturer: d?.manufacturerName || null,
         profileId: d?.profileId || null,
         deviceTypeName: d?.deviceTypeName || d?.type || null,
@@ -1172,6 +1173,41 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     } catch (e) {
       if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
       res.status(500).json({ ok:false, error:'failed to fetch devices' });
+    }
+  });
+
+  // List SmartThings rooms (by location). If no locationId provided, infer from devices.
+  router.get('/smartthings/rooms', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const token = await ensureStAccess(user);
+      const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
+      let locationIds = [];
+      const qLoc = String(req.query.locationId||'').trim();
+      if (qLoc) {
+        locationIds = [qLoc];
+      } else {
+        // Infer from devices
+        try {
+          const r = await fetch(`${apiBase}/devices`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+          const j = await r.json();
+          const list = Array.isArray(j?.items) ? j.items : [];
+          locationIds = Array.from(new Set(list.map(d => d?.locationId).filter(Boolean)));
+        } catch {}
+      }
+      const rooms = [];
+      for (const loc of locationIds) {
+        try {
+          const r = await fetch(`${apiBase}/locations/${encodeURIComponent(loc)}/rooms`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+          const j = await r.json();
+          const items = Array.isArray(j?.items) ? j.items : [];
+          for (const it of items) rooms.push({ id: it?.roomId || it?.id, name: it?.name || it?.label || '', locationId: loc });
+        } catch {}
+      }
+      res.json({ ok:true, items: rooms });
+    } catch (e) {
+      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
+      res.status(500).json({ ok:false, error:'failed to fetch rooms' });
     }
   });
 

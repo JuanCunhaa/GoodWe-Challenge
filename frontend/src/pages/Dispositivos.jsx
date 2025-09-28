@@ -11,6 +11,8 @@ export default function Dispositivos(){
   const [statusMap, setStatusMap] = useState({})
   const [busy, setBusy] = useState({})
   const [canControl, setCanControl] = useState(true)
+  const [rooms, setRooms] = useState({}) // { roomId: roomName }
+  const [room, setRoom] = useState('') // '' = todos, 'none' = sem cômodo
 
   async function fetchDevices(){
     setErr(''); setLoading(true)
@@ -19,6 +21,13 @@ export default function Dispositivos(){
       const j = await integrationsApi.stDevices(token)
       const list = Array.isArray(j?.items) ? j.items : []
       setItems(list)
+      // Load rooms mapping (best-effort)
+      try {
+        const r = await integrationsApi.stRooms(token)
+        const map = {}
+        for (const it of (r?.items||[])) { if (it?.id) map[it.id] = it.name || '' }
+        setRooms(map)
+      } catch {}
       // Auto-carrega status para dispositivos com switch (limita a 6 em paralelo)
       const capsFor = (d)=> (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
       const ids = list.filter(d => capsFor(d).includes('switch')).map(d=> d.id)
@@ -65,9 +74,14 @@ export default function Dispositivos(){
 
   const list = useMemo(()=>{
     const qq = q.trim().toLowerCase();
-    return items
+    let arr = items
       .filter(d => !vendor || String(d.vendor||'')===vendor)
       .filter(d => !qq || (String(d.name||'').toLowerCase().includes(qq) || String(d.id||'').includes(qq)))
+    if (room) {
+      if (room === 'none') arr = arr.filter(d => !d.roomId)
+      else arr = arr.filter(d => String(d.roomId||'')===room)
+    }
+    return arr
   }, [items, q, vendor])
 
   function getSwitchComponent(d){
@@ -88,6 +102,13 @@ export default function Dispositivos(){
           <div className="flex items-center gap-2 flex-wrap">
             <select className="panel w-full sm:w-auto" value={vendor} onChange={e=>setVendor(e.target.value)}>
               <option value="smartthings">SmartThings</option>
+            </select>
+            <select className="panel w-full sm:w-auto" value={room} onChange={e=>setRoom(e.target.value)}>
+              <option value="">Todos os cômodos</option>
+              <option value="none">Sem cômodo</option>
+              {Object.entries(rooms).map(([id,name]) => (
+                <option key={id} value={id}>{name||id}</option>
+              ))}
             </select>
             <input className="panel outline-none w-full sm:w-64" placeholder="Buscar" value={q} onChange={e=>setQ(e.target.value)} />
             <button className="btn w-full sm:w-auto" onClick={fetchDevices} disabled={loading}>{loading ? 'Atualizando...' : 'Atualizar'}</button>
@@ -123,6 +144,7 @@ export default function Dispositivos(){
                   <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||''}>
                     {(d.deviceTypeName || d.manufacturer || 'Dispositivo')}
                   </div>
+                  <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || (d.roomId ? d.roomId : '—')}</div>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   {hasSwitch ? (

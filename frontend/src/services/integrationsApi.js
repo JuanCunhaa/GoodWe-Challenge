@@ -15,6 +15,7 @@ export const integrationsApi = {
   stUnlink: (token) => request('/auth/smartthings/unlink', { method:'POST', token, body:{} }),
   stDevices: (token) => request('/smartthings/devices', { token }),
   stDeviceStatus: (token, id) => request(`/smartthings/device/${encodeURIComponent(id)}/status`, { token }),
+  stRooms: (token, locationId) => request(locationId ? `/smartthings/rooms?locationId=${encodeURIComponent(locationId)}` : '/smartthings/rooms', { token }),
   stSendCommands: (token, deviceId, payload) => {
     const body = Array.isArray(payload)
       ? { deviceId, commands: payload }
