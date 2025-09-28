@@ -67,3 +67,11 @@
 .ring-brand { box-shadow: none !important; }
 /* Ensure common components don’t render shadows */
 .card, .panel, .dock, .btn, .btn-primary, .btn-danger, .btn-ghost { box-shadow: none !important; filter: none !important; }
+
+/* --- Mobile-only tweaks (<= 640px) --- */
+@media (max-width: 640px) {
+  .card { padding: 1rem; border-radius: 1rem; }
+  .panel { padding: 0.75rem; border-radius: 0.75rem; }
+  .h1 { font-size: 1.125rem; line-height: 1.4; }
+  .h2 { font-size: 1rem; }
+}

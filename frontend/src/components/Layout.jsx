@@ -90,8 +90,8 @@ export default function Layout(){
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-[280px_1fr]">
-      {/* Sidebar */}
-      <aside className={clsx("sticky top-0 h-svh dock rounded-none !shadow-soft !border-r transition-all", open ? "lg:w-[280px]" : "lg:w-[96px]")}>
+      {/* Sidebar (hidden on mobile) */}
+      <aside className={clsx("hidden lg:block sticky top-0 h-svh dock rounded-none !shadow-soft !border-r transition-all", open ? "lg:w-[280px]" : "lg:w-[96px]")}>
         <div className="p-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="size-8 rounded-2xl bg-brand/20 border border-brand/30 animate-float" />
@@ -132,8 +132,19 @@ export default function Layout(){
           </div>
         </div>
 
+        {/* Mobile quick nav (below topbar) */}
+        <div className="lg:hidden mx-auto max-w-[1400px] px-4 py-2 overflow-x-auto">
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            {NAV.map(({to,label})=> (
+              <NavLink key={to} to={to} className={({isActive})=> clsx("pill", isActive && "pill-active") }>
+                {label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+
         {/* Content area */}
-        <div className="mx-auto max-w-[1400px] grid lg:grid-cols-[1fr_360px] gap-6 p-6">
+        <div className="mx-auto max-w-[1400px] grid lg:grid-cols-[1fr_360px] gap-6 p-4 sm:p-6">
           <div className="grid gap-6">
             <Outlet />
           </div>
