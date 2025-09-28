@@ -222,14 +222,18 @@ export default function Perfil(){
             {st.lastSync && <div className="muted text-xs mb-1">Ãšltimo sync: {new Date(st.lastSync).toLocaleString()}</div>}
             {st.count!=null && <div className="muted text-xs mb-2">Dispositivos: {st.count}</div>}
             {st.error && <div className="text-red-600 text-xs mb-1">{st.error}</div>}
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button className="btn btn-primary" onClick={stConnect} disabled={st.syncing}>Conectar</button>
               <button className="btn" onClick={stSync} disabled={st.syncing || !st.connected}>{st.syncing ? 'Sincronizando...' : 'Sincronizar'}</button>
               <button className="btn btn-danger" onClick={stUnlink} disabled={!st.connected || st.syncing}>Desconectar</button>
               {!st.canControl && st.connected && (
-                <button className="btn btn-primary" onClick={stConnect} disabled={st.syncing}>Re-conectar com comandos</button>
+                <button className="btn" onClick={stConnect} disabled={st.syncing} title="Necessário escopo de comandos (devices:commands ou x:devices:*)">Re‑conectar com comandos</button>
               )}
             </div>
+            {st.connected && st.scopes && (
+              <div className="muted text-xs mt-2">Scopes: <span className="font-mono">{st.scopes}</span></div>
+            )}
+            <div className="muted text-[11px] mt-1">Scopes necessários para controle: <span className="font-mono">devices:commands</span> ou <span className="font-mono">x:devices:*</span>.</div>
           </div>
           <div className="panel opacity-60" title="Em breve">
             <div className="font-semibold mb-1">Philips Hue</div>

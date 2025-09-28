@@ -93,6 +93,12 @@ export default function Dispositivos(){
             <button className="btn w-full sm:w-auto" onClick={fetchDevices} disabled={loading}>{loading ? 'Atualizando...' : 'Atualizar'}</button>
           </div>
         </div>
+        {!loading && !canControl && (
+          <div className="panel border border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm mb-3">
+            Comando indisponível: conecte o SmartThings com escopo de comandos
+            (<span className="font-mono">devices:commands</span> ou <span className="font-mono">x:devices:*</span>) na página <a className="underline" href="/perfil">Perfil</a>.
+          </div>
+        )}
         {err && (
           <div className="text-red-600 text-sm mb-2">
             {err}
@@ -111,34 +117,33 @@ export default function Dispositivos(){
             const comp = getSwitchComponent(d)
             const isOn = String(st?.components?.[comp]?.switch?.switch?.value||'').toLowerCase()==='on'
             return (
-              <div key={d.id} className="panel">
-                <div className="flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold whitespace-normal break-words" title={d.name}>{d.name||'-'}</div>
-                    <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||''}>
-                      {(d.deviceTypeName || d.manufacturer || 'Dispositivo')}
-                    </div>
+              <div key={d.id} className="panel h-full flex flex-col gap-2">
+                <div>
+                  <div className="font-semibold text-sm sm:text-base whitespace-normal break-words" title={d.name}>{d.name||'-'}</div>
+                  <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||''}>
+                    {(d.deviceTypeName || d.manufacturer || 'Dispositivo')}
                   </div>
-                  {hasSwitch && (
-                    <div className="flex items-center gap-2 shrink-0">
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  {hasSwitch ? (
+                    <>
                       <span className={`px-2 py-0.5 rounded text-xs ${isOn ? 'bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-gray-500/20 text-gray-600 dark:text-gray-400'}`}>
                         {isOn ? 'ON' : 'OFF'}
                       </span>
                       {canControl ? (
                         isOn ? (
-                          <button className="btn btn-danger btn-sm" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,false, comp)}>{busy[d.id]? '...' : 'Desligar'}</button>
+                          <button className="btn btn-danger" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,false, comp)}>{busy[d.id]? '...' : 'Desligar'}</button>
                         ) : (
-                          <button className="btn btn-primary btn-sm" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true, comp)}>{busy[d.id]? '...' : 'Ligar'}</button>
+                          <button className="btn btn-primary" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true, comp)}>{busy[d.id]? '...' : 'Ligar'}</button>
                         )
                       ) : (
-                        <button className="btn btn-ghost btn-sm" disabled title="Conecte o SmartThings com devices:commands na página Perfil">Comando indisponível</button>
+                        <button className="btn btn-ghost" disabled title="Conecte o SmartThings com devices:commands ou x:devices:* na página Perfil">Comando indisponível</button>
                       )}
-                    </div>
+                    </>
+                  ) : (
+                    <span className="muted text-xs">Sem controle direto (switch não disponível)</span>
                   )}
                 </div>
-                {!hasSwitch && (
-                  <div className="mt-2 muted text-xs">Sem controle direto (switch não disponível)</div>
-                )}
               </div>
             )
           })}
