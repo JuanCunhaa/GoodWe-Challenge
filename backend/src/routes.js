@@ -1286,7 +1286,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   });
 
   // ========== Philips Hue (Remote API v2) ==========
-  const HUE_ENABLED = String(process.env.HUE_ENABLED||'false').toLowerCase()==='true';
+  const HUE_ENABLED = String(process.env.HUE_ENABLED||'true').toLowerCase()==='true';
   async function hueTokenRequest(params){
     const clientId = process.env.HUE_CLIENT_ID||'';
     const clientSecret = process.env.HUE_CLIENT_SECRET||'';
@@ -1563,17 +1563,17 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const plugs  = await fetchRes('/resource/smart_plug');
       const byRid = new Map();
       for (const it of lights) if (it?.id) byRid.set(it.id, { kind:'light', on: !!it?.on?.on });
-      for (const it of plugs) if (it?.id) byRid.set(it.id, { kind:'plug', on: !!it?.on?.on });
+      for (const it of plugs) if (it?.id) byRid.set(it.id, { kind:'smart_plug', on: !!it?.on?.on });
 
       const norm = devices.map((d) => {
         const id = d?.id || '';
         const name = d?.metadata?.name || d?.product_data?.product_name || 'Device';
         const type = d?.product_data?.product_name || d?.metadata?.archetype || d?.type || '';
         // Find first controllable service
-        let on = null;
+        let on = null, rid=null, kind=null;
         const svcs = Array.isArray(d?.services) ? d.services : [];
-        for (const s of svcs){ const st = byRid.get(s?.rid); if (st){ on = st.on; break; } }
-        return { id, name, vendor:'philips-hue', type, on };
+        for (const s of svcs){ const st = byRid.get(s?.rid); if (st){ on = st.on; rid = s.rid; kind = st.kind; break; } }
+        return { id, name, vendor:'philips-hue', type, on, controlRid: rid, controlKind: kind };
       });
       res.json({ ok:true, items: norm, total: norm.length, ts: Date.now() });
     } catch (e) {

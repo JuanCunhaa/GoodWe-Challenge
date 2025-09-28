@@ -236,10 +236,7 @@ export default function Perfil(){
             )}
             <div className="muted text-[11px] mt-1">Scopes necessários para controle: <span className="font-mono">devices:commands</span> ou <span className="font-mono">x:devices:*</span>.</div>
           </div>
-          <div className="panel opacity-60" title="Em breve">
-            <div className="font-semibold mb-1">Philips Hue</div>
-            <div className="muted text-xs">Em breve</div>
-          </div>
+          <HueCard />
           <TuyaCard />
         </div>
       </div>
