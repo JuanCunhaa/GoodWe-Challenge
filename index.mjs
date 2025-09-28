@@ -45,8 +45,10 @@ async function getJson(url) {
 async function postAssistant(input) {
   const API_BASE = process.env.API_BASE;
   const token = process.env.ASSIST_TOKEN || '';
+  const plantId = process.env.PLANT_ID || process.env.ASSIST_PLANT_ID || '';
   const HTTP_TIMEOUT_MS = Math.max(500, numEnv('HTTP_TIMEOUT_MS', 2500));
-  const r = await fetch(`${API_BASE}/assistant/chat`, {
+  const url = `${API_BASE}/assistant/chat${plantId ? `?powerstation_id=${encodeURIComponent(plantId)}` : ''}`;
+  const r = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

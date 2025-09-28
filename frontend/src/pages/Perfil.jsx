@@ -64,7 +64,7 @@ export default function Perfil(){
   async function savePsName(){
     setPsErr(''); setPsOk('')
     try{
-      const base = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'
+      const base = import.meta.env.VITE_API_BASE || '/api'
       const res = await fetch(`${base}/powerstations/${encodeURIComponent(powerstationId)}/name`, {
         method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ name: psName||null })
       })
@@ -76,7 +76,7 @@ export default function Perfil(){
 
   async function checkConnections(){
     try{
-      const base = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'
+      const base = import.meta.env.VITE_API_BASE || '/api'
       const r1 = await fetch(`${base}/health`).then(r=> r.ok)
       setApiHealth(!!r1)
       const r2 = await fetch(`${base}/assistant/ping`).then(r=> r.json()).catch(()=>null)

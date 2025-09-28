@@ -262,8 +262,25 @@ export function createRoutes(gw, dbApi) {
     try {
       const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY || '';
       if (!OPENAI_API_KEY) return res.status(501).json({ ok: false, error: 'assistant unavailable: missing OPENAI_API_KEY' });
-
-      const user = requireUser(req, res); if (!user) return;
+      // Allow either authenticated app users OR a service token (ASSIST_TOKEN) for Alexa/automation
+      const bearer = getBearerToken(req);
+      const svcToken = process.env.ASSIST_TOKEN || '';
+      let user = null;
+      if (svcToken && bearer === svcToken) {
+        // Service-mode: plant id can come from query or env (ASSIST_PLANT_ID/PLANT_ID)
+        const plantId = String(
+          req.query.powerstation_id ||
+          req.query.powerStationId ||
+          req.query.pw_id ||
+          process.env.ASSIST_PLANT_ID ||
+          process.env.PLANT_ID ||
+          ''
+        );
+        if (!plantId) return res.status(400).json({ ok:false, error:'missing plant id (set ASSIST_PLANT_ID/PLANT_ID or pass ?powerstation_id=...)' });
+        user = { id: 0, email: 'assistant@service', powerstation_id: plantId };
+      } else {
+        user = requireUser(req, res); if (!user) return;
+      }
 
       const input = String(req.body?.input || '').trim();
       const prev = Array.isArray(req.body?.messages) ? req.body.messages : [];

@@ -18,7 +18,7 @@ export default function AssistantPanel(){
 
   // Fala a resposta do assistente (TTS via backend, com fallback Web Speech)
   async function speak(text) {
-    const base = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api'
+    const base = import.meta.env.VITE_API_BASE || '/api'
     // 1) Tenta back-end TTS em chunks (resposta mais rápida para frases longas)
     try {
       const chunks = splitTextForTTS(text)
@@ -81,7 +81,7 @@ export default function AssistantPanel(){
     setMessages(newMsgs); setInput(''); setLoading(true)
     try{
       const token = localStorage.getItem('token')
-      const r = await fetch((import.meta.env.VITE_API_BASE || 'http://localhost:3000/api') + '/assistant/chat', {
+      const r = await fetch((import.meta.env.VITE_API_BASE || '/api') + '/assistant/chat', {
         method:'POST', headers: { 'Content-Type':'application/json', ...(token? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ input: content, messages: newMsgs })
       })

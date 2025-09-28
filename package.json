@@ -1,0 +1,15 @@
+{
+  "name": "goodwe-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unified GoodWe app: backend API + built frontend served on one port",
+  "scripts": {
+    "start": "npm --prefix backend run start:all",
+    "dev": "npm --prefix backend run dev",
+    "build": "npm --prefix frontend run build",
+    "seed": "npm --prefix backend run seed"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
