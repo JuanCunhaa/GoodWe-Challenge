@@ -236,12 +236,11 @@ export default function Perfil(){
             )}
             <div className="muted text-[11px] mt-1">Scopes necessários para controle: <span className="font-mono">devices:commands</span> ou <span className="font-mono">x:devices:*</span>.</div>
           </div>
-          <HueCard />
           <div className="panel opacity-60" title="Em breve">
-            <div className="font-semibold mb-1">eWeLink</div>
+            <div className="font-semibold mb-1">Philips Hue</div>
             <div className="muted text-xs">Em breve</div>
-            
           </div>
+          <TuyaCard />
         </div>
       </div>
     </section>
@@ -317,6 +316,70 @@ function HueCard(){
         </div>
       )}
       <div className="muted text-[11px] mt-2">Cadastre seu app no portal Hue (Remote API v2) e defina HUE_CLIENT_ID/SECRET, HUE_APP_KEY no backend.</div>
+    </div>
+  )
+}
+
+function TuyaCard(){
+  const [state, setState] = React.useState({ connected:false, uid:'', syncing:false, error:'', count:null })
+  const uidRef = React.useRef('')
+
+  React.useEffect(()=>{ refresh() }, [])
+
+  async function refresh(){
+    try{
+      const { token } = loadSession(); if (!token) return
+      const s = await integrationsApi.tuyaStatus(token)
+      setState(prev=> ({ ...prev, connected: !!s?.connected, uid: String(s?.uid||''), error:'' }))
+    }catch(e){ setState(prev=> ({ ...prev, connected:false, error:String(e.message||e) })) }
+  }
+  async function link(){
+    try{
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const uid = (uidRef.current?.value || '').trim();
+      if (!uid) throw new Error('Informe o UID da sua conta Tuya/Smart Life vinculada ao projeto no Tuya IoT Console')
+      await integrationsApi.tuyaLink(token, uid)
+      await refresh()
+    }catch(e){ alert(String(e.message||e)) }
+  }
+  async function sync(){
+    setState(prev=> ({ ...prev, syncing:true, error:'' }))
+    try{
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const j = await integrationsApi.tuyaDevices(token)
+      setState(prev=> ({ ...prev, count: Number(j?.total||0) }))
+    }catch(e){ setState(prev=> ({ ...prev, error:String(e.message||e) })) }
+    finally{ setState(prev=> ({ ...prev, syncing:false })) }
+  }
+  async function unlink(){
+    setState(prev=> ({ ...prev, syncing:true, error:'' }))
+    try{
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      await integrationsApi.tuyaUnlink(token)
+      setState({ connected:false, uid:'', syncing:false, error:'', count:null })
+    }catch(e){ setState(prev=> ({ ...prev, syncing:false, error:String(e.message||e) })) }
+  }
+
+  return (
+    <div className="panel">
+      <div className="font-semibold mb-1">Tuya (dev/test)</div>
+      <div className="muted text-xs mb-1">Status: {state.connected ? `Vinculado (uid: ${state.uid})` : 'Desvinculado'}</div>
+      {state.error && <div className="text-red-600 text-xs mb-1">{state.error}</div>}
+      {!state.connected && (
+        <div className="grid sm:flex items-end gap-2 mb-2">
+          <label className="grid gap-1 min-w-64">
+            <span className="muted text-xs">UID do usuário (Tuya/Smart Life)</span>
+            <input ref={uidRef} className="panel outline-none focus:ring-2 ring-brand" placeholder="ex.: eu1623*********" />
+          </label>
+          <button className="btn btn-primary" onClick={link}>Vincular</button>
+        </div>
+      )}
+      <div className="flex gap-2 flex-wrap">
+        <button className="btn" onClick={sync} disabled={state.syncing || !state.connected}>{state.syncing ? 'Sincronizando...' : 'Sincronizar'}</button>
+        <button className="btn btn-danger" onClick={unlink} disabled={!state.connected || state.syncing}>Desvincular</button>
+      </div>
+      {state.count!=null && <div className="muted text-xs mt-2">Dispositivos: {state.count}</div>}
+      <div className="muted text-[11px] mt-2">Observação: a Tuya Cloud não tem OAuth público. Para testes, use o projeto no Tuya IoT Console com uma conta Smart Life vinculada e informe o UID dessa conta aqui.</div>
     </div>
   )
 }

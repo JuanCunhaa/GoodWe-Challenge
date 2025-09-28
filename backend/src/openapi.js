@@ -22,6 +22,9 @@ const openapi = {
     { name: 'GoodWe Live', description: 'Powerflow e clima' },
     { name: 'GoodWe EV Chargers', description: 'Carregadores de veículos elétricos' },
     { name: 'GoodWe Warnings', description: 'Alertas/avisos por planta' },
+    { name: 'SmartThings', description: 'Integração SmartThings (OAuth2 + devices)' },
+    { name: 'Tuya', description: 'Integração Tuya Cloud (dev/test; UID vinculado)' },
+    { name: 'Hue', description: 'Integração Philips Hue (Remote API v2; opcional)' },
   ],
   servers: [
     { url: '/api', description: 'API base' },
@@ -373,6 +376,81 @@ const openapi = {
         parameters: [ { name: 'powerStationId', in: 'query', required: true, schema: { type: 'string' }, example: 'PWID-123' } ],
         responses: { '200': { description: 'OK' } },
       },
+    },
+
+    // SmartThings
+    '/auth/smartthings': {
+      get: { tags: ['SmartThings'], summary: 'Inicia OAuth2 (redirect)', responses: { '302': { description: 'Redirect to SmartThings' }, '401': { description:'Missing token' } } }
+    },
+    '/auth/smartthings/status': {
+      get: { tags: ['SmartThings'], summary: 'Status da integração', security:[{ bearerAuth:[] }], responses: { '200': { description:'OK' } } }
+    },
+    '/auth/smartthings/unlink': {
+      post: { tags: ['SmartThings'], summary: 'Desvincular', security:[{ bearerAuth:[] }], responses: { '204': { description:'No Content' }, '401':{ description:'Unauthorized' } } }
+    },
+    '/smartthings/devices': {
+      get: { tags: ['SmartThings'], summary: 'Lista devices normalizados', security:[{ bearerAuth:[] }], responses: { '200': { description:'OK' } } }
+    },
+    '/smartthings/rooms': {
+      get: {
+        tags: ['SmartThings'], summary: 'Lista cômodos (rooms)', security:[{ bearerAuth:[] }],
+        parameters: [ { name:'locationId', in:'query', schema:{ type:'string' } } ], responses: { '200': { description:'OK' } }
+      }
+    },
+    '/smartthings/device/{id}/status': {
+      get: {
+        tags: ['SmartThings'], summary: 'Status de um device', security:[{ bearerAuth:[] }],
+        parameters: [ { name:'id', in:'path', required:true, schema:{ type:'string' } } ], responses: { '200': { description:'OK' } }
+      }
+    },
+    '/smartthings/commands': {
+      post: {
+        tags: ['SmartThings'], summary: 'Envia comandos ao device', security:[{ bearerAuth:[] }],
+        requestBody: { required:true, content: { 'application/json': { schema: { type:'object', properties: { deviceId:{type:'string'}, commands:{ type:'array', items:{ type:'object' } }, component:{type:'string'}, capability:{type:'string'}, command:{type:'string'}, arguments:{ type:'array' } }, required:['deviceId'] } } } },
+        responses: { '200': { description:'OK' }, '401': { description:'Unauthorized' }, '422': { description:'Invalid payload' }, '409': { description:'Conflict (device state)' } }
+      }
+    },
+
+    // Tuya Cloud (dev/test)
+    '/auth/tuya/status': {
+      get: { tags: ['Tuya'], summary: 'Status da integração Tuya', security:[{ bearerAuth:[] }], responses: { '200': { description:'OK' } } }
+    },
+    '/auth/tuya/link': {
+      post: {
+        tags: ['Tuya'], summary: 'Vincular UID Tuya ao usuário', security:[{ bearerAuth:[] }],
+        requestBody: { required:true, content: { 'application/json': { schema: { type:'object', properties:{ uid:{ type:'string' } }, required:['uid'] }, example:{ uid:'eu1623********' } } } },
+        responses: { '200': { description:'OK' }, '400': { description:'Bad Request' } }
+      }
+    },
+    '/auth/tuya/unlink': {
+      post: { tags: ['Tuya'], summary: 'Desvincular Tuya', security:[{ bearerAuth:[] }], responses: { '204': { description:'No Content' } } }
+    },
+    '/tuya/devices': {
+      get: { tags: ['Tuya'], summary: 'Lista devices (UID)', security:[{ bearerAuth:[] }], responses: { '200': { description:'OK' }, '401':{ description:'not linked / missing uid' } } }
+    },
+    '/tuya/commands': {
+      post: {
+        tags: ['Tuya'], summary: 'Envia comandos Tuya (teste)', security:[{ bearerAuth:[] }],
+        requestBody: { required:true, content:{ 'application/json': { schema:{ type:'object', properties:{ device_id:{ type:'string' }, commands:{ type:'array', items:{ type:'object', properties:{ code:{type:'string'}, value:{} }, required:['code','value'] } } }, required:['device_id','commands'] } } } },
+        responses: { '200': { description:'OK' }, '401':{ description:'not linked / missing uid' } }
+      }
+    },
+
+    // Philips Hue (opcional; pode estar desabilitado por env)
+    '/auth/hue/status': {
+      get: { tags: ['Hue'], summary: 'Status da integração Hue', security:[{ bearerAuth:[] }], responses: { '200': { description:'OK' } } }
+    },
+    '/auth/hue': {
+      get: { tags: ['Hue'], summary: 'Inicia OAuth2 (redirect)', responses: { '302': { description:'Redirect' } } }
+    },
+    '/auth/hue/unlink': {
+      post: { tags: ['Hue'], summary: 'Desvincular Hue', security:[{ bearerAuth:[] }], responses: { '204': { description:'No Content' } } }
+    },
+    '/hue/devices': {
+      get: { tags: ['Hue'], summary: 'Lista devices Hue (normalizado)', security:[{ bearerAuth:[] }], responses: { '200': { description:'OK' } } }
+    },
+    '/auth/hue/appkey': {
+      post: { tags: ['Hue'], summary: 'Gerar Application Key via Remote API (exige botão do bridge)', security:[{ bearerAuth:[] }], responses: { '200':{ description:'OK' }, '400':{ description:'No app key returned' } } }
     },
   },
   components: {

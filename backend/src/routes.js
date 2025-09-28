@@ -1266,6 +1266,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   });
 
   // ========== Philips Hue (Remote API v2) ==========
+  const HUE_ENABLED = String(process.env.HUE_ENABLED||'false').toLowerCase()==='true';
   async function hueTokenRequest(params){
     const clientId = process.env.HUE_CLIENT_ID||'';
     const clientSecret = process.env.HUE_CLIENT_SECRET||'';
@@ -1317,6 +1318,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // Start OAuth
   router.get('/auth/hue', async (req, res) => {
+    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
     let user = await tryGetUser(req);
     if (!user) {
       const t = String(req.query.token||'');
@@ -1337,8 +1339,140 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     } catch { res.status(500).send('Erro ao iniciar OAuth (Hue)'); }
   });
 
+  // ========== Tuya Cloud API (dev/test) ==========
+  const TUYA_ENABLED = String(process.env.TUYA_ENABLED||'true').toLowerCase()==='true';
+  const TUYA_ACCESS_ID = (process.env.TUYA_ACCESS_ID||'').trim();
+  const TUYA_ACCESS_SECRET = (process.env.TUYA_ACCESS_SECRET||'').trim();
+  const TUYA_API_BASE = ((process.env.TUYA_API_BASE||'https://openapi.tuyaus.com').replace(/\/$/,'')).trim();
+  const TUYA_SIGN_VERSION = String(process.env.TUYA_SIGN_VERSION||'2.0');
+  const TUYA_LANG = String(process.env.TUYA_LANG||'pt');
+
+  let tuyaToken = { access_token:'', expire_time:0 };
+  function sha256Hex(buf){ return crypto.createHash('sha256').update(buf).digest('hex'); }
+  function hmac256Hex(key, str){ return crypto.createHmac('sha256', key).update(str).digest('hex').toUpperCase(); }
+  function nowMs(){ return Date.now().toString(); }
+  async function tuyaSignAndFetch(path, { method='GET', query='', bodyObj=null, accessToken='' }={}){
+    const t = nowMs();
+    const urlPath = path + (query ? `?${query}` : '');
+    const body = bodyObj ? JSON.stringify(bodyObj) : '';
+    const contentHash = sha256Hex(body);
+    const stringToSign = [method.toUpperCase(), contentHash, '', urlPath].join('\n');
+    const str = TUYA_ACCESS_ID + (accessToken||'') + t + stringToSign;
+    const sign = hmac256Hex(TUYA_ACCESS_SECRET, str);
+    const headers = {
+      'client_id': TUYA_ACCESS_ID,
+      'sign': sign,
+      't': t,
+      'sign_method': 'HMAC-SHA256',
+      'sign_version': TUYA_SIGN_VERSION,
+      'lang': TUYA_LANG,
+    };
+    if (accessToken) headers['access_token'] = accessToken;
+    if (body) headers['Content-Type'] = 'application/json';
+    const url = `${TUYA_API_BASE}${urlPath}`;
+    const r = await fetch(url, { method, headers, body: body || undefined, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+    const json = await r.json().catch(()=>null);
+    return { status: r.status, json };
+  }
+  async function tuyaEnsureAppToken(){
+    if (!TUYA_ENABLED) throw new Error('TUYA_DISABLED');
+    if (!TUYA_ACCESS_ID || !TUYA_ACCESS_SECRET) throw new Error('missing TUYA_ACCESS_ID/SECRET');
+    const now = Date.now();
+    if (tuyaToken.access_token && now < tuyaToken.expire_time-5000) return tuyaToken.access_token;
+    const t = nowMs();
+    // Token signing (no access_token in signature for token request)
+    const path = '/v1.0/token';
+    const query = 'grant_type=1';
+    const contentHash = sha256Hex('');
+    const stringToSign = ['GET', contentHash, '', `${path}?${query}`].join('\n');
+    const sign = hmac256Hex(TUYA_ACCESS_SECRET, TUYA_ACCESS_ID + t + stringToSign);
+    const headers = { 'client_id':TUYA_ACCESS_ID, 'sign':sign, 't':t, 'sign_method':'HMAC-SHA256', 'sign_version': TUYA_SIGN_VERSION };
+    const url = `${TUYA_API_BASE}${path}?${query}`;
+    const r = await fetch(url, { headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+    const j = await r.json();
+    if (!j || j.success !== true) throw new Error('tuya token failed: ' + JSON.stringify(j||{}));
+    tuyaToken = { access_token: j.result.access_token, expire_time: now + (Number(j.result.expire_time)||3600)*1000 };
+    return tuyaToken.access_token;
+  }
+  async function ensureTuyaLinkedUser(user){
+    const row = await dbApi.getLinkedAccount(user.id, 'tuya');
+    if (!row) throw Object.assign(new Error('not linked'), { code:'NOT_LINKED' });
+    const meta = row?.meta ? (JSON.parse(row.meta||'{}')||{}) : {};
+    const uid = String(meta.uid||'');
+    if (!uid) throw Object.assign(new Error('missing uid'), { code:'MISSING_UID' });
+    return { uid, row };
+  }
+
+  // Link Tuya UID (obtido no Tuya IoT Console, conta Smart Life vinculada)
+  router.post('/auth/tuya/link', async (req, res) => {
+    if (!TUYA_ENABLED) return res.status(501).json({ ok:false, error:'Tuya integration disabled' });
+    const user = await requireUser(req, res); if (!user) return;
+    const uid = String(req.body?.uid||'').trim();
+    if (!uid) return res.status(400).json({ ok:false, error:'uid required' });
+    const meta = { uid };
+    await dbApi.upsertLinkedAccount({ user_id: user.id, vendor:'tuya', access_token:null, refresh_token:null, expires_at:null, scopes:null, meta });
+    res.json({ ok:true });
+  });
+  router.get('/auth/tuya/status', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const row = await dbApi.getLinkedAccount(user.id, 'tuya');
+      const meta = row?.meta ? (JSON.parse(row.meta||'{}')||{}) : {};
+      res.json({ ok:true, connected: !!(row && meta.uid), uid: meta.uid||'' });
+    } catch { res.json({ ok:true, connected:false }); }
+  });
+  router.post('/auth/tuya/unlink', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try { await dbApi.deleteLinkedAccount(user.id, 'tuya'); res.status(204).end(); }
+    catch(e){ res.status(500).json({ ok:false, error:'unlink failed' }); }
+  });
+  // Lista dispositivos do UID do usuário
+  router.get('/tuya/devices', async (req, res) => {
+    try {
+      const user = await requireUser(req, res); if (!user) return;
+      const { uid } = await ensureTuyaLinkedUser(user);
+      const token = await tuyaEnsureAppToken();
+      const p = `/v1.0/users/${encodeURIComponent(uid)}/devices`;
+      const { status, json } = await tuyaSignAndFetch(p, { method:'GET', accessToken: token });
+      if (status !== 200 || json?.success !== true) return res.status(status).json(json||{ ok:false });
+      const items = Array.isArray(json.result) ? json.result : [];
+      const norm = items.map(d => ({
+        id: String(d.id||d.uuid||''),
+        name: String(d.name||d.local_key||'Device'),
+        category: String(d.category||d.product_id||''),
+        online: !!d.online,
+        vendor: 'tuya',
+      }));
+      res.json({ ok:true, items: norm, total: norm.length, ts: Date.now() });
+    } catch (e) {
+      const code = String(e?.code||'');
+      if (code==='NOT_LINKED' || code==='MISSING_UID') return res.status(401).json({ ok:false, error: code.toLowerCase() });
+      res.status(500).json({ ok:false, error: String(e?.message||e) });
+    }
+  });
+  // Envia comandos genéricos (para testes). Body: { device_id, commands: [{code,value}] }
+  router.post('/tuya/commands', async (req, res) => {
+    try {
+      const user = await requireUser(req, res); if (!user) return;
+      await ensureTuyaLinkedUser(user); // garante vinculo
+      const token = await tuyaEnsureAppToken();
+      const id = String(req.body?.device_id||'').trim();
+      const commands = Array.isArray(req.body?.commands) ? req.body.commands : [];
+      if (!id || commands.length===0) return res.status(400).json({ ok:false, error:'device_id and commands required' });
+      const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/commands`;
+      const { status, json } = await tuyaSignAndFetch(path, { method:'POST', bodyObj: { commands }, accessToken: token });
+      if (status!==200 || json?.success!==true) return res.status(status).json(json||{ ok:false });
+      res.json({ ok:true, result: json.result });
+    } catch (e) {
+      const code = String(e?.code||'');
+      if (code==='NOT_LINKED' || code==='MISSING_UID') return res.status(401).json({ ok:false, error: code.toLowerCase() });
+      res.status(500).json({ ok:false, error: String(e?.message||e) });
+    }
+  });
+
   // OAuth2 callback
   router.get('/integrations/hue/callback', async (req, res) => {
+    if (!HUE_ENABLED) return res.status(501).send('Hue integration disabled');
     try {
       const code = String(req.query.code||'');
       const state = String(req.query.state||'');
@@ -1370,6 +1504,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   });
 
   router.get('/auth/hue/status', async (req, res) => {
+    if (!HUE_ENABLED) return res.json({ ok:true, connected:false, disabled:true });
     const user = await requireUser(req, res); if (!user) return;
     try {
       const row = await dbApi.getLinkedAccount(user.id, 'hue');
@@ -1381,6 +1516,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   });
 
   router.post('/auth/hue/unlink', async (req, res) => {
+    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
     const user = await requireUser(req, res); if (!user) return;
     try { await dbApi.deleteLinkedAccount(user.id, 'hue'); res.status(204).end(); }
     catch(e){ res.status(500).json({ ok:false, error:'unlink failed' }); }
@@ -1388,6 +1524,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // List Hue devices (normalized)
   router.get('/hue/devices', async (req, res) => {
+    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
     const user = await requireUser(req, res); if (!user) return;
     try {
       const { token, appKey } = await getHueContext(user);
@@ -1427,6 +1564,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   // Try to generate/store Hue application key (user must press bridge button during this call)
   router.post('/auth/hue/appkey', async (req, res) => {
+    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
     const user = await requireUser(req, res); if (!user) return;
     try {
       const { token } = await getHueContext(user); // ensures linked + valid token

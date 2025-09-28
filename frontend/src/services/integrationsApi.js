@@ -27,4 +27,10 @@ export const integrationsApi = {
   hueUnlink: (token) => request('/auth/hue/unlink', { method:'POST', token, body:{} }),
   hueDevices: (token) => request('/hue/devices', { token }),
   hueEnsureAppKey: (token, devicetype='goodwe-app#server') => request('/auth/hue/appkey', { method:'POST', token, body: { devicetype } }),
+  // Tuya
+  tuyaStatus: (token) => request('/auth/tuya/status', { token }),
+  tuyaLink: (token, uid) => request('/auth/tuya/link', { method:'POST', token, body: { uid } }),
+  tuyaUnlink: (token) => request('/auth/tuya/unlink', { method:'POST', token, body:{} }),
+  tuyaDevices: (token) => request('/tuya/devices', { token }),
+  tuyaSendCommands: (token, device_id, commands) => request('/tuya/commands', { method:'POST', token, body: { device_id, commands } }),
 };

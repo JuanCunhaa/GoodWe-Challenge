@@ -114,7 +114,6 @@ export default function Dispositivos(){
           <div className="flex items-center gap-2 flex-wrap">
             <select className="panel w-full sm:w-auto" value={vendor} onChange={e=>setVendor(e.target.value)}>
               <option value="smartthings">SmartThings</option>
-              <option value="philips-hue">Philips Hue</option>
             </select>
             <select className="panel w-full sm:w-auto" value={room} onChange={e=>setRoom(e.target.value)}>
               <option value="">Todos os cômodos</option>
