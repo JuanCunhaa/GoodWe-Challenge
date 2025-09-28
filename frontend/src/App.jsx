@@ -14,6 +14,7 @@ import Admin from './pages/Admin.jsx'
 import Auditoria from './pages/Auditoria.jsx'
 import Configuracoes from './pages/Configuracoes.jsx'
 import Perfil from './pages/Perfil.jsx'
+import Dispositivos from './pages/Dispositivos.jsx'
 // Auth pages (new)
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
@@ -44,6 +45,7 @@ export default function App(){
         <Route path="/auditoria" element={<Auditoria/>} />
         <Route path="/configuracoes" element={<Configuracoes/>} />
         <Route path="/perfil" element={<Perfil/>} />
+        <Route path="/dispositivos" element={<Dispositivos/>} />
         <Route path="*" element={<Navigate to="/" replace/>} />
       </Route>
     </Routes>

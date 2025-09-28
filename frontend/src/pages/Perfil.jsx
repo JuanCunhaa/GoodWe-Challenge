@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi, loadSession } from '../services/authApi.js'
+import { integrationsApi } from '../services/integrationsApi.js'
 
 export default function Perfil(){
   const navigate = useNavigate()
@@ -17,6 +18,8 @@ export default function Perfil(){
   const [psErr, setPsErr] = useState('')
   const [apiHealth, setApiHealth] = useState(null)
   const [assistantPing, setAssistantPing] = useState(null)
+  // SmartThings
+  const [st, setSt] = useState({ connected:false, syncing:false, error:'', count:null, lastSync: (()=>{ const v=localStorage.getItem('st_last_sync'); return v? Number(v): null })() })
 
   useEffect(()=>{
     const { token, user } = loadSession()
@@ -30,6 +33,13 @@ export default function Perfil(){
         if (r?.ok && r.user?.powerstation_id) setPowerstationId(r.user.powerstation_id)
       }catch{} finally{ setLoadingEmail(false) }
     })()
+  },[])
+
+  useEffect(()=>{
+    // Listen for account linking completion
+    function onMsg(e){ try{ if (String(e.data)==='st:linked'){ refreshStStatus() } }catch{} }
+    window.addEventListener('message', onMsg)
+    return ()=> window.removeEventListener('message', onMsg)
   },[])
 
   // Load local powerstation name
@@ -59,6 +69,39 @@ export default function Perfil(){
       setPw({ old:'', n1:'', n2:'' })
     }catch(err){ setPwErr(String(err.message || err)) }
     finally{ setPwLoading(false) }
+  }
+
+  async function refreshStStatus(){
+    try{
+      const { token } = loadSession(); if (!token) return;
+      const s = await integrationsApi.stStatus(token);
+      setSt(prev => ({ ...prev, connected: !!s?.connected, error:'' }))
+    }catch(e){ setSt(prev=> ({ ...prev, connected:false, error:String(e.message||e) })) }
+  }
+
+  async function stConnect(){
+    const base = import.meta.env.VITE_API_BASE || '/api'
+    const { token } = loadSession();
+    const url = token ? `${base}/auth/smartthings?token=${encodeURIComponent(token)}` : `${base}/auth/smartthings`;
+    window.open(url, '_blank', 'noopener')
+  }
+  async function stSync(){
+    setSt(prev=> ({ ...prev, syncing:true, error:'' }))
+    try{
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const j = await integrationsApi.stDevices(token)
+      const ts = Date.now(); localStorage.setItem('st_last_sync', String(ts))
+      setSt(prev=> ({ ...prev, count: Number(j?.total||0), lastSync: ts }))
+    }catch(e){ setSt(prev=> ({ ...prev, error:String(e.message||e) })) }
+    finally{ setSt(prev=> ({ ...prev, syncing:false })) }
+  }
+  async function stUnlink(){
+    setSt(prev=> ({ ...prev, syncing:true, error:'' }))
+    try{
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      await integrationsApi.stUnlink(token)
+      setSt({ connected:false, syncing:false, error:'', count:null, lastSync:null })
+    }catch(e){ setSt(prev=> ({ ...prev, syncing:false, error:String(e.message||e) })) }
   }
 
   async function savePsName(){
@@ -160,6 +203,33 @@ export default function Perfil(){
           {assistantPing?.ok && (
             <div className="muted text-xs">GoodWe auth: {assistantPing.hasAuth ? 'OK' : 'Sem autenticação'} {assistantPing.api_base ? `• ${assistantPing.api_base}` : ''}</div>
           )}
+        </div>
+      </div>
+      <div className="card">
+        <div className="h2 mb-2">Integrações de automação</div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="panel">
+            <div className="font-semibold mb-1">SmartThings</div>
+            <div className="muted text-sm mb-2">Status: {st.connected ? 'Conectado' : 'Desconectado'}</div>
+            {st.lastSync && <div className="muted text-xs mb-1">Último sync: {new Date(st.lastSync).toLocaleString()}</div>}
+            {st.count!=null && <div className="muted text-xs mb-2">Dispositivos: {st.count}</div>}
+            {st.error && <div className="text-red-600 text-xs mb-1">{st.error}</div>}
+            <div className="flex gap-2">
+              <button className="btn btn-primary" onClick={stConnect} disabled={st.syncing}>Conectar</button>
+              <button className="btn" onClick={stSync} disabled={st.syncing || !st.connected}>{st.syncing ? 'Sincronizando...' : 'Sincronizar'}</button>
+              <button className="btn btn-danger" onClick={stUnlink} disabled={!st.connected || st.syncing}>Desconectar</button>
+            </div>
+          </div>
+          <div className="panel opacity-60" title="Em breve">
+            <div className="font-semibold mb-1">Philips Hue</div>
+            <div className="muted text-sm mb-2">Em breve</div>
+            <div className="flex gap-2"><button className="btn" disabled>Conectar</button></div>
+          </div>
+          <div className="panel opacity-60" title="Em breve">
+            <div className="font-semibold mb-1">eWeLink</div>
+            <div className="muted text-sm mb-2">Em breve</div>
+            <div className="flex gap-2"><button className="btn" disabled>Conectar</button></div>
+          </div>
         </div>
       </div>
     </section>

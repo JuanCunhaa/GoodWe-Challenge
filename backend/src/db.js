@@ -47,6 +47,27 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY(user_id) REFERENCES users(id)
 );
+
+-- OAuth states (anti-CSRF) por vendor
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state TEXT PRIMARY KEY,
+  vendor TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Linked accounts (tokens criptografados)
+CREATE TABLE IF NOT EXISTS linked_accounts (
+  user_id INTEGER NOT NULL,
+  vendor TEXT NOT NULL,
+  access_token TEXT,
+  refresh_token TEXT,
+  expires_at INTEGER,
+  scopes TEXT,
+  meta TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY(user_id, vendor)
+);
 `);
 
 export function seedPowerstations(ids) {
@@ -100,4 +121,32 @@ export function deleteSession(token) {
 export function updateUserPassword(user_id, password_hash) {
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(password_hash, user_id);
   return getUserById(user_id);
+}
+
+// -------- OAuth/Integrations --------
+export function createOauthState({ state, vendor, user_id }){
+  db.prepare('INSERT INTO oauth_states(state, vendor, user_id) VALUES(?,?,?)').run(state, vendor, user_id);
+}
+export function consumeOauthState(state){
+  const row = db.prepare('SELECT state, vendor, user_id, created_at FROM oauth_states WHERE state = ?').get(state);
+  if (row) db.prepare('DELETE FROM oauth_states WHERE state = ?').run(state);
+  return row;
+}
+
+export function upsertLinkedAccount({ user_id, vendor, access_token, refresh_token, expires_at, scopes, meta }){
+  db.prepare(`INSERT INTO linked_accounts(user_id, vendor, access_token, refresh_token, expires_at, scopes, meta, updated_at)
+             VALUES(?,?,?,?,?,?,?, datetime('now'))
+             ON CONFLICT(user_id, vendor) DO UPDATE SET
+               access_token=excluded.access_token,
+               refresh_token=excluded.refresh_token,
+               expires_at=excluded.expires_at,
+               scopes=excluded.scopes,
+               meta=excluded.meta,
+               updated_at=datetime('now')`).run(user_id, vendor, access_token ?? null, refresh_token ?? null, Number(expires_at)||null, scopes ?? null, meta ? JSON.stringify(meta) : null);
+}
+export function getLinkedAccount(user_id, vendor){
+  return db.prepare('SELECT user_id, vendor, access_token, refresh_token, expires_at, scopes, meta, updated_at FROM linked_accounts WHERE user_id = ? AND vendor = ?').get(user_id, vendor);
+}
+export function deleteLinkedAccount(user_id, vendor){
+  db.prepare('DELETE FROM linked_accounts WHERE user_id = ? AND vendor = ?').run(user_id, vendor);
 }
