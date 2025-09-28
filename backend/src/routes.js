@@ -1218,7 +1218,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const j = await r.json().catch(()=>({}));
       if (!r.ok) {
         if (r.status === 401 || r.status === 403) {
-          return res.status(r.status).json({ ok:false, error:'SmartThings recusou comandos (401/403). Verifique o vínculo e o escopo devices:commands na conexão.', details: j });
+          return res.status(r.status).json({ ok:false, error:'SmartThings recusou comandos (401/403). Verifique o vínculo e o escopo devices:commands ou x:devices:* na conexão.', details: j });
         }
         return res.status(r.status).json({ ok:false, error:`SmartThings HTTP ${r.status}`, details:j });
       }

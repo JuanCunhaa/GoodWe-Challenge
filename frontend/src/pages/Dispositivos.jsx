@@ -40,7 +40,7 @@ export default function Dispositivos(){
         const { token } = loadSession(); if (!token) return;
         const s = await integrationsApi.stStatus(token)
         const scopes = String(s?.scopes||'')
-        setCanControl(/\bdevices:commands\b/.test(scopes))
+        setCanControl(/\b(devices:commands|x:devices:\*)\b/.test(scopes))
       }catch{}
     })()
   }, [])
