@@ -380,3 +380,245 @@ function TuyaCard(){
     </div>
   )
 }
+import React, { useEffect, useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { authApi, loadSession } from '../services/authApi.js'
+import { integrationsApi } from '../services/integrationsApi.js'
+
+export default function Perfil(){
+  const navigate = useNavigate()
+
+  // Minha conta
+  const [email, setEmail] = useState('')
+  const [powerstationId, setPowerstationId] = useState('')
+  const [loadingEmail, setLoadingEmail] = useState(true)
+
+  // Troca de senha
+  const [pw, setPw] = useState({ old:'', n1:'', n2:'' })
+  const [pwErr, setPwErr] = useState('')
+  const [pwOk, setPwOk] = useState('')
+  const [pwLoading, setPwLoading] = useState(false)
+
+  // Nome local da planta
+  const [psName, setPsName] = useState('')
+  const [psOk, setPsOk] = useState('')
+  const [psErr, setPsErr] = useState('')
+
+  // Conexões
+  const [apiHealth, setApiHealth] = useState(null)
+  const [assistantPing, setAssistantPing] = useState(null)
+
+  // SmartThings (apenas status/botões)
+  const [st, setSt] = useState({ connected:false, syncing:false })
+
+  useEffect(()=>{
+    const { token, user } = loadSession()
+    if (user?.email) setEmail(user.email)
+    if (user?.powerstation_id) setPowerstationId(user.powerstation_id)
+    if (!token){ setLoadingEmail(false); return }
+    ;(async()=>{
+      try{
+        const r = await authApi.me(token)
+        if (r?.ok){
+          setEmail(r.user?.email||'')
+          setPowerstationId(r.user?.powerstation_id||'')
+        }
+      } finally { setLoadingEmail(false) }
+    })()
+  },[])
+
+  useEffect(()=>{ refreshStStatus() }, [])
+
+  // Carregar nome local da planta
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const list = await authApi.listPowerstations()
+        const it = (list?.items||[]).find(x=> String(x.id)===String(powerstationId))
+        if (it) setPsName(String(it.business_name||''))
+      }catch{}
+    })()
+  }, [powerstationId])
+
+  async function onChangePassword(e){
+    e.preventDefault()
+    setPwErr(''); setPwOk('')
+    if (!pw.old || !pw.n1 || !pw.n2){ setPwErr('Preencha todos os campos.'); return }
+    if (pw.n1.length < 6){ setPwErr('A nova senha deve ter pelo menos 6 caracteres.'); return }
+    if (pw.n1 !== pw.n2){ setPwErr('As senhas não coincidem.'); return }
+    const { token } = loadSession(); if (!token){ setPwErr('Sessão expirada. Entre novamente.'); return }
+    setPwLoading(true)
+    try{
+      const resp = await authApi.changePassword(token, pw.old, pw.n1)
+      if (!resp?.ok) throw new Error(resp?.error || 'Falha ao alterar senha')
+      setPwOk('Senha alterada com sucesso.')
+      setPw({ old:'', n1:'', n2:'' })
+    }catch(err){ setPwErr(String(err.message || err)) }
+    finally{ setPwLoading(false) }
+  }
+
+  async function refreshStStatus(){
+    try{
+      const { token } = loadSession(); if (!token) return
+      const s = await integrationsApi.stStatus(token)
+      setSt(prev => ({ ...prev, connected: !!s?.connected }))
+    }catch{}
+  }
+  async function stConnect(){
+    const base = import.meta.env.VITE_API_BASE || '/api'
+    const { token } = loadSession()
+    const url = token ? `${base}/auth/smartthings?token=${encodeURIComponent(token)}` : `${base}/auth/smartthings`
+    window.open(url, '_blank', 'noopener')
+  }
+  async function stSync(){ setSt(p=>({ ...p, syncing:true })); try{ const { token }=loadSession(); if (!token) return; await integrationsApi.stDevices(token) } finally { setSt(p=>({ ...p, syncing:false })) } }
+  async function stUnlink(){ const { token }=loadSession(); if (!token) return; await integrationsApi.stUnlink(token); setSt({ connected:false, syncing:false }) }
+
+  async function savePsName(){
+    setPsErr(''); setPsOk('')
+    try{
+      const base = import.meta.env.VITE_API_BASE || '/api'
+      const res = await fetch(`${base}/powerstations/${encodeURIComponent(powerstationId)}/name`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ name: psName||null }) })
+      const j = await res.json().catch(()=>null)
+      if (!res.ok || !j?.ok) throw new Error(j?.error || `${res.status} ${res.statusText}`)
+      setPsOk('Nome atualizado.')
+    }catch(e){ setPsErr(String(e.message||e)) }
+  }
+
+  async function checkConnections(){
+    try{
+      const base = import.meta.env.VITE_API_BASE || '/api'
+      const r1 = await fetch(`${base}/health`).then(r=> r.ok)
+      setApiHealth(!!r1)
+      const r2 = await fetch(`${base}/assistant/ping`).then(r=> r.json()).catch(()=>null)
+      setAssistantPing(r2||null)
+    }catch{ setApiHealth(false) }
+  }
+
+  function copyToken(){ const { token } = loadSession(); if (!token) return; try{ navigator.clipboard.writeText(token) }catch{} }
+  function logout(){ try{ localStorage.removeItem('token'); localStorage.removeItem('user') }catch{}; navigate('/login', { replace:true }) }
+
+  return (
+    <section className="grid gap-6 lg:grid-cols-2">
+      <div className="card">
+        <div className="h2 mb-2">Minha Conta</div>
+        <div className="grid gap-3">
+          <div className="flex items-center gap-4">
+            <div className="size-16 rounded-full bg-brand/20 border border-brand/30" />
+            <div>
+              <div className="muted text-xs">E-mail</div>
+              <div className="font-semibold">{loadingEmail ? 'Carregando...' : (email || '-')}</div>
+              <div className="muted text-xs mt-1">Powerstation</div>
+              <div className="font-mono text-sm">{powerstationId || '-'}</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn btn-ghost" onClick={copyToken}>Copiar token</button>
+            <button className="btn btn-danger" onClick={logout}>Sair</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="h2 mb-2">Trocar Senha</div>
+        <form onSubmit={onChangePassword} className="grid gap-3">
+          <input type="password" className="panel outline-none focus:ring-2 ring-brand" placeholder="Senha atual" value={pw.old} onChange={e=>setPw(p=>({...p,old:e.target.value}))} required />
+          <input type="password" className="panel outline-none focus:ring-2 ring-brand" placeholder="Nova senha" value={pw.n1} onChange={e=>setPw(p=>({...p,n1:e.target.value}))} required />
+          <input type="password" className="panel outline-none focus:ring-2 ring-brand" placeholder="Repetir nova senha" value={pw.n2} onChange={e=>setPw(p=>({...p,n2:e.target.value}))} required />
+          {pwErr && <div className="text-red-600 text-sm">{pwErr}</div>}
+          {pwOk && <div className="text-green-600 text-sm">{pwOk}</div>}
+          <button className="btn btn-primary" type="submit" disabled={pwLoading}>{pwLoading ? 'Salvando...' : 'Salvar'}</button>
+        </form>
+      </div>
+
+      <div className="card">
+        <div className="h2 mb-2">Planta</div>
+        <div className="grid gap-2">
+          <div className="muted text-xs">ID</div>
+          <div className="font-mono text-sm">{powerstationId || '-'}</div>
+          <input className="panel outline-none focus:ring-2 ring-brand mt-2" value={psName} onChange={e=>{ setPsName(e.target.value); setPsOk(''); setPsErr('') }} placeholder="Nome comercial (local)" />
+          <div className="flex items-center gap-2">
+            <button className="btn" onClick={savePsName} disabled={!powerstationId}>Salvar</button>
+            {psOk && <span className="text-green-600 text-xs">{psOk}</span>}
+            {psErr && <span className="text-red-600 text-xs">{psErr}</span>}
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="h2 mb-2">Conexões</div>
+        <div className="grid gap-2">
+          <button className="btn btn-ghost w-fit" onClick={checkConnections}>Testar conexões</button>
+          <div className="text-sm">API: {apiHealth==null ? '-' : (apiHealth ? 'OK' : 'Falha')}</div>
+          <div className="text-sm">Assistente: {assistantPing?.ok ? 'OK' : (assistantPing==null ? '-' : 'Falha')}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="h2 mb-2">Integrações de automação</div>
+        <div className="grid gap-3">
+          <SmartThingsCard st={st} stConnect={stConnect} stSync={stSync} stUnlink={stUnlink} />
+          <HueCard />
+          <TuyaCard />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SmartThingsCard({ st, stConnect, stSync, stUnlink }){
+  return (
+    <div className="panel">
+      <div className="font-semibold mb-1">SmartThings</div>
+      <div className="muted text-xs">Status: {st.connected ? 'Conectado' : 'Desconectado'}</div>
+      <div className="flex gap-2 flex-wrap mt-2">
+        <button className="btn btn-primary" onClick={stConnect} disabled={st.syncing}>Conectar</button>
+        <button className="btn" onClick={stSync} disabled={st.syncing || !st.connected}>{st.syncing ? 'Sincronizando...' : 'Sincronizar'}</button>
+        <button className="btn btn-danger" onClick={stUnlink} disabled={!st.connected || st.syncing}>Desconectar</button>
+      </div>
+    </div>
+  )
+}
+
+function HueCard(){
+  const [state, setState] = useState({ connected:false, syncing:false })
+  useEffect(()=>{ (async()=>{ try{ const { token }=loadSession(); if(!token) return; const s=await integrationsApi.hueStatus(token); setState(p=>({...p, connected:!!s?.connected})) }catch{} })() }, [])
+  async function connect(){ const base=import.meta.env.VITE_API_BASE||'/api'; const { token }=loadSession(); const url = token?`${base}/auth/hue?token=${encodeURIComponent(token)}`:`${base}/auth/hue`; window.open(url,'_blank','noopener') }
+  async function sync(){ setState(p=>({...p, syncing:true})); try{ const { token }=loadSession(); if(!token) return; await integrationsApi.hueDevices(token) } finally{ setState(p=>({...p, syncing:false})) } }
+  async function unlink(){ const { token }=loadSession(); if(!token) return; await integrationsApi.hueUnlink(token); setState({ connected:false, syncing:false }) }
+  return (
+    <div className="panel">
+      <div className="font-semibold mb-1">Philips Hue</div>
+      <div className="muted text-xs">Status: {state.connected ? 'Conectado' : 'Desconectado'}</div>
+      <div className="flex gap-2 flex-wrap mt-2">
+        <button className="btn btn-primary" onClick={connect} disabled={state.syncing}>Conectar</button>
+        <button className="btn" onClick={sync} disabled={state.syncing || !state.connected}>{state.syncing ? 'Sincronizando...' : 'Sincronizar'}</button>
+        <button className="btn btn-danger" onClick={unlink} disabled={!state.connected || state.syncing}>Desconectar</button>
+      </div>
+    </div>
+  )
+}
+
+function TuyaCard(){
+  const [state, setState] = useState({ connected:false, uid:'', syncing:false })
+  const uidRef = useRef('')
+  useEffect(()=>{ (async()=>{ try{ const { token }=loadSession(); if(!token) return; const s = await integrationsApi.tuyaStatus(token); setState(p=>({...p, connected:!!s?.connected, uid:String(s?.uid||'')})) }catch{} })() }, [])
+  async function link(){ try{ const { token }=loadSession(); if(!token) throw new Error('Sessão expirada'); const uid=(uidRef.current?.value||'').trim(); if(!uid) throw new Error('Informe o UID'); await integrationsApi.tuyaLink(token, uid); const s=await integrationsApi.tuyaStatus(token); setState({ connected:!!s?.connected, uid:String(s?.uid||''), syncing:false }) }catch(e){ alert(String(e.message||e)) } }
+  async function sync(){ setState(p=>({...p, syncing:true})); try{ const { token }=loadSession(); if(!token) return; await integrationsApi.tuyaDevices(token) } finally{ setState(p=>({...p, syncing:false})) } }
+  async function unlink(){ const { token }=loadSession(); if(!token) return; await integrationsApi.tuyaUnlink(token); setState({ connected:false, uid:'', syncing:false }) }
+  return (
+    <div className="panel">
+      <div className="font-semibold mb-1">Tuya (dev/test)</div>
+      <div className="muted text-xs">Status: {state.connected ? 'Conectado' : 'Desconectado'}</div>
+      {!state.connected && (
+        <div className="grid sm:flex items-end gap-2 mt-2">
+          <input ref={uidRef} className="panel outline-none focus:ring-2 ring-brand min-w-64" placeholder="UID (Smart Life)" />
+          <button className="btn btn-primary" onClick={link}>Vincular</button>
+        </div>
+      )}
+      <div className="flex gap-2 flex-wrap mt-2">
+        <button className="btn" onClick={sync} disabled={state.syncing || !state.connected}>{state.syncing ? 'Sincronizando...' : 'Sincronizar'}</button>
+        <button className="btn btn-danger" onClick={unlink} disabled={!state.connected || state.syncing}>Desvincular</button>
+      </div>
+    </div>
+  )
+}
