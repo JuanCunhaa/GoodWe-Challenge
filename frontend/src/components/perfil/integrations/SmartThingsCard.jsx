@@ -8,7 +8,6 @@ export default function SmartThingsCard() {
         <div className="panel">
             <div className="font-semibold mb-1">SmartThings</div>
             <div className="muted text-xs">Status: {state.connected ? 'Conectado' : 'Desconectado'}</div>
-            {state.lastSync && <div className="muted text-xs mb-1">Último sync: {new Date(state.lastSync).toLocaleString()}</div>}
             {state.count != null && <div className="muted text-xs mb-2">Dispositivos: {state.count}</div>}
             {state.error && <div className="text-red-600 text-xs mb-1">{state.error}</div>}
             <div className="flex gap-2 flex-wrap">
