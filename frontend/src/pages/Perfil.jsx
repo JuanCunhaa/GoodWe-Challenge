@@ -32,7 +32,7 @@ export default function Perfil() {
         <div className="h2 mb-2">Integrações de automação</div>
         <div className="grid gap-3">
           <SmartThingsCard />
-          <HueCard />
+          {/* <HueCard /> */}
           <TuyaCard />
         </div>
       </div>
