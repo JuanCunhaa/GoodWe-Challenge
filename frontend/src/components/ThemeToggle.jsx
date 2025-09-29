@@ -1,9 +1,8 @@
-import { useEffect } from 'react'
+import { Moon, Sun } from 'lucide-react'
+import { useTheme } from '../hooks/useTheme.js'
 
-export function useTheme() {
-  useEffect(() => {
-    document.documentElement.classList.add('dark')
-  }, [])
-
-  return { theme: 'dark', setTheme: () => {} }
+export default function ThemeToggle(){
+  const { theme, setTheme } = useTheme()
+  const isDark = theme === 'dark'
+  return;
 }

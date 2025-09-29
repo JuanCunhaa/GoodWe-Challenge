@@ -1,15 +1,11 @@
-import { useEffect, useState } from 'react'
-const KEY='goodwee-theme'
-export function useTheme(){
-  const [theme, setTheme] = useState(() => {
-    const v = localStorage.getItem(KEY)
-    if (v==='light' || v==='dark') return v
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  })
-  useEffect(()=>{
+import { useEffect } from 'react'
+
+export function useTheme() {
+  useEffect(() => {
     const root = document.documentElement
-    if (theme==='dark') root.classList.add('dark'); else root.classList.remove('dark')
-    localStorage.setItem(KEY, theme)
-  }, [theme])
-  return { theme, setTheme }
+    root.classList.add('dark')
+    localStorage.setItem('goodwee-theme', 'dark')
+  }, [])
+
+  return { theme: 'dark', setTheme: () => {} }
 }
