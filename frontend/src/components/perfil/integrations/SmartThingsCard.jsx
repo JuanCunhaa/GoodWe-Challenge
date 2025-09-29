@@ -25,7 +25,6 @@ export default function SmartThingsCard() {
             {state.connected && state.scopes && (
                 <div className="muted text-xs mt-2">Scopes: <span className="font-mono">{state.scopes}</span></div>
             )}
-            <div className="muted text-[11px] mt-1">Scopes necessários para controle: <span className="font-mono">devices:commands</span> ou <span className="font-mono">x:devices:*</span>.</div>
         </div>
     )
 }

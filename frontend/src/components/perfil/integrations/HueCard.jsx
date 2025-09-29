@@ -31,7 +31,6 @@ export default function HueCard() {
                     }} title="Aperte o botão do bridge e clique aqui em até 30s">Gerar App Key (apertar botão do bridge)</button>
                 </div>
             )}
-            <div className="muted text-[11px] mt-2">Cadastre seu app no portal Hue (Remote API v2) e defina HUE_CLIENT_ID/SECRET, HUE_APP_KEY no backend.</div>
         </div>
     )
 }

@@ -25,7 +25,6 @@ export default function TuyaCard() {
                 <button className="btn btn-danger" onClick={unlink} disabled={!state.connected || state.syncing}>Desvincular</button>
             </div>
             {state.count != null && <div className="muted text-xs mt-2">Dispositivos: {state.count}</div>}
-            <div className="muted text-[11px] mt-2">Observação: a Tuya Cloud não tem OAuth público. Para testes, use o projeto no Tuya IoT Console com uma conta Smart Life vinculada e informe o UID dessa conta aqui.</div>
         </div>
     )
 }
