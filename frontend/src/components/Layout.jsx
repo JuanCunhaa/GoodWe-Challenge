@@ -97,9 +97,6 @@ export default function Layout(){
             <div className="size-8 rounded-2xl bg-brand/20 border border-brand/30 animate-float" />
             <div className={clsx("font-extrabold text-lg text-gray-900 dark:text-gray-100 transition-all", !open && "lg:opacity-0 lg:w-0 lg:overflow-hidden")}>Grupo 04 • Projeto GoodWe</div>
           </div>
-          <button className="btn burger-2 text-gray-800 dark:text-gray-100" aria-expanded={open} onClick={()=>setOpen(!open)} aria-label="Alternar menu">
-            <span></span><span></span>
-          </button>
         </div>
         <div className="px-4 pb-4">
         </div>
