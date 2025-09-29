@@ -8,8 +8,8 @@ export default function TuyaCard() {
 
     return (
         <div className="panel">
-            <div className="font-semibold mb-1">Tuya (dev/test)</div>
-            <div className="muted text-xs mb-1">Status: {state.connected ? `Vinculado (uid: ${state.uid})` : 'Desvinculado'}</div>
+            <div className="font-semibold mb-1">TUYA</div>
+            <div className="muted text-xs mb-1">Status: {state.connected ? `Vinculado` : 'Desvinculado'}</div>
             {state.error && <div className="text-red-600 text-xs mb-1">{state.error}</div>}
             {!state.connected && (
                 <div className="grid sm:flex items-end gap-2 mb-2">
