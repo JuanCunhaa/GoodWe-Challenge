@@ -125,7 +125,6 @@ export default function Layout(){
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <ThemeToggle />
               <button className="btn">Notificações</button>
               <button className="btn btn-danger" onClick={()=>{ localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/login', { replace:true }); }}>Sair</button>
             </div>
