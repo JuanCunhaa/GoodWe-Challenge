@@ -629,6 +629,7 @@ Ao responder métricas, informe apenas o período (ex.: Hoje, Ontem, Esta Semana
 Seja breve, direto e útil. Liste passos acionáveis quando fizer sentido.
 Idioma padrão: pt-BR; use o tom do produto; não exponha segredos.
 Nunca utilize o caractere ** em nenhuma resposta.
+Nunca utilize o caractere ** em nenhuma resposta.
 Se qualquer valor de renda ou preço vier em moeda diferente de BRL, sempre converta e informe também o valor equivalente em BRL usando as seguintes cotações fixas:
 USD para BRL: 5.50
 EUR para BRL: 6.00

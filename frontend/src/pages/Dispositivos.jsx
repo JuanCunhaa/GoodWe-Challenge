@@ -14,22 +14,50 @@ export default function Dispositivos(){
   const [rooms, setRooms] = useState({}) // { roomId: roomName }
   const [room, setRoom] = useState('') // '' = todos, 'none' = sem cômodo
 
+  // ---- Helpers Tuya ----
+  function normalizeTuyaDevice(d){
+    const id = String(d.id || d.uuid || '')
+    const name = String(d.name || d.local_key || 'Device')
+    const category = String(d.category || d.product_id || '').toLowerCase()
+    const online = !!d.online
+    // heurística simples p/ expor "switch" em categorias comuns
+    const looksSwitch =
+      category.includes('switch') ||
+      category.includes('socket') ||
+      category.includes('plug') ||
+      category.includes('light') ||
+      ['cz','dj'].some(k => category.includes(k)) // categorias Tuya comuns
+    return {
+      id,
+      name,
+      category,
+      online,
+      vendor: 'tuya',
+      roomId: '', // sem cômodo por enquanto
+      components: [{
+        id: 'main',
+        capabilities: looksSwitch ? [{ id:'switch' }] : []
+      }],
+    }
+  }
+
   async function fetchDevices(){
     setErr(''); setLoading(true)
     try{
       const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+
       if (vendor === 'smartthings'){
         const j = await integrationsApi.stDevices(token)
         const list = Array.isArray(j?.items) ? j.items : []
         setItems(list)
-        // Load rooms mapping (best-effort)
+        // Rooms (best-effort)
         try {
           const r = await integrationsApi.stRooms(token)
           const map = {}
           for (const it of (r?.items||[])) { if (it?.id) map[it.id] = it.name || '' }
           setRooms(map)
         } catch {}
-        // Auto-carrega status para dispositivos com switch (limita a 6 em paralelo)
+        // Status em lote p/ quem tem switch (6 em paralelo)
         const capsFor = (d)=> (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
         const ids = list.filter(d => capsFor(d).includes('switch')).map(d=> d.id)
         const batch = async (arr, size=6) => {
@@ -38,12 +66,21 @@ export default function Dispositivos(){
           }
         }
         await batch(ids)
+
       } else if (vendor === 'philips-hue'){
         const j = await integrationsApi.hueDevices(token)
         const list = Array.isArray(j?.items) ? j.items : []
         setItems(list)
         setRooms({})
         setStatusMap({})
+
+      } else if (vendor === 'tuya'){
+        const j = await integrationsApi.tuyaDevices(token)
+        const raw = Array.isArray(j?.items) ? j.items : []
+        const list = raw.map(normalizeTuyaDevice)
+        setItems(list)
+        setRooms({})
+        setStatusMap({}) // sem leitura de status Tuya por enquanto
       }
     }catch(e){ setErr(String(e.message||e)) }
     finally{ setLoading(false) }
@@ -59,6 +96,9 @@ export default function Dispositivos(){
           const s = await integrationsApi.stStatus(token)
           const scopes = String(s?.scopes||'')
           setCanControl(scopes.includes('devices:commands') || scopes.includes('x:devices:*'))
+        } else if (vendor==='tuya'){
+          // temos POST /tuya/commands → habilita controle
+          setCanControl(true)
         } else {
           setCanControl(false)
         }
@@ -78,8 +118,36 @@ export default function Dispositivos(){
     try{
       setBusy(b => ({ ...b, [id]: true }))
       const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
-      await integrationsApi.stSendCommands(token, id, { capability:'switch', command: on ? 'on' : 'off', component: component || 'main', arguments: [] })
-      await fetchStatus(id)
+
+      if (vendor === 'smartthings'){
+        await integrationsApi.stSendCommands(token, id, { capability:'switch', command: on ? 'on' : 'off', component: component || 'main', arguments: [] })
+        await fetchStatus(id)
+
+      } else if (vendor === 'tuya'){
+        // Tuya usa "commands: [{code,value}]" – tentamos 'switch' e fallback 'switch_led'
+        const codes = ['switch', 'switch_led']
+        let lastErr = null
+        for (const code of codes){
+          try{
+            await integrationsApi.tuyaSendCommands(token, id, [{ code, value: !!on }])
+            // status otimista p/ refletir na UI
+            setStatusMap(m => ({
+              ...m,
+              [id]: {
+                components: {
+                  [component || 'main']: { switch: { switch: { value: on ? 'on' : 'off' } } }
+                }
+              }
+            }))
+            lastErr = null
+            break
+          }catch(e){ lastErr = e }
+        }
+        if (lastErr) throw lastErr
+
+      } else {
+        throw new Error('Comando não suportado para este fornecedor')
+      }
     }catch(e){ setErr(String(e.message||e)) }
     finally{ setBusy(b => ({ ...b, [id]: false })) }
   }
@@ -94,7 +162,7 @@ export default function Dispositivos(){
       else arr = arr.filter(d => String(d.roomId||'')===room)
     }
     return arr
-  }, [items, q, vendor])
+  }, [items, q, vendor, room])
 
   function getSwitchComponent(d){
     const comps = Array.isArray(d.components) ? d.components : []
@@ -115,6 +183,7 @@ export default function Dispositivos(){
             <select className="panel w-full sm:w-auto" value={vendor} onChange={e=>setVendor(e.target.value)}>
               <option value="smartthings">SmartThings</option>
               <option value="philips-hue">Philips Hue</option>
+              <option value="tuya">Tuya</option>
             </select>
             <select className="panel w-full sm:w-auto" value={room} onChange={e=>setRoom(e.target.value)}>
               <option value="">Todos os cômodos</option>
@@ -127,22 +196,24 @@ export default function Dispositivos(){
             <button className="btn w-full sm:w-auto" onClick={fetchDevices} disabled={loading}>{loading ? 'Atualizando...' : 'Atualizar'}</button>
           </div>
         </div>
+
         {!loading && !canControl && (
           <div className="panel border border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm mb-3">
-            Comando indisponível: conecte o SmartThings com escopo de comandos
-            (<span className="font-mono">devices:commands</span> ou <span className="font-mono">x:devices:*</span>) na página <a className="underline" href="/perfil">Perfil</a>.
+            Comando indisponível para o fornecedor selecionado. Verifique permissões/conexão na página <a className="underline" href="/perfil">Perfil</a>.
           </div>
         )}
+
         {err && (
           <div className="text-red-600 text-sm mb-2">
             {err}
-            {/not linked|missing token|401|403/i.test(err) && (
+            {/not linked|missing|401|403/i.test(err) && (
               <span className="ml-2">
-                Verifique conexão com SmartThings na página <a className="underline" href="/perfil">Perfil</a>.
+                Verifique a conexão do fornecedor na página <a className="underline" href="/perfil">Perfil</a>.
               </span>
             )}
           </div>
         )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {list.map(d => {
             const caps = (Array.isArray(d.components)? d.components : []).flatMap(c => (c.capabilities||[]).map(x=> x.id||x.capability||'')).filter(Boolean)
@@ -154,8 +225,8 @@ export default function Dispositivos(){
               <div key={d.id} className="panel h-full flex flex-col gap-2">
                 <div>
                   <div className="font-semibold text-sm sm:text-base whitespace-normal break-words" title={d.name}>{d.name||'-'}</div>
-                  <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||''}>
-                    {(d.deviceTypeName || d.manufacturer || 'Dispositivo')}
+                  <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||d.category||''}>
+                    {(d.deviceTypeName || d.manufacturer || d.category || 'Dispositivo')}
                   </div>
                   <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || (d.roomId ? d.roomId : '—')}</div>
                 </div>
@@ -172,7 +243,7 @@ export default function Dispositivos(){
                           <button className="btn btn-primary" disabled={!!busy[d.id]} onClick={()=>sendSwitch(d.id,true, comp)}>{busy[d.id]? '...' : 'Ligar'}</button>
                         )
                       ) : (
-                        <button className="btn btn-ghost" disabled title="Conecte o SmartThings com devices:commands ou x:devices:* na página Perfil">Comando indisponível</button>
+                        <button className="btn btn-ghost" disabled title="Conecte com escopo de comandos na página Perfil">Comando indisponível</button>
                       )}
                     </>
                   ) : (
