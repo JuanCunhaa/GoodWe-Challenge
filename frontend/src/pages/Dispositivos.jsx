@@ -24,7 +24,6 @@ export default function Dispositivos(){
       const list = await currentAdapter.listDevices(token, { setRooms, setStatusMap, setErr })
       setItems(Array.isArray(list) ? list : [])
 
-      // permissões / capacidade de controlar
       const ok = await (currentAdapter.canControl?.(token) ?? false)
       setCanControl(!!ok)
     }catch(e){
@@ -79,12 +78,14 @@ export default function Dispositivos(){
     }
   }
 
+  const linkErr = /not\s*linked|missing\s*uid|missing\s*token|unauthorized|401|403/i.test(err)
+
   return (
     <section className="grid gap-4">
       <div className="card">
         <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
           <div className="h2">Dispositivos</div>
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
             <select className="panel w-full sm:w-auto" value={vendor} onChange={e=>setVendor(e.target.value)}>
               {adapterList.map(a => (
                 <option key={a.key} value={a.key}>{a.label}</option>
@@ -102,13 +103,19 @@ export default function Dispositivos(){
           </div>
         </div>
 
-        {!loading && !canControl && (
+        {!loading && !canControl && !linkErr && (
           <div className="panel border border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm mb-3">
             Comando indisponível para o fornecedor selecionado. Verifique permissões/conexão na página <a className="underline" href="/perfil">Perfil</a>.
           </div>
         )}
 
-        {err && <div className="text-red-600 text-sm mb-2">{err}</div>}
+        {!loading && vendor === 'smartthings' && linkErr && (
+          <div className="panel border border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300 text-sm mb-3">
+            Para usar o SmartThings aqui, conecte sua conta na página <a className="underline" href="/perfil">Perfil</a>.
+          </div>
+        )}
+
+        {err && !linkErr && <div className="text-red-600 text-sm mb-2">{err}</div>}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {list.map(d => {
@@ -117,8 +124,6 @@ export default function Dispositivos(){
             const hasSwitch = caps.includes('switch')
             const comp = getSwitchComponent(d)
             const isOn = String(st?.components?.[comp]?.switch?.switch?.value||'').toLowerCase()==='on'
-
-            const debugBadge = currentAdapter.getDebugBadge?.(d.id)
 
             return (
               <div key={d.id} className="panel h-full flex flex-col gap-2">
@@ -129,7 +134,6 @@ export default function Dispositivos(){
                   </div>
                   <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || (d.roomId ? d.roomId : '—')}</div>
                   {d.vendor==='tuya' && d.online===false && <div className="text-[11px] text-red-500 mt-1">Offline</div>}
-                  {debugBadge && <div className="text-[11px] text-gray-500 mt-1">{debugBadge}</div>}
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   {hasSwitch ? (
@@ -156,7 +160,9 @@ export default function Dispositivos(){
           })}
         </div>
 
-        {(!loading && list.length===0) && <div className="muted text-sm">Nenhum dispositivo.</div>}
+        {(!loading && list.length===0 && !(vendor==='smartthings' && linkErr)) && (
+          <div className="muted text-sm">Nenhum dispositivo.</div>
+        )}
       </div>
     </section>
   )
