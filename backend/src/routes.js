@@ -1509,18 +1509,27 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   })
 
   // Lista dispositivos do UID do usuário
+  // Lista dispositivos do UID do usuário (tenta /users primeiro; fallback iot-03)
   router.get('/tuya/devices', async (req, res) => {
     try {
       const user = await requireUser(req, res); if (!user) return
       const { uid } = await ensureTuyaLinkedUser(user)
-      const token = await tuyaEnsureAppToken()
+      const accessToken = await tuyaEnsureAppToken()
 
-      // Use o namespace iot-03 para maior compatibilidade
-      const path = `/v1.0/iot-03/users/${encodeURIComponent(uid)}/devices`
-      const { status, json } = await tuyaSignAndFetch(path, { method: 'GET', accessToken: token })
-      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false })
+      const pathUsers = `/v1.0/users/${encodeURIComponent(uid)}/devices`
+      let r = await tuyaSignAndFetch(pathUsers, { method: 'GET', accessToken })
 
-      const items = Array.isArray(json.result) ? json.result : []
+      // Se não deu certo, tenta o namespace iot-03
+      if (!(r.status === 200 && r.json?.success === true)) {
+        const pathIot03 = `/v1.0/iot-03/users/${encodeURIComponent(uid)}/devices`
+        r = await tuyaSignAndFetch(pathIot03, { method: 'GET', accessToken })
+      }
+
+      if (r.status !== 200 || r.json?.success !== true) {
+        return res.status(r.status).json(r.json || { ok: false })
+      }
+
+      const items = Array.isArray(r.json.result) ? r.json.result : []
       const norm = items.map(d => ({
         id: String(d.id || d.uuid || ''),
         name: String(d.name || d.local_key || 'Device'),
@@ -1529,12 +1538,16 @@ Exemplo: " US$ 10 = R$ 55,00"`;
         vendor: 'tuya',
       }))
       res.json({ ok: true, items: norm, total: norm.length, ts: Date.now() })
+
     } catch (e) {
       const code = String(e?.code || '')
-      if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() })
+      if (code === 'NOT_LINKED' || code === 'MISSING_UID') {
+        return res.status(401).json({ ok: false, error: code.toLowerCase() })
+      }
       res.status(500).json({ ok: false, error: String(e?.message || e) })
     }
   })
+
 
   // Lista functions (descobre os "codes" disponíveis no device)
   router.get('/tuya/device/:id/functions', async (req, res) => {
