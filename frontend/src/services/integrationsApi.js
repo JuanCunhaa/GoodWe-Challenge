@@ -32,9 +32,11 @@ export const integrationsApi = {
   tuyaLink: (token, uid) => request('/auth/tuya/link', { method: 'POST', token, body: { uid } }),
   tuyaUnlink: (token) => request('/auth/tuya/unlink', { method: 'POST', token, body: {} }),
   tuyaDevices: (token) => request('/tuya/devices', { token }),
-  tuyaSendCommands: (token, device_id, commands) => request('/tuya/commands', { method: 'POST', token, body: { device_id, commands } }),
+  tuyaSendCommands: (token, device_id, commands) =>
+    request('/tuya/commands', { method: 'POST', token, body: { device_id, commands } }),
+  tuyaFunctions: (token, deviceId) =>
+    request(`/tuya/device/${encodeURIComponent(deviceId)}/functions`, { token }),
+  tuyaDeviceStatus: (token, deviceId) =>
+    request(`/tuya/device/${encodeURIComponent(deviceId)}/status`, { token }),
 
-  // NOVOS:
-  tuyaFunctions: (token, deviceId) => request(`/tuya/device/${encodeURIComponent(deviceId)}/functions`, { token }),
-  tuyaDeviceStatus: (token, deviceId) => request(`/tuya/device/${encodeURIComponent(deviceId)}/status`, { token }),
 };
