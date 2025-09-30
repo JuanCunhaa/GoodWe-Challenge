@@ -26,7 +26,7 @@ export function createRoutes(gw, dbApi) {
   // ---------- Piper auto-detect (bundled) ----------
   // Se PIPER_PATH/PIPER_VOICE não estiverem definidos, tenta achar em ../../piper ou vendor/piper
   let piperDetected = null;
-  async function detectBundledPiper(){
+  async function detectBundledPiper() {
     if (piperDetected) return piperDetected;
     try {
       const here = path.dirname(fileURLToPath(import.meta.url));
@@ -36,20 +36,20 @@ export function createRoutes(gw, dbApi) {
       const candidateRoots = [repoPiperDir, vendorPiperDir];
 
       // Helpers: busca recursiva limitada
-      async function findFirst(root, names, maxDepth = 3){
+      async function findFirst(root, names, maxDepth = 3) {
         const stack = [{ dir: root, depth: 0 }];
         const seen = new Set();
-        while (stack.length){
+        while (stack.length) {
           const { dir, depth } = stack.shift();
           if (!dir || seen.has(dir)) continue; seen.add(dir);
           let entries = [];
           try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { continue; }
-          for (const ent of entries){
+          for (const ent of entries) {
             const full = path.join(dir, ent.name);
             if (ent.isFile() && names.includes(ent.name)) return full;
           }
-          if (depth < maxDepth){
-            for (const ent of entries){
+          if (depth < maxDepth) {
+            for (const ent of entries) {
               const full = path.join(dir, ent.name);
               if (ent.isDirectory()) stack.push({ dir: full, depth: depth + 1 });
             }
@@ -57,21 +57,21 @@ export function createRoutes(gw, dbApi) {
         }
         return '';
       }
-      async function collectVoices(root, maxDepth = 4){
+      async function collectVoices(root, maxDepth = 4) {
         const list = [];
         const stack = [{ dir: root, depth: 0 }];
         const seen = new Set();
-        while (stack.length){
+        while (stack.length) {
           const { dir, depth } = stack.shift();
           if (!dir || seen.has(dir)) continue; seen.add(dir);
           let entries = [];
           try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { continue; }
-          for (const ent of entries){
+          for (const ent of entries) {
             const full = path.join(dir, ent.name);
             if (ent.isFile() && /\.onnx$/i.test(ent.name)) list.push(full);
           }
-          if (depth < maxDepth){
-            for (const ent of entries){
+          if (depth < maxDepth) {
+            for (const ent of entries) {
               const full = path.join(dir, ent.name);
               if (ent.isDirectory()) stack.push({ dir: full, depth: depth + 1 });
             }
@@ -83,27 +83,27 @@ export function createRoutes(gw, dbApi) {
       // Localiza executável e vozes em subpastas (ex.: Linux/, Windows/, voices/)
       const exeNames = process.platform === 'win32' ? ['piper.exe', 'piper'] : ['piper', 'piper-linux', 'piper-amd64'];
       let piperPath = '';
-      for (const root of candidateRoots){
+      for (const root of candidateRoots) {
         if (piperPath) break;
         piperPath = await findFirst(root, exeNames, 4);
       }
 
       let voicePath = '';
       let voiceJson = '';
-      for (const root of candidateRoots){
+      for (const root of candidateRoots) {
         const voices = await collectVoices(root, 4);
-        const preferred = voices.find(p=>/pt[_-]?br|\bpt\b/i.test(p)) || voices[0];
+        const preferred = voices.find(p => /pt[_-]?br|\bpt\b/i.test(p)) || voices[0];
         if (preferred) { voicePath = preferred; break; }
       }
-      if (voicePath){
+      if (voicePath) {
         const json1 = voicePath + '.json';
         const json2 = voicePath.replace(/\.onnx$/i, '.onnx.json');
-        try { await fs.access(json1); voiceJson = json1; } catch { try { await fs.access(json2); voiceJson = json2; } catch {} }
+        try { await fs.access(json1); voiceJson = json1; } catch { try { await fs.access(json2); voiceJson = json2; } catch { } }
       }
 
       // Tenta garantir permissão de execução em Linux
-      if (piperPath && process.platform !== 'win32'){
-        try { await fs.chmod(piperPath, 0o755); } catch {}
+      if (piperPath && process.platform !== 'win32') {
+        try { await fs.chmod(piperPath, 0o755); } catch { }
       }
 
       piperDetected = { piperPath, voicePath, voiceJson };
@@ -131,11 +131,11 @@ export function createRoutes(gw, dbApi) {
   };
   const requireUser = async (req, res) => {
     const token = getBearerToken(req);
-    if (!token) { res.status(401).json({ ok:false, error:'missing token' }); return null; }
+    if (!token) { res.status(401).json({ ok: false, error: 'missing token' }); return null; }
     const sess = await dbApi.getSession(token);
-    if (!sess) { res.status(401).json({ ok:false, error:'invalid token' }); return null; }
+    if (!sess) { res.status(401).json({ ok: false, error: 'invalid token' }); return null; }
     const user = await dbApi.getUserById(sess.user_id);
-    if (!user) { res.status(401).json({ ok:false, error:'invalid token' }); return null; }
+    if (!user) { res.status(401).json({ ok: false, error: 'invalid token' }); return null; }
     return user;
   };
   const getPsId = async (req) => {
@@ -195,16 +195,16 @@ export function createRoutes(gw, dbApi) {
   const TTS_MAX_CONCURRENT = Math.max(1, Number(process.env.TTS_MAX_CONCURRENT || 1));
   let activeSlots = 0;
   const waiters = [];
-  function acquireSlot(){
+  function acquireSlot() {
     return new Promise((resolve) => {
       const tryAcquire = () => {
-        if (activeSlots < TTS_MAX_CONCURRENT){ activeSlots++; resolve(); }
+        if (activeSlots < TTS_MAX_CONCURRENT) { activeSlots++; resolve(); }
         else waiters.push(tryAcquire);
       };
       tryAcquire();
     });
   }
-  function releaseSlot(){
+  function releaseSlot() {
     activeSlots = Math.max(0, activeSlots - 1);
     const next = waiters.shift(); if (next) next();
   }
@@ -219,17 +219,17 @@ export function createRoutes(gw, dbApi) {
     const sig = JSON.stringify({ PIPER_PATH, PIPER_VOICE, PIPER_VOICE_JSON, PIPER_SPEAKER, PIPER_LENGTH_SCALE, PIPER_NOISE_SCALE, PIPER_NOISE_W });
     return crypto.createHash('sha1').update(text + '|' + sig).digest('hex');
   }
-  function cacheGet(key){
+  function cacheGet(key) {
     if (!TTS_CACHE_MAX) return null;
     const it = ttsCache.get(key);
     if (!it) return null;
     if (Date.now() >= it.exp) { ttsCache.delete(key); return null; }
     return it.buf;
   }
-  function cacheSet(key, buf){
+  function cacheSet(key, buf) {
     if (!TTS_CACHE_MAX || !buf) return;
     ttsCache.set(key, { buf, exp: Date.now() + TTS_CACHE_TTL_MS });
-    if (ttsCache.size > TTS_CACHE_MAX){
+    if (ttsCache.size > TTS_CACHE_MAX) {
       const firstKey = ttsCache.keys().next().value;
       if (firstKey) ttsCache.delete(firstKey);
     }
@@ -249,13 +249,13 @@ export function createRoutes(gw, dbApi) {
       res.setHeader('Cache-Control', 'no-store');
       return res.send(cached);
     }
-    if (inflight.has(key)){
-      try{
+    if (inflight.has(key)) {
+      try {
         const buf = await inflight.get(key);
         res.setHeader('Content-Type', 'audio/wav');
         res.setHeader('Cache-Control', 'no-store');
         return res.send(buf);
-      }catch(e){ return res.status(500).json({ ok:false, error:String(e) }) }
+      } catch (e) { return res.status(500).json({ ok: false, error: String(e) }) }
     }
 
     // 1) Tentativa com Piper (Node) se variáveis estiverem configuradas
@@ -273,7 +273,7 @@ export function createRoutes(gw, dbApi) {
       try {
         await fs.access(PIPER_PATH);
         await fs.access(PIPER_VOICE);
-        if (PIPER_VOICE_JSON) { await fs.access(PIPER_VOICE_JSON).catch(()=>{}); }
+        if (PIPER_VOICE_JSON) { await fs.access(PIPER_VOICE_JSON).catch(() => { }); }
       } catch (e) {
         // Se o caminho não existe, não tente spawn; cai para fallback/erro
         // console.warn('[tts] invalid path', e);
@@ -305,7 +305,7 @@ export function createRoutes(gw, dbApi) {
             if (code === 0) resolve(0);
             else reject(new Error(`piper exited with code ${code}: ${stderr.slice(0, 500)}`));
           });
-          try { child.stdin.setDefaultEncoding('utf8'); child.stdin.write(text + "\n"); child.stdin.end(); } catch {}
+          try { child.stdin.setDefaultEncoding('utf8'); child.stdin.write(text + "\n"); child.stdin.end(); } catch { }
         });
         // Tenta ler o arquivo (com pequeno retry em caso de latência no FS)
         let buf = await fs.readFile(outPath).catch(() => null);
@@ -313,7 +313,7 @@ export function createRoutes(gw, dbApi) {
           await new Promise(r => setTimeout(r, 50));
           buf = await fs.readFile(outPath).catch(() => null);
         }
-        try { await fs.unlink(outPath).catch(()=>{}); } catch {}
+        try { await fs.unlink(outPath).catch(() => { }); } catch { }
         if (!buf) return res.status(500).json({ ok: false, error: 'piper: missing output file' });
         res.setHeader('Content-Type', 'audio/wav');
         res.setHeader('Cache-Control', 'no-store');
@@ -343,7 +343,7 @@ export function createRoutes(gw, dbApi) {
           return buf;
         })();
         inflight.set(key, p);
-        const buf = await p.finally(()=> inflight.delete(key));
+        const buf = await p.finally(() => inflight.delete(key));
         res.setHeader('Content-Type', 'audio/wav');
         res.setHeader('Cache-Control', 'no-store');
         return res.send(buf);
@@ -374,7 +374,7 @@ export function createRoutes(gw, dbApi) {
           process.env.PLANT_ID ||
           ''
         );
-        if (!plantId) return res.status(400).json({ ok:false, error:'missing plant id (set ASSIST_PLANT_ID/PLANT_ID or pass ?powerstation_id=...)' });
+        if (!plantId) return res.status(400).json({ ok: false, error: 'missing plant id (set ASSIST_PLANT_ID/PLANT_ID or pass ?powerstation_id=...)' });
         user = { id: 0, email: 'assistant@service', powerstation_id: plantId };
       } else {
         user = await requireUser(req, res); if (!user) return;
@@ -516,7 +516,7 @@ export function createRoutes(gw, dbApi) {
           }
         },
         async get_monitor({ page_index = 1, page_size = 14, key = '', orderby = '', powerstation_type = '', powerstation_status = '', adcode = '', org_id = '', condition = '' } = {}) {
-    const body = { powerstation_id: psId, key, orderby, powerstation_type, powerstation_status, page_index: Number(page_index), page_size: Number(page_size), adcode, org_id, condition };
+          const body = { powerstation_id: psId, key, orderby, powerstation_type, powerstation_status, page_index: Number(page_index), page_size: Number(page_size), adcode, org_id, condition };
           const j = await gw.postJson('PowerStationMonitor/QueryPowerStationMonitor', body);
           return j;
         },
@@ -962,7 +962,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
         { name: 'cross_login_raw', description: 'Retorna JSON cru do CrossLogin SEMS', parameters: { type: 'object', properties: { version: { type: 'string' } }, additionalProperties: false } },
       ];
       res.json({ items });
-    } catch (e) { res.status(500).json({ ok:false, error:String(e) }) }
+    } catch (e) { res.status(500).json({ ok: false, error: String(e) }) }
   });
 
   router.get('/assistant/help', (req, res) => {
@@ -977,7 +977,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   router.get('/assistant/ping', (req, res) => {
     const auth = gw.auth || null;
-    res.json({ ok:true, hasAuth: !!auth, api_base: auth?.api_base || null, ts: Date.now() });
+    res.json({ ok: true, hasAuth: !!auth, api_base: auth?.api_base || null, ts: Date.now() });
   });
 
   // ---------- SmartThings WebHook (SmartApp lifecycle) ----------
@@ -990,7 +990,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       if (lifecycle === 'CONFIRMATION') {
         const url = String(req.body?.confirmationData?.confirmationUrl || '');
         if (url) {
-          try { await fetch(url, { method: 'GET', signal: AbortSignal.timeout(15000) }); } catch {}
+          try { await fetch(url, { method: 'GET', signal: AbortSignal.timeout(15000) }); } catch { }
         }
         return res.json({ statusCode: 200 });
       }
@@ -1006,52 +1006,52 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   });
 
   // ========== SmartThings OAuth2 + Devices ==========
-  function getEncKey(){
-    const hex = String(process.env.INTEGRATIONS_ENC_KEY||'').trim();
+  function getEncKey() {
+    const hex = String(process.env.INTEGRATIONS_ENC_KEY || '').trim();
     if (!hex || hex.length !== 64) return null;
     try { return Buffer.from(hex, 'hex'); } catch { return null; }
   }
-  function enc(plain){
+  function enc(plain) {
     const key = getEncKey(); if (!key) throw new Error('missing INTEGRATIONS_ENC_KEY (32-byte hex)');
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
     const ct = Buffer.concat([cipher.update(String(plain), 'utf8'), cipher.final()]);
     const tag = cipher.getAuthTag();
-    return iv.toString('hex')+':'+ct.toString('hex')+':'+tag.toString('hex');
+    return iv.toString('hex') + ':' + ct.toString('hex') + ':' + tag.toString('hex');
   }
-  function dec(packed){
+  function dec(packed) {
     const key = getEncKey(); if (!key) throw new Error('missing INTEGRATIONS_ENC_KEY');
-    const [ivh, cth, tagh] = String(packed||'').split(':');
-    if (!ivh||!cth||!tagh) return '';
-    const iv = Buffer.from(ivh,'hex');
-    const ct = Buffer.from(cth,'hex');
-    const tag = Buffer.from(tagh,'hex');
+    const [ivh, cth, tagh] = String(packed || '').split(':');
+    if (!ivh || !cth || !tagh) return '';
+    const iv = Buffer.from(ivh, 'hex');
+    const ct = Buffer.from(cth, 'hex');
+    const tag = Buffer.from(tagh, 'hex');
     const d = crypto.createDecipheriv('aes-256-gcm', key, iv);
     d.setAuthTag(tag);
     return Buffer.concat([d.update(ct), d.final()]).toString('utf8');
   }
-  function deriveBaseUrl(req){
-    const explicit = (process.env.BASE_URL||'').trim();
+  function deriveBaseUrl(req) {
+    const explicit = (process.env.BASE_URL || '').trim();
     if (explicit) return explicit.replace(/\/$/, '');
-    const proto = (req.headers['x-forwarded-proto']||req.protocol||'https');
-    const host = req.headers['x-forwarded-host']||req.headers.host;
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https');
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
     return `${proto}://${host}`;
   }
-  async function stTokenRequest(params){
-    const clientId = process.env.ST_CLIENT_ID||'';
-    const clientSecret = process.env.ST_CLIENT_SECRET||'';
-    const tokenUrl = process.env.ST_TOKEN_URL||'https://auth-global.api.smartthings.com/oauth/token';
+  async function stTokenRequest(params) {
+    const clientId = process.env.ST_CLIENT_ID || '';
+    const clientSecret = process.env.ST_CLIENT_SECRET || '';
+    const tokenUrl = process.env.ST_TOKEN_URL || 'https://auth-global.api.smartthings.com/oauth/token';
     const body = new URLSearchParams(params).toString();
     const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     const r = await fetch(tokenUrl, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/x-www-form-urlencoded', 'Authorization':`Basic ${basic}` },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${basic}` },
       body,
-      signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)),
+      signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)),
     });
-    if (!r.ok){
+    if (!r.ok) {
       const t = await r.text();
-      throw new Error(`SmartThings token HTTP ${r.status}: ${t.slice(0,200)}`);
+      throw new Error(`SmartThings token HTTP ${r.status}: ${t.slice(0, 200)}`);
     }
     return r.json();
   }
@@ -1060,25 +1060,25 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     // Permite token via query para abrir em nova aba: /auth/smartthings?token=...
     let user = await tryGetUser(req);
     if (!user) {
-      const t = String(req.query.token||'');
+      const t = String(req.query.token || '');
       try {
-        if (t){
+        if (t) {
           const sess = await dbApi.getSession(t);
           if (sess) user = await dbApi.getUserById(sess.user_id);
         }
-      } catch {}
+      } catch { }
     }
     if (!user) { res.status(401).send('missing token'); return; }
     try {
       const state = crypto.randomBytes(16).toString('hex');
-      await dbApi.createOauthState({ state, vendor:'smartthings', user_id: user.id });
+      await dbApi.createOauthState({ state, vendor: 'smartthings', user_id: user.id });
       const base = deriveBaseUrl(req);
-      const authUrl = (process.env.ST_AUTH_URL||'https://auth-global.api.smartthings.com/oauth/authorize');
-      const redirectUri = base + (process.env.ST_REDIRECT_PATH||'/api/integrations/st/callback');
-      const scopes = (process.env.ST_SCOPES||'devices:read devices:commands');
-      const url = `${authUrl}?client_id=${encodeURIComponent(process.env.ST_CLIENT_ID||'')}`+
-        `&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}`+
-        `&scope=${encodeURIComponent(scopes)}`+
+      const authUrl = (process.env.ST_AUTH_URL || 'https://auth-global.api.smartthings.com/oauth/authorize');
+      const redirectUri = base + (process.env.ST_REDIRECT_PATH || '/api/integrations/st/callback');
+      const scopes = (process.env.ST_SCOPES || 'devices:read devices:commands');
+      const url = `${authUrl}?client_id=${encodeURIComponent(process.env.ST_CLIENT_ID || '')}` +
+        `&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&scope=${encodeURIComponent(scopes)}` +
         `&state=${encodeURIComponent(state)}`;
       res.redirect(url);
     } catch (e) { res.status(500).send('Erro ao iniciar OAuth'); }
@@ -1086,27 +1086,27 @@ Exemplo: " US$ 10 = R$ 55,00"`;
 
   router.get('/integrations/st/callback', async (req, res) => {
     try {
-      const code = String(req.query.code||'');
-      const state = String(req.query.state||'');
+      const code = String(req.query.code || '');
+      const state = String(req.query.state || '');
       if (!code || !state) return res.status(400).send('missing code/state');
       const st = await dbApi.consumeOauthState(state);
       if (!st || st.vendor !== 'smartthings') return res.status(400).send('invalid state');
 
       const base = deriveBaseUrl(req);
-      const redirectUri = base + (process.env.ST_REDIRECT_PATH||'/api/integrations/st/callback');
-      const tok = await stTokenRequest({ grant_type:'authorization_code', code, redirect_uri: redirectUri });
-      const access = String(tok.access_token||'');
-      const refresh = String(tok.refresh_token||'');
-      const expiresIn = Number(tok.expires_in||0);
-      const expires_at = Date.now() + Math.max(0, expiresIn-30)*1000;
-      const scopes = String(tok.scope||process.env.ST_SCOPES||'');
+      const redirectUri = base + (process.env.ST_REDIRECT_PATH || '/api/integrations/st/callback');
+      const tok = await stTokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirectUri });
+      const access = String(tok.access_token || '');
+      const refresh = String(tok.refresh_token || '');
+      const expiresIn = Number(tok.expires_in || 0);
+      const expires_at = Date.now() + Math.max(0, expiresIn - 30) * 1000;
+      const scopes = String(tok.scope || process.env.ST_SCOPES || '');
       if (!access || !refresh) throw new Error('missing tokens');
-      await dbApi.upsertLinkedAccount({ user_id: st.user_id, vendor:'smartthings', access_token: enc(access), refresh_token: enc(refresh), expires_at, scopes, meta: { obtained_at: Date.now() } });
+      await dbApi.upsertLinkedAccount({ user_id: st.user_id, vendor: 'smartthings', access_token: enc(access), refresh_token: enc(refresh), expires_at, scopes, meta: { obtained_at: Date.now() } });
       // Redirect to frontend (Vercel) after success
       const frontOrigin = (process.env.FRONT_ORIGIN || process.env.CORS_ORIGIN || '').replace(/\/$/, '');
       const toPath = String(process.env.FRONT_REDIRECT_SUCCESS || '/perfil');
       const toUrl = frontOrigin ? (frontOrigin + (toPath.startsWith('/') ? toPath : ('/' + toPath))) : toPath;
-      res.set('Content-Type','text/html; charset=utf-8');
+      res.set('Content-Type', 'text/html; charset=utf-8');
       res.send(`<!doctype html><meta charset="utf-8"/><title>SmartThings</title>
         <body style="font-family:system-ui,Segoe UI,Roboto,Arial;padding:24px;background:#0b1220;color:#e2e8f0">
           Conectado com sucesso.
@@ -1123,28 +1123,28 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   router.post('/auth/smartthings/unlink', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
     try { await dbApi.deleteLinkedAccount(user.id, 'smartthings'); res.status(204).end(); }
-    catch(e){ res.status(500).json({ ok:false, error:'unlink failed' }); }
+    catch (e) { res.status(500).json({ ok: false, error: 'unlink failed' }); }
   });
 
   router.get('/auth/smartthings/status', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
     const row = await dbApi.getLinkedAccount(user.id, 'smartthings');
-    res.json({ ok:true, connected: !!row, expires_at: row?.expires_at||null, scopes: row?.scopes||'' });
+    res.json({ ok: true, connected: !!row, expires_at: row?.expires_at || null, scopes: row?.scopes || '' });
   });
 
-  async function ensureStAccess(user){
+  async function ensureStAccess(user) {
     const row = await dbApi.getLinkedAccount(user.id, 'smartthings');
-    if (!row) throw Object.assign(new Error('not linked'), { code:'NOT_LINKED' });
-    let access = dec(row.access_token||'');
-    const refresh = dec(row.refresh_token||'');
+    if (!row) throw Object.assign(new Error('not linked'), { code: 'NOT_LINKED' });
+    let access = dec(row.access_token || '');
+    const refresh = dec(row.refresh_token || '');
     const now = Date.now();
-    if (!access || now >= Number(row.expires_at||0)-5000){
-      const tok = await stTokenRequest({ grant_type:'refresh_token', refresh_token: refresh });
-      access = String(tok.access_token||'');
-      const newRefresh = String(tok.refresh_token||refresh||'');
-      const expiresIn = Number(tok.expires_in||0);
-      const expires_at = Date.now() + Math.max(0, expiresIn-30)*1000;
-      await dbApi.upsertLinkedAccount({ user_id: user.id, vendor:'smartthings', access_token: enc(access), refresh_token: enc(newRefresh), expires_at, scopes: row.scopes, meta: { refreshed_at: Date.now() } });
+    if (!access || now >= Number(row.expires_at || 0) - 5000) {
+      const tok = await stTokenRequest({ grant_type: 'refresh_token', refresh_token: refresh });
+      access = String(tok.access_token || '');
+      const newRefresh = String(tok.refresh_token || refresh || '');
+      const expiresIn = Number(tok.expires_in || 0);
+      const expires_at = Date.now() + Math.max(0, expiresIn - 30) * 1000;
+      await dbApi.upsertLinkedAccount({ user_id: user.id, vendor: 'smartthings', access_token: enc(access), refresh_token: enc(newRefresh), expires_at, scopes: row.scopes, meta: { refreshed_at: Date.now() } });
     }
     return access;
   }
@@ -1153,14 +1153,14 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     const user = await requireUser(req, res); if (!user) return;
     try {
       const token = await ensureStAccess(user);
-      const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
-      const r = await fetch(`${apiBase}/devices`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+      const apiBase = (process.env.ST_API_BASE || 'https://api.smartthings.com/v1').replace(/\/$/, '');
+      const r = await fetch(`${apiBase}/devices`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
       const j = await r.json();
       if (!r.ok) return res.status(r.status).json(j);
       const list = Array.isArray(j?.items) ? j.items : [];
       const norm = list.map(d => ({
-        id: String(d?.deviceId||d?.device_id||''),
-        name: String(d?.label||d?.name||''),
+        id: String(d?.deviceId || d?.device_id || ''),
+        name: String(d?.label || d?.name || ''),
         roomId: d?.roomId || null,
         locationId: d?.locationId || null,
         manufacturer: d?.manufacturerName || null,
@@ -1170,10 +1170,10 @@ Exemplo: " US$ 10 = R$ 55,00"`;
         components: d?.components || [],
         raw: d,
       }));
-      res.json({ ok:true, items: norm, total: norm.length, ts: Date.now() });
+      res.json({ ok: true, items: norm, total: norm.length, ts: Date.now() });
     } catch (e) {
-      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
-      res.status(500).json({ ok:false, error:'failed to fetch devices' });
+      if (String(e?.code) === 'NOT_LINKED') return res.status(401).json({ ok: false, error: 'not linked' });
+      res.status(500).json({ ok: false, error: 'failed to fetch devices' });
     }
   });
 
@@ -1182,33 +1182,33 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     const user = await requireUser(req, res); if (!user) return;
     try {
       const token = await ensureStAccess(user);
-      const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
+      const apiBase = (process.env.ST_API_BASE || 'https://api.smartthings.com/v1').replace(/\/$/, '');
       let locationIds = [];
-      const qLoc = String(req.query.locationId||'').trim();
+      const qLoc = String(req.query.locationId || '').trim();
       if (qLoc) {
         locationIds = [qLoc];
       } else {
         // Infer from devices
         try {
-          const r = await fetch(`${apiBase}/devices`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+          const r = await fetch(`${apiBase}/devices`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
           const j = await r.json();
           const list = Array.isArray(j?.items) ? j.items : [];
           locationIds = Array.from(new Set(list.map(d => d?.locationId).filter(Boolean)));
-        } catch {}
+        } catch { }
       }
       const rooms = [];
       for (const loc of locationIds) {
         try {
-          const r = await fetch(`${apiBase}/locations/${encodeURIComponent(loc)}/rooms`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+          const r = await fetch(`${apiBase}/locations/${encodeURIComponent(loc)}/rooms`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
           const j = await r.json();
           const items = Array.isArray(j?.items) ? j.items : [];
           for (const it of items) rooms.push({ id: it?.roomId || it?.id, name: it?.name || it?.label || '', locationId: loc });
-        } catch {}
+        } catch { }
       }
-      res.json({ ok:true, items: rooms });
+      res.json({ ok: true, items: rooms });
     } catch (e) {
-      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
-      res.status(500).json({ ok:false, error:'failed to fetch rooms' });
+      if (String(e?.code) === 'NOT_LINKED') return res.status(401).json({ ok: false, error: 'not linked' });
+      res.status(500).json({ ok: false, error: 'failed to fetch rooms' });
     }
   });
 
@@ -1217,18 +1217,18 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     const user = await requireUser(req, res); if (!user) return;
     try {
       const token = await ensureStAccess(user);
-      const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
-      const id = encodeURIComponent(String(req.params.id||''));
+      const apiBase = (process.env.ST_API_BASE || 'https://api.smartthings.com/v1').replace(/\/$/, '');
+      const id = encodeURIComponent(String(req.params.id || ''));
       const r = await fetch(`${apiBase}/devices/${id}/status`, {
         headers: { 'Authorization': `Bearer ${token}` },
-        signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000))
+        signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000))
       });
       const j = await r.json();
       if (!r.ok) return res.status(r.status).json(j);
-      res.json({ ok:true, status:j, ts: Date.now() });
+      res.json({ ok: true, status: j, ts: Date.now() });
     } catch (e) {
-      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
-      res.status(500).json({ ok:false, error:'failed to fetch status' });
+      if (String(e?.code) === 'NOT_LINKED') return res.status(401).json({ ok: false, error: 'not linked' });
+      res.status(500).json({ ok: false, error: 'failed to fetch status' });
     }
   });
 
@@ -1238,147 +1238,147 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     try {
       const token = await ensureStAccess(user);
       let { deviceId, commands, component, capability, command, arguments: args, action } = req.body || {};
-      const id = String(deviceId||'').trim();
-      if (!id) return res.status(400).json({ ok:false, error:'deviceId is required' });
+      const id = String(deviceId || '').trim();
+      if (!id) return res.status(400).json({ ok: false, error: 'deviceId is required' });
       // Auto-map: if action is 'on'/'off' infer switch + correct component
-      if (!commands && !capability && (action==='on' || action==='off')){
-        const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
-        const rDev = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}`, { headers:{ 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
-        const dev = await rDev.json().catch(()=>null);
+      if (!commands && !capability && (action === 'on' || action === 'off')) {
+        const apiBase = (process.env.ST_API_BASE || 'https://api.smartthings.com/v1').replace(/\/$/, '');
+        const rDev = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+        const dev = await rDev.json().catch(() => null);
         const comps = Array.isArray(dev?.components) ? dev.components : [];
         let compId = 'main';
-        for (const c of comps){ const caps=(c?.capabilities||[]).map(x=>x?.id||x?.capability||''); if (caps.includes('switch')) { compId = c?.id || 'main'; break; } }
+        for (const c of comps) { const caps = (c?.capabilities || []).map(x => x?.id || x?.capability || ''); if (caps.includes('switch')) { compId = c?.id || 'main'; break; } }
         capability = 'switch'; command = action; component = compId;
       }
       let payload = { commands: [] };
       if (Array.isArray(commands) && commands.length) payload.commands = commands;
       else if (capability && command) {
-        let comp = String(component||'main');
-        if (String(capability)==='switch' && (!component || component==='main')){
+        let comp = String(component || 'main');
+        if (String(capability) === 'switch' && (!component || component === 'main')) {
           // try to detect correct component automatically
-          const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
-          const rDev = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}`, { headers:{ 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
-          const dev = await rDev.json().catch(()=>null);
+          const apiBase = (process.env.ST_API_BASE || 'https://api.smartthings.com/v1').replace(/\/$/, '');
+          const rDev = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+          const dev = await rDev.json().catch(() => null);
           const comps = Array.isArray(dev?.components) ? dev.components : [];
-          for (const c of comps){ const caps=(c?.capabilities||[]).map(x=>x?.id||x?.capability||''); if (caps.includes('switch')) { comp = c?.id || 'main'; break; } }
+          for (const c of comps) { const caps = (c?.capabilities || []).map(x => x?.id || x?.capability || ''); if (caps.includes('switch')) { comp = c?.id || 'main'; break; } }
         }
-        payload.commands = [{ component: comp, capability, command, arguments: Array.isArray(args)? args : (args!=null? [args] : []) }];
-      } else return res.status(400).json({ ok:false, error:'commands array or capability/command or action (on/off) required' });
+        payload.commands = [{ component: comp, capability, command, arguments: Array.isArray(args) ? args : (args != null ? [args] : []) }];
+      } else return res.status(400).json({ ok: false, error: 'commands array or capability/command or action (on/off) required' });
 
-      const apiBase = (process.env.ST_API_BASE||'https://api.smartthings.com/v1').replace(/\/$/, '');
+      const apiBase = (process.env.ST_API_BASE || 'https://api.smartthings.com/v1').replace(/\/$/, '');
       const r = await fetch(`${apiBase}/devices/${encodeURIComponent(id)}/commands`, {
-        method:'POST',
-        headers:{ 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' },
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000))
+        signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000))
       });
-      const j = await r.json().catch(()=>({}));
+      const j = await r.json().catch(() => ({}));
       if (!r.ok) {
         if (r.status === 401 || r.status === 403) {
-          return res.status(r.status).json({ ok:false, error:'SmartThings recusou comandos (401/403). Verifique o vínculo e o escopo devices:commands ou x:devices:* na conexão.', details: j });
+          return res.status(r.status).json({ ok: false, error: 'SmartThings recusou comandos (401/403). Verifique o vínculo e o escopo devices:commands ou x:devices:* na conexão.', details: j });
         }
-        return res.status(r.status).json({ ok:false, error:`SmartThings HTTP ${r.status}`, details:j });
+        return res.status(r.status).json({ ok: false, error: `SmartThings HTTP ${r.status}`, details: j });
       }
-      res.json({ ok:true, result:j });
+      res.json({ ok: true, result: j });
     } catch (e) {
-      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
-      res.status(500).json({ ok:false, error:'failed to send command' });
+      if (String(e?.code) === 'NOT_LINKED') return res.status(401).json({ ok: false, error: 'not linked' });
+      res.status(500).json({ ok: false, error: 'failed to send command' });
     }
   });
 
   // ========== Philips Hue (Remote API v2) ==========
-  const HUE_ENABLED = String(process.env.HUE_ENABLED||'true').toLowerCase()==='true';
-  async function hueTokenRequest(params){
-    const clientId = process.env.HUE_CLIENT_ID||'';
-    const clientSecret = process.env.HUE_CLIENT_SECRET||'';
-    const tokenUrl = process.env.HUE_TOKEN_URL||'https://api.meethue.com/v2/oauth2/token';
+  const HUE_ENABLED = String(process.env.HUE_ENABLED || 'true').toLowerCase() === 'true';
+  async function hueTokenRequest(params) {
+    const clientId = process.env.HUE_CLIENT_ID || '';
+    const clientSecret = process.env.HUE_CLIENT_SECRET || '';
+    const tokenUrl = process.env.HUE_TOKEN_URL || 'https://api.meethue.com/v2/oauth2/token';
     const body = new URLSearchParams(params).toString();
     const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     const r = await fetch(tokenUrl, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/x-www-form-urlencoded', 'Authorization':`Basic ${basic}` },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${basic}` },
       body,
-      signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)),
+      signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)),
     });
-    if (!r.ok){
+    if (!r.ok) {
       const t = await r.text();
-      throw new Error(`Hue token HTTP ${r.status}: ${t.slice(0,200)}`);
+      throw new Error(`Hue token HTTP ${r.status}: ${t.slice(0, 200)}`);
     }
     return r.json();
   }
-  async function ensureHueAccess(user){
+  async function ensureHueAccess(user) {
     const row = await dbApi.getLinkedAccount(user.id, 'hue');
-    if (!row) throw Object.assign(new Error('not linked'), { code:'NOT_LINKED' });
-    let access = dec(row.access_token||'');
-    const refresh = dec(row.refresh_token||'');
+    if (!row) throw Object.assign(new Error('not linked'), { code: 'NOT_LINKED' });
+    let access = dec(row.access_token || '');
+    const refresh = dec(row.refresh_token || '');
     const now = Date.now();
-    if (!access || now >= Number(row.expires_at||0)-5000){
-      const tok = await hueTokenRequest({ grant_type:'refresh_token', refresh_token: refresh });
-      access = String(tok.access_token||'');
-      const newRefresh = String(tok.refresh_token||refresh||'');
-      const expiresIn = Number(tok.expires_in||0);
-      const expires_at = Date.now() + Math.max(0, expiresIn-30)*1000;
-      const scopes = String(tok.scope||row.scopes||'');
-      await dbApi.upsertLinkedAccount({ user_id: user.id, vendor:'hue', access_token: enc(access), refresh_token: enc(newRefresh), expires_at, scopes, meta: { refreshed_at: Date.now() } });
+    if (!access || now >= Number(row.expires_at || 0) - 5000) {
+      const tok = await hueTokenRequest({ grant_type: 'refresh_token', refresh_token: refresh });
+      access = String(tok.access_token || '');
+      const newRefresh = String(tok.refresh_token || refresh || '');
+      const expiresIn = Number(tok.expires_in || 0);
+      const expires_at = Date.now() + Math.max(0, expiresIn - 30) * 1000;
+      const scopes = String(tok.scope || row.scopes || '');
+      await dbApi.upsertLinkedAccount({ user_id: user.id, vendor: 'hue', access_token: enc(access), refresh_token: enc(newRefresh), expires_at, scopes, meta: { refreshed_at: Date.now() } });
     }
     return access;
   }
 
-  async function getHueContext(user){
+  async function getHueContext(user) {
     const row = await dbApi.getLinkedAccount(user.id, 'hue');
-    if (!row) throw Object.assign(new Error('not linked'), { code:'NOT_LINKED' });
+    if (!row) throw Object.assign(new Error('not linked'), { code: 'NOT_LINKED' });
     const token = await ensureHueAccess(user);
-    const envKey = (process.env.HUE_APP_KEY||'').trim();
+    const envKey = (process.env.HUE_APP_KEY || '').trim();
     let appKey = envKey || '';
     try {
       const meta = row?.meta ? JSON.parse(row.meta) : {};
       if (!appKey && meta && meta.app_key) appKey = String(meta.app_key);
-    } catch {}
+    } catch { }
     return { token, appKey };
   }
 
   // Start OAuth
   router.get('/auth/hue', async (req, res) => {
-    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
+    if (!HUE_ENABLED) return res.status(501).json({ ok: false, error: 'Hue integration disabled' });
     let user = await tryGetUser(req);
     if (!user) {
-      const t = String(req.query.token||'');
-      try { if (t){ const sess = await dbApi.getSession(t); if (sess) user = await dbApi.getUserById(sess.user_id); } } catch {}
+      const t = String(req.query.token || '');
+      try { if (t) { const sess = await dbApi.getSession(t); if (sess) user = await dbApi.getUserById(sess.user_id); } } catch { }
     }
     if (!user) { res.status(401).send('missing token'); return; }
     try {
       const state = crypto.randomBytes(16).toString('hex');
-      await dbApi.createOauthState({ state, vendor:'hue', user_id: user.id });
+      await dbApi.createOauthState({ state, vendor: 'hue', user_id: user.id });
       const base = deriveBaseUrl(req);
-      const authUrl = (process.env.HUE_AUTH_URL||'https://api.meethue.com/v2/oauth2/authorize');
+      const authUrl = (process.env.HUE_AUTH_URL || 'https://api.meethue.com/v2/oauth2/authorize');
       const redirectUri = base + '/api/integrations/hue/callback';
       // Hue accepts space-separated scopes. For basic device access, remote control is implicit.
-      const url = `${authUrl}?client_id=${encodeURIComponent(process.env.HUE_CLIENT_ID||'')}`+
-        `&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}`+
+      const url = `${authUrl}?client_id=${encodeURIComponent(process.env.HUE_CLIENT_ID || '')}` +
+        `&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}` +
         `&state=${encodeURIComponent(state)}`;
       res.redirect(url);
     } catch { res.status(500).send('Erro ao iniciar OAuth (Hue)'); }
   });
 
   // ========== Tuya Cloud API (dev/test) ==========
-  const TUYA_ENABLED = String(process.env.TUYA_ENABLED||'true').toLowerCase()==='true';
-  const TUYA_ACCESS_ID = (process.env.TUYA_ACCESS_ID||'').trim();
-  const TUYA_ACCESS_SECRET = (process.env.TUYA_ACCESS_SECRET||'').trim();
-  const TUYA_API_BASE = ((process.env.TUYA_API_BASE||'https://openapi.tuyaus.com').replace(/\/$/,'')).trim();
-  const TUYA_SIGN_VERSION = String(process.env.TUYA_SIGN_VERSION||'2.0');
-  const TUYA_LANG = String(process.env.TUYA_LANG||'pt');
+  const TUYA_ENABLED = String(process.env.TUYA_ENABLED || 'true').toLowerCase() === 'true';
+  const TUYA_ACCESS_ID = (process.env.TUYA_ACCESS_ID || '').trim();
+  const TUYA_ACCESS_SECRET = (process.env.TUYA_ACCESS_SECRET || '').trim();
+  const TUYA_API_BASE = ((process.env.TUYA_API_BASE || 'https://openapi.tuyaus.com').replace(/\/$/, '')).trim();
+  const TUYA_SIGN_VERSION = String(process.env.TUYA_SIGN_VERSION || '2.0');
+  const TUYA_LANG = String(process.env.TUYA_LANG || 'pt');
 
-  let tuyaToken = { access_token:'', expire_time:0 };
-  function sha256Hex(buf){ return crypto.createHash('sha256').update(buf).digest('hex'); }
-  function hmac256Hex(key, str){ return crypto.createHmac('sha256', key).update(str).digest('hex').toUpperCase(); }
-  function nowMs(){ return Date.now().toString(); }
-  async function tuyaSignAndFetch(path, { method='GET', query='', bodyObj=null, accessToken='' }={}){
+  let tuyaToken = { access_token: '', expire_time: 0 };
+  function sha256Hex(buf) { return crypto.createHash('sha256').update(buf).digest('hex'); }
+  function hmac256Hex(key, str) { return crypto.createHmac('sha256', key).update(str).digest('hex').toUpperCase(); }
+  function nowMs() { return Date.now().toString(); }
+  async function tuyaSignAndFetch(path, { method = 'GET', query = '', bodyObj = null, accessToken = '' } = {}) {
     const t = nowMs();
     const urlPath = path + (query ? `?${query}` : '');
     const body = bodyObj ? JSON.stringify(bodyObj) : '';
     const contentHash = sha256Hex(body);
     const stringToSign = [method.toUpperCase(), contentHash, '', urlPath].join('\n');
-    const str = TUYA_ACCESS_ID + (accessToken||'') + t + stringToSign;
+    const str = TUYA_ACCESS_ID + (accessToken || '') + t + stringToSign;
     const sign = hmac256Hex(TUYA_ACCESS_SECRET, str);
     const headers = {
       'client_id': TUYA_ACCESS_ID,
@@ -1391,15 +1391,15 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     if (accessToken) headers['access_token'] = accessToken;
     if (body) headers['Content-Type'] = 'application/json';
     const url = `${TUYA_API_BASE}${urlPath}`;
-    const r = await fetch(url, { method, headers, body: body || undefined, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
-    const json = await r.json().catch(()=>null);
+    const r = await fetch(url, { method, headers, body: body || undefined, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+    const json = await r.json().catch(() => null);
     return { status: r.status, json };
   }
-  async function tuyaEnsureAppToken(){
+  async function tuyaEnsureAppToken() {
     if (!TUYA_ENABLED) throw new Error('TUYA_DISABLED');
     if (!TUYA_ACCESS_ID || !TUYA_ACCESS_SECRET) throw new Error('missing TUYA_ACCESS_ID/SECRET');
     const now = Date.now();
-    if (tuyaToken.access_token && now < tuyaToken.expire_time-5000) return tuyaToken.access_token;
+    if (tuyaToken.access_token && now < tuyaToken.expire_time - 5000) return tuyaToken.access_token;
     const t = nowMs();
     // Token signing (no access_token in signature for token request)
     const path = '/v1.0/token';
@@ -1407,45 +1407,45 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     const contentHash = sha256Hex('');
     const stringToSign = ['GET', contentHash, '', `${path}?${query}`].join('\n');
     const sign = hmac256Hex(TUYA_ACCESS_SECRET, TUYA_ACCESS_ID + t + stringToSign);
-    const headers = { 'client_id':TUYA_ACCESS_ID, 'sign':sign, 't':t, 'sign_method':'HMAC-SHA256', 'sign_version': TUYA_SIGN_VERSION };
+    const headers = { 'client_id': TUYA_ACCESS_ID, 'sign': sign, 't': t, 'sign_method': 'HMAC-SHA256', 'sign_version': TUYA_SIGN_VERSION };
     const url = `${TUYA_API_BASE}${path}?${query}`;
-    const r = await fetch(url, { headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+    const r = await fetch(url, { headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
     const j = await r.json();
-    if (!j || j.success !== true) throw new Error('tuya token failed: ' + JSON.stringify(j||{}));
-    tuyaToken = { access_token: j.result.access_token, expire_time: now + (Number(j.result.expire_time)||3600)*1000 };
+    if (!j || j.success !== true) throw new Error('tuya token failed: ' + JSON.stringify(j || {}));
+    tuyaToken = { access_token: j.result.access_token, expire_time: now + (Number(j.result.expire_time) || 3600) * 1000 };
     return tuyaToken.access_token;
   }
-  async function ensureTuyaLinkedUser(user){
+  async function ensureTuyaLinkedUser(user) {
     const row = await dbApi.getLinkedAccount(user.id, 'tuya');
-    if (!row) throw Object.assign(new Error('not linked'), { code:'NOT_LINKED' });
-    const meta = row?.meta ? (JSON.parse(row.meta||'{}')||{}) : {};
-    const uid = String(meta.uid||'');
-    if (!uid) throw Object.assign(new Error('missing uid'), { code:'MISSING_UID' });
+    if (!row) throw Object.assign(new Error('not linked'), { code: 'NOT_LINKED' });
+    const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {};
+    const uid = String(meta.uid || '');
+    if (!uid) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' });
     return { uid, row };
   }
 
   // Link Tuya UID (obtido no Tuya IoT Console, conta Smart Life vinculada)
   router.post('/auth/tuya/link', async (req, res) => {
-    if (!TUYA_ENABLED) return res.status(501).json({ ok:false, error:'Tuya integration disabled' });
+    if (!TUYA_ENABLED) return res.status(501).json({ ok: false, error: 'Tuya integration disabled' });
     const user = await requireUser(req, res); if (!user) return;
-    const uid = String(req.body?.uid||'').trim();
-    if (!uid) return res.status(400).json({ ok:false, error:'uid required' });
+    const uid = String(req.body?.uid || '').trim();
+    if (!uid) return res.status(400).json({ ok: false, error: 'uid required' });
     const meta = { uid };
-    await dbApi.upsertLinkedAccount({ user_id: user.id, vendor:'tuya', access_token:null, refresh_token:null, expires_at:null, scopes:null, meta });
-    res.json({ ok:true });
+    await dbApi.upsertLinkedAccount({ user_id: user.id, vendor: 'tuya', access_token: null, refresh_token: null, expires_at: null, scopes: null, meta });
+    res.json({ ok: true });
   });
   router.get('/auth/tuya/status', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
     try {
       const row = await dbApi.getLinkedAccount(user.id, 'tuya');
-      const meta = row?.meta ? (JSON.parse(row.meta||'{}')||{}) : {};
-      res.json({ ok:true, connected: !!(row && meta.uid), uid: meta.uid||'' });
-    } catch { res.json({ ok:true, connected:false }); }
+      const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {};
+      res.json({ ok: true, connected: !!(row && meta.uid), uid: meta.uid || '' });
+    } catch { res.json({ ok: true, connected: false }); }
   });
   router.post('/auth/tuya/unlink', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
     try { await dbApi.deleteLinkedAccount(user.id, 'tuya'); res.status(204).end(); }
-    catch(e){ res.status(500).json({ ok:false, error:'unlink failed' }); }
+    catch (e) { res.status(500).json({ ok: false, error: 'unlink failed' }); }
   });
   // Lista dispositivos do UID do usuário
   router.get('/tuya/devices', async (req, res) => {
@@ -1454,21 +1454,21 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const { uid } = await ensureTuyaLinkedUser(user);
       const token = await tuyaEnsureAppToken();
       const p = `/v1.0/users/${encodeURIComponent(uid)}/devices`;
-      const { status, json } = await tuyaSignAndFetch(p, { method:'GET', accessToken: token });
-      if (status !== 200 || json?.success !== true) return res.status(status).json(json||{ ok:false });
+      const { status, json } = await tuyaSignAndFetch(p, { method: 'GET', accessToken: token });
+      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false });
       const items = Array.isArray(json.result) ? json.result : [];
       const norm = items.map(d => ({
-        id: String(d.id||d.uuid||''),
-        name: String(d.name||d.local_key||'Device'),
-        category: String(d.category||d.product_id||''),
+        id: String(d.id || d.uuid || ''),
+        name: String(d.name || d.local_key || 'Device'),
+        category: String(d.category || d.product_id || ''),
         online: !!d.online,
         vendor: 'tuya',
       }));
-      res.json({ ok:true, items: norm, total: norm.length, ts: Date.now() });
+      res.json({ ok: true, items: norm, total: norm.length, ts: Date.now() });
     } catch (e) {
-      const code = String(e?.code||'');
-      if (code==='NOT_LINKED' || code==='MISSING_UID') return res.status(401).json({ ok:false, error: code.toLowerCase() });
-      res.status(500).json({ ok:false, error: String(e?.message||e) });
+      const code = String(e?.code || '');
+      if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() });
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
   });
   // Envia comandos genéricos (para testes). Body: { device_id, commands: [{code,value}] }
@@ -1477,45 +1477,84 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const user = await requireUser(req, res); if (!user) return;
       await ensureTuyaLinkedUser(user); // garante vinculo
       const token = await tuyaEnsureAppToken();
-      const id = String(req.body?.device_id||'').trim();
+      const id = String(req.body?.device_id || '').trim();
       const commands = Array.isArray(req.body?.commands) ? req.body.commands : [];
-      if (!id || commands.length===0) return res.status(400).json({ ok:false, error:'device_id and commands required' });
+      if (!id || commands.length === 0) return res.status(400).json({ ok: false, error: 'device_id and commands required' });
       const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/commands`;
-      const { status, json } = await tuyaSignAndFetch(path, { method:'POST', bodyObj: { commands }, accessToken: token });
-      if (status!==200 || json?.success!==true) return res.status(status).json(json||{ ok:false });
-      res.json({ ok:true, result: json.result });
+      const { status, json } = await tuyaSignAndFetch(path, { method: 'POST', bodyObj: { commands }, accessToken: token });
+      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false });
+      res.json({ ok: true, result: json.result });
     } catch (e) {
-      const code = String(e?.code||'');
-      if (code==='NOT_LINKED' || code==='MISSING_UID') return res.status(401).json({ ok:false, error: code.toLowerCase() });
-      res.status(500).json({ ok:false, error: String(e?.message||e) });
+      const code = String(e?.code || '');
+      if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() });
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
     }
   });
+
+  // Lista functions (quais "codes" o device aceita)
+  router.get('/tuya/device/:id/functions', async (req, res) => {
+    try {
+      const user = await requireUser(req, res); if (!user) return;
+      await ensureTuyaLinkedUser(user);
+      const token = await tuyaEnsureAppToken();
+      const id = String(req.params.id || '').trim();
+      if (!id) return res.status(400).json({ ok: false, error: 'device id required' });
+      const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/functions`;
+      const { status, json } = await tuyaSignAndFetch(path, { method: 'GET', accessToken: token });
+      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false });
+      res.json({ ok: true, result: json.result || { functions: [] } });
+    } catch (e) {
+      const code = String(e?.code || '');
+      if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() });
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
+  // (Opcional, útil para depurar estado atual)
+  router.get('/tuya/device/:id/status', async (req, res) => {
+    try {
+      const user = await requireUser(req, res); if (!user) return;
+      await ensureTuyaLinkedUser(user);
+      const token = await tuyaEnsureAppToken();
+      const id = String(req.params.id || '').trim();
+      if (!id) return res.status(400).json({ ok: false, error: 'device id required' });
+      const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/status`;
+      const { status, json } = await tuyaSignAndFetch(path, { method: 'GET', accessToken: token });
+      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false });
+      res.json({ ok: true, result: json.result || [] });
+    } catch (e) {
+      const code = String(e?.code || '');
+      if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() });
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
 
   // OAuth2 callback
   router.get('/integrations/hue/callback', async (req, res) => {
     if (!HUE_ENABLED) return res.status(501).send('Hue integration disabled');
     try {
-      const code = String(req.query.code||'');
-      const state = String(req.query.state||'');
+      const code = String(req.query.code || '');
+      const state = String(req.query.state || '');
       if (!code || !state) return res.status(400).send('missing code/state');
       const st = await dbApi.consumeOauthState(state);
       if (!st || st.vendor !== 'hue') return res.status(400).send('invalid state');
 
       const base = deriveBaseUrl(req);
       const redirectUri = base + '/api/integrations/hue/callback';
-      const tok = await hueTokenRequest({ grant_type:'authorization_code', code, redirect_uri: redirectUri });
-      const access = String(tok.access_token||'');
-      const refresh = String(tok.refresh_token||'');
-      const expiresIn = Number(tok.expires_in||0);
-      const expires_at = Date.now() + Math.max(0, expiresIn-30)*1000;
-      const scopes = String(tok.scope||'');
+      const tok = await hueTokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirectUri });
+      const access = String(tok.access_token || '');
+      const refresh = String(tok.refresh_token || '');
+      const expiresIn = Number(tok.expires_in || 0);
+      const expires_at = Date.now() + Math.max(0, expiresIn - 30) * 1000;
+      const scopes = String(tok.scope || '');
       if (!access || !refresh) throw new Error('missing tokens');
-      await dbApi.upsertLinkedAccount({ user_id: st.user_id, vendor:'hue', access_token: enc(access), refresh_token: enc(refresh), expires_at, scopes, meta: { obtained_at: Date.now() } });
+      await dbApi.upsertLinkedAccount({ user_id: st.user_id, vendor: 'hue', access_token: enc(access), refresh_token: enc(refresh), expires_at, scopes, meta: { obtained_at: Date.now() } });
       // Redirect to frontend
       const frontOrigin = (process.env.FRONT_ORIGIN || process.env.CORS_ORIGIN || '').replace(/\/$/, '');
       const toPath = String(process.env.FRONT_REDIRECT_SUCCESS || '/perfil');
       const toUrl = frontOrigin ? (frontOrigin + (toPath.startsWith('/') ? toPath : ('/' + toPath))) : toPath;
-      res.set('Content-Type','text/html; charset=utf-8');
+      res.set('Content-Type', 'text/html; charset=utf-8');
       res.send(`<!doctype html><meta charset="utf-8"/><title>Hue</title>
         <body style="font-family:system-ui,Segoe UI,Roboto,Arial;padding:24px;background:#0b1220;color:#e2e8f0">
           Conectado com sucesso.
@@ -1525,132 +1564,132 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   });
 
   router.get('/auth/hue/status', async (req, res) => {
-    if (!HUE_ENABLED) return res.json({ ok:true, connected:false, disabled:true });
+    if (!HUE_ENABLED) return res.json({ ok: true, connected: false, disabled: true });
     const user = await requireUser(req, res); if (!user) return;
     try {
       const row = await dbApi.getLinkedAccount(user.id, 'hue');
-      const meta = row?.meta ? (JSON.parse(row.meta||'{}')||{}) : {};
-      const envKey = (process.env.HUE_APP_KEY||'').trim();
+      const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {};
+      const envKey = (process.env.HUE_APP_KEY || '').trim();
       const hasAppKey = !!(envKey || meta?.app_key);
-      res.json({ ok:true, connected: !!row, expires_at: row?.expires_at||null, scopes: row?.scopes||'', has_app_key: hasAppKey });
-    } catch { res.json({ ok:true, connected:false }); }
+      res.json({ ok: true, connected: !!row, expires_at: row?.expires_at || null, scopes: row?.scopes || '', has_app_key: hasAppKey });
+    } catch { res.json({ ok: true, connected: false }); }
   });
 
   router.post('/auth/hue/unlink', async (req, res) => {
-    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
+    if (!HUE_ENABLED) return res.status(501).json({ ok: false, error: 'Hue integration disabled' });
     const user = await requireUser(req, res); if (!user) return;
     try { await dbApi.deleteLinkedAccount(user.id, 'hue'); res.status(204).end(); }
-    catch(e){ res.status(500).json({ ok:false, error:'unlink failed' }); }
+    catch (e) { res.status(500).json({ ok: false, error: 'unlink failed' }); }
   });
 
   // List Hue devices (normalized)
   router.get('/hue/devices', async (req, res) => {
-    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
+    if (!HUE_ENABLED) return res.status(501).json({ ok: false, error: 'Hue integration disabled' });
     const user = await requireUser(req, res); if (!user) return;
     try {
       const { token, appKey } = await getHueContext(user);
-      if (!appKey) return res.status(400).json({ ok:false, error:'missing app key (HUE_APP_KEY or stored meta.app_key). Gere via /api/auth/hue/appkey' });
-      const apiBase = (process.env.HUE_API_BASE||'https://api.meethue.com/route/clip/v2').replace(/\/$/, '');
+      if (!appKey) return res.status(400).json({ ok: false, error: 'missing app key (HUE_APP_KEY or stored meta.app_key). Gere via /api/auth/hue/appkey' });
+      const apiBase = (process.env.HUE_API_BASE || 'https://api.meethue.com/route/clip/v2').replace(/\/$/, '');
       const hdrs = { 'Authorization': `Bearer ${token}`, 'hue-application-key': appKey };
-      const rDev = await fetch(`${apiBase}/resource/device`, { headers: hdrs, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+      const rDev = await fetch(`${apiBase}/resource/device`, { headers: hdrs, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
       const jDev = await rDev.json();
       if (!rDev.ok) return res.status(rDev.status).json(jDev);
       const devices = Array.isArray(jDev?.data) ? jDev.data : [];
       // Optionally fetch lights/plug status
       const fetchRes = async (path) => {
-        try { const r = await fetch(`${apiBase}${path}`, { headers: hdrs, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) }); const j = await r.json(); return Array.isArray(j?.data)? j.data: []; } catch { return []; }
+        try { const r = await fetch(`${apiBase}${path}`, { headers: hdrs, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) }); const j = await r.json(); return Array.isArray(j?.data) ? j.data : []; } catch { return []; }
       };
       const lights = await fetchRes('/resource/light');
-      const plugs  = await fetchRes('/resource/smart_plug');
+      const plugs = await fetchRes('/resource/smart_plug');
       const byRid = new Map();
-      for (const it of lights) if (it?.id) byRid.set(it.id, { kind:'light', on: !!it?.on?.on });
-      for (const it of plugs) if (it?.id) byRid.set(it.id, { kind:'smart_plug', on: !!it?.on?.on });
+      for (const it of lights) if (it?.id) byRid.set(it.id, { kind: 'light', on: !!it?.on?.on });
+      for (const it of plugs) if (it?.id) byRid.set(it.id, { kind: 'smart_plug', on: !!it?.on?.on });
 
       const norm = devices.map((d) => {
         const id = d?.id || '';
         const name = d?.metadata?.name || d?.product_data?.product_name || 'Device';
         const type = d?.product_data?.product_name || d?.metadata?.archetype || d?.type || '';
         // Find first controllable service
-        let on = null, rid=null, kind=null;
+        let on = null, rid = null, kind = null;
         const svcs = Array.isArray(d?.services) ? d.services : [];
-        for (const s of svcs){ const st = byRid.get(s?.rid); if (st){ on = st.on; rid = s.rid; kind = st.kind; break; } }
-        return { id, name, vendor:'philips-hue', type, on, controlRid: rid, controlKind: kind };
+        for (const s of svcs) { const st = byRid.get(s?.rid); if (st) { on = st.on; rid = s.rid; kind = st.kind; break; } }
+        return { id, name, vendor: 'philips-hue', type, on, controlRid: rid, controlKind: kind };
       });
-      res.json({ ok:true, items: norm, total: norm.length, ts: Date.now() });
+      res.json({ ok: true, items: norm, total: norm.length, ts: Date.now() });
     } catch (e) {
-      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
-      res.status(500).json({ ok:false, error:'failed to fetch hue devices' });
+      if (String(e?.code) === 'NOT_LINKED') return res.status(401).json({ ok: false, error: 'not linked' });
+      res.status(500).json({ ok: false, error: 'failed to fetch hue devices' });
     }
   });
 
   // Toggle Hue on/off (auto: light/smart_plug via kind query)
   router.post('/hue/device/:rid/:action', async (req, res) => {
-    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
+    if (!HUE_ENABLED) return res.status(501).json({ ok: false, error: 'Hue integration disabled' });
     const user = await requireUser(req, res); if (!user) return;
     try {
       const { token, appKey } = await getHueContext(user);
-      if (!appKey) return res.status(400).json({ ok:false, error:'missing app key' });
-      const rid = String(req.params.rid||'');
-      const action = String(req.params.action||'').toLowerCase();
-      const kind = String(req.query.kind||'light');
-      if (!rid || (action!=='on' && action!=='off')) return res.status(400).json({ ok:false, error:'rid and action(on|off) required' });
-      const apiBase = (process.env.HUE_API_BASE||'https://api.meethue.com/route/clip/v2').replace(/\/$/, '');
-      const hdrs = { 'Authorization': `Bearer ${token}`, 'hue-application-key': appKey, 'Content-Type':'application/json' };
-      const body = { on: { on: action==='on' } };
-      const r = await fetch(`${apiBase}/resource/${encodeURIComponent(kind)}/${encodeURIComponent(rid)}`, { method:'PUT', headers: hdrs, body: JSON.stringify(body), signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
-      const j = await r.json().catch(()=>null);
-      if (!r.ok) return res.status(r.status).json({ ok:false, error:'hue toggle failed', details:j });
-      res.json({ ok:true });
-    } catch (e) { res.status(500).json({ ok:false, error:String(e) }); }
+      if (!appKey) return res.status(400).json({ ok: false, error: 'missing app key' });
+      const rid = String(req.params.rid || '');
+      const action = String(req.params.action || '').toLowerCase();
+      const kind = String(req.query.kind || 'light');
+      if (!rid || (action !== 'on' && action !== 'off')) return res.status(400).json({ ok: false, error: 'rid and action(on|off) required' });
+      const apiBase = (process.env.HUE_API_BASE || 'https://api.meethue.com/route/clip/v2').replace(/\/$/, '');
+      const hdrs = { 'Authorization': `Bearer ${token}`, 'hue-application-key': appKey, 'Content-Type': 'application/json' };
+      const body = { on: { on: action === 'on' } };
+      const r = await fetch(`${apiBase}/resource/${encodeURIComponent(kind)}/${encodeURIComponent(rid)}`, { method: 'PUT', headers: hdrs, body: JSON.stringify(body), signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) return res.status(r.status).json({ ok: false, error: 'hue toggle failed', details: j });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 
   // Try to generate/store Hue application key (user must press bridge button during this call)
   router.post('/auth/hue/appkey', async (req, res) => {
-    if (!HUE_ENABLED) return res.status(501).json({ ok:false, error:'Hue integration disabled' });
+    if (!HUE_ENABLED) return res.status(501).json({ ok: false, error: 'Hue integration disabled' });
     const user = await requireUser(req, res); if (!user) return;
     try {
       const { token } = await getHueContext(user); // ensures linked + valid token
       const devicetype = String(req.body?.devicetype || 'goodwe-app#server');
       const body = { devicetype, generateclientkey: true };
       const r = await fetch('https://api.meethue.com/route/api', {
-        method:'POST',
-        headers:{ 'Authorization':`Bearer ${token}`, 'Content-Type':'application/json' },
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000))
+        signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000))
       });
-      const j = await r.json().catch(()=>null);
-      if (!r.ok) return res.status(r.status).json({ ok:false, error:'hue appkey http error', details:j });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) return res.status(r.status).json({ ok: false, error: 'hue appkey http error', details: j });
       const arr = Array.isArray(j) ? j : [];
       const succ = arr.find(it => it?.success?.username);
-      if (!succ) return res.status(400).json({ ok:false, error:'no app key returned (press the bridge link button and retry)', details:j });
+      if (!succ) return res.status(400).json({ ok: false, error: 'no app key returned (press the bridge link button and retry)', details: j });
       const appKey = String(succ.success.username);
       // persist in meta
       const row = await dbApi.getLinkedAccount(user.id, 'hue');
-      const meta = row?.meta ? (JSON.parse(row.meta||'{}')||{}) : {};
+      const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {};
       meta.app_key = appKey;
-      await dbApi.upsertLinkedAccount({ user_id: user.id, vendor:'hue', access_token: row.access_token, refresh_token: row.refresh_token, expires_at: row.expires_at, scopes: row.scopes, meta });
-      res.json({ ok:true, app_key: appKey });
+      await dbApi.upsertLinkedAccount({ user_id: user.id, vendor: 'hue', access_token: row.access_token, refresh_token: row.refresh_token, expires_at: row.expires_at, scopes: row.scopes, meta });
+      res.json({ ok: true, app_key: appKey });
     } catch (e) {
-      if (String(e?.code)==='NOT_LINKED') return res.status(401).json({ ok:false, error:'not linked' });
-      res.status(500).json({ ok:false, error:String(e) });
+      if (String(e?.code) === 'NOT_LINKED') return res.status(401).json({ ok: false, error: 'not linked' });
+      res.status(500).json({ ok: false, error: String(e) });
     }
   });
 
   // Tuya helpers for status/toggle
-  async function tuyaGetStatus(deviceId, token){
+  async function tuyaGetStatus(deviceId, token) {
     const path = `/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/status`;
-    const { status, json } = await tuyaSignAndFetch(path, { method:'GET', accessToken: token });
-    if (status!==200 || json?.success!==true) throw new Error('tuya status failed');
+    const { status, json } = await tuyaSignAndFetch(path, { method: 'GET', accessToken: token });
+    if (status !== 200 || json?.success !== true) throw new Error('tuya status failed');
     return Array.isArray(json.result) ? json.result : [];
   }
-  async function tuyaFindSwitchCode(deviceId, token){
-    const { status, json } = await tuyaSignAndFetch(`/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/functions`, { method:'GET', accessToken: token });
-    if (status!==200 || json?.success!==true) return '';
+  async function tuyaFindSwitchCode(deviceId, token) {
+    const { status, json } = await tuyaSignAndFetch(`/v1.0/iot-03/devices/${encodeURIComponent(deviceId)}/functions`, { method: 'GET', accessToken: token });
+    if (status !== 200 || json?.success !== true) return '';
     const list = Array.isArray(json?.result) ? json.result : [];
-    const codes = list.map(f=> String(f?.code||'')).filter(Boolean);
-    const order = ['switch_led','switch_main','switch_1','switch','switch_usb1'];
+    const codes = list.map(f => String(f?.code || '')).filter(Boolean);
+    const order = ['switch_led', 'switch_main', 'switch_1', 'switch', 'switch_usb1'];
     for (const c of order) if (codes.includes(c)) return c;
-    return codes.find(c=> c.startsWith('switch')) || '';
+    return codes.find(c => c.startsWith('switch')) || '';
   }
 
   // Tuya: status (on/off + mapa bruto)
@@ -1659,13 +1698,13 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const user = await requireUser(req, res); if (!user) return;
       await ensureTuyaLinkedUser(user);
       const token = await tuyaEnsureAppToken();
-      const id = String(req.params.id||'');
+      const id = String(req.params.id || '');
       const list = await tuyaGetStatus(id, token);
-      const map = Object.fromEntries(list.map(it=> [it.code, it.value]));
+      const map = Object.fromEntries(list.map(it => [it.code, it.value]));
       const code = await tuyaFindSwitchCode(id, token);
       const on = code ? !!map[code] : null;
-      res.json({ ok:true, on, status: map, code });
-    } catch (e) { res.status(500).json({ ok:false, error:String(e) }); }
+      res.json({ ok: true, on, status: map, code });
+    } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 
   // Tuya: toggle on/off (auto-detect switch code)
@@ -1674,16 +1713,16 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const user = await requireUser(req, res); if (!user) return;
       await ensureTuyaLinkedUser(user);
       const token = await tuyaEnsureAppToken();
-      const id = String(req.params.id||'');
-      const action = String(req.params.action||'off').toLowerCase();
+      const id = String(req.params.id || '');
+      const action = String(req.params.action || 'off').toLowerCase();
       const code = await tuyaFindSwitchCode(id, token);
-      if (!code) return res.status(400).json({ ok:false, error:'no switch code found for this device' });
-      const payload = { commands: [{ code, value: action==='on' }] };
+      if (!code) return res.status(400).json({ ok: false, error: 'no switch code found for this device' });
+      const payload = { commands: [{ code, value: action === 'on' }] };
       const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/commands`;
-      const { status, json } = await tuyaSignAndFetch(path, { method:'POST', bodyObj: payload, accessToken: token });
-      if (status!==200 || json?.success!==true) return res.status(status).json(json||{ ok:false });
-      res.json({ ok:true, result: json.result, code });
-    } catch (e) { res.status(500).json({ ok:false, error:String(e) }); }
+      const { status, json } = await tuyaSignAndFetch(path, { method: 'POST', bodyObj: payload, accessToken: token });
+      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false });
+      res.json({ ok: true, result: json.result, code });
+    } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 
   return router;
