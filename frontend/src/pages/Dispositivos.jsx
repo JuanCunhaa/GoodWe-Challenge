@@ -14,15 +14,14 @@ export default function Dispositivos(){
   const [rooms, setRooms] = useState({})
   const [room, setRoom] = useState('')
 
-  // Mapeia qual "code" usar por device Tuya
-  const [tuyaCodeMap, setTuyaCodeMap] = useState({}) // { [id]: 'switch' | 'switch_1' | 'switch_led' | ... }
+  // cache do "code" ON/OFF por device Tuya
+  const [tuyaCodeMap, setTuyaCodeMap] = useState({})
 
   function normalizeTuyaDevice(d){
     const id = String(d.id || d.uuid || '')
     const name = String(d.name || d.local_key || 'Device')
     const category = String(d.category || d.product_id || '').toLowerCase()
     const online = !!d.online
-    // heurística: expor switch para categorias comuns
     const looksSwitch =
       category.includes('switch') ||
       category.includes('socket') ||
@@ -30,16 +29,10 @@ export default function Dispositivos(){
       category.includes('light') ||
       ['cz','dj'].some(k => category.includes(k))
     return {
-      id,
-      name,
-      category,
-      online,
+      id, name, category, online,
       vendor: 'tuya',
       roomId: '',
-      components: [{
-        id: 'main',
-        capabilities: looksSwitch ? [{ id:'switch' }] : []
-      }],
+      components: [{ id: 'main', capabilities: looksSwitch ? [{ id:'switch' }] : [] }],
     }
   }
 
@@ -52,52 +45,45 @@ export default function Dispositivos(){
         const j = await integrationsApi.stDevices(token)
         const list = Array.isArray(j?.items) ? j.items : []
         setItems(list)
-        try {
+        // rooms
+        try{
           const r = await integrationsApi.stRooms(token)
           const map = {}
-          for (const it of (r?.items||[])) { if (it?.id) map[it.id] = it.name || '' }
+          for (const it of (r?.items||[])) if (it?.id) map[it.id] = it.name || ''
           setRooms(map)
         } catch {}
+        // status (switch) em lote
         const capsFor = (d)=> (d.components?.[0]?.capabilities || []).map(c=> c.id||c.capability||'').filter(Boolean)
         const ids = list.filter(d => capsFor(d).includes('switch')).map(d=> d.id)
-        const batch = async (arr, size=6) => {
-          for (let i=0;i<arr.length;i+=size){
-            await Promise.all(arr.slice(i,i+size).map(id => fetchStatus(id)))
-          }
+        for (let i=0;i<ids.length;i+=6){
+          await Promise.all(ids.slice(i,i+6).map(id => fetchStatus(id)))
         }
-        await batch(ids)
 
       } else if (vendor === 'philips-hue'){
         const j = await integrationsApi.hueDevices(token)
-        const list = Array.isArray(j?.items) ? j.items : []
-        setItems(list)
+        setItems(Array.isArray(j?.items) ? j.items : [])
         setRooms({})
         setStatusMap({})
 
       } else if (vendor === 'tuya'){
         const j = await integrationsApi.tuyaDevices(token)
-        const raw = Array.isArray(j?.items) ? j.items : []
-        const list = raw.map(normalizeTuyaDevice)
+        const list = (Array.isArray(j?.items) ? j.items : []).map(normalizeTuyaDevice)
         setItems(list)
         setRooms({})
         setStatusMap({})
-
-        // Pré-descobrir o code de on/off para quem parece switch (até 6 em paralelo)
+        // pré-descobre code on/off para quem parece switch
         const candidates = list.filter(d => (d.components?.[0]?.capabilities||[]).some(c=> (c.id||c.capability)==='switch'))
         for (let i=0;i<candidates.length;i+=6){
           await Promise.all(candidates.slice(i,i+6).map(async d=>{
             try{
-              const f = await integrationsApi.tuyaFunctions(token, d.id) // { ok, result: { functions: [...] } }
+              const f = await integrationsApi.tuyaFunctions(token, d.id)
               const funcs = f?.result?.functions || []
-              // Tente achar um Boolean ligado a "switch"
               const onoff =
-                funcs.find(x => /^switch(_\d+)?$/.test(x.code) && x.type?.toLowerCase()==='bool') ||
-                funcs.find(x => x.code==='switch_led' && x.type?.toLowerCase()==='bool') ||
-                funcs.find(x => x.type?.toLowerCase()==='bool') // fallback: qualquer bool
-              if (onoff?.code){
-                setTuyaCodeMap(m => ({ ...m, [d.id]: onoff.code }))
-              }
-            }catch{/* ignore */}
+                funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase()==='bool') ||
+                funcs.find(x => x.code==='switch_led' && String(x.type).toLowerCase()==='bool') ||
+                funcs.find(x => String(x.type).toLowerCase()==='bool')
+              if (onoff?.code) setTuyaCodeMap(m => ({ ...m, [d.id]: onoff.code }))
+            }catch{}
           }))
         }
       }
@@ -107,22 +93,20 @@ export default function Dispositivos(){
 
   useEffect(()=>{ fetchDevices() }, [vendor])
 
-  useEffect(()=>{
-    (async()=>{
-      try{
-        const { token } = loadSession(); if (!token) return;
-        if (vendor==='smartthings'){
-          const s = await integrationsApi.stStatus(token)
-          const scopes = String(s?.scopes||'')
-          setCanControl(scopes.includes('devices:commands') || scopes.includes('x:devices:*'))
-        } else if (vendor==='tuya'){
-          setCanControl(true) // temos POST /tuya/commands
-        } else {
-          setCanControl(false)
-        }
-      }catch{}
-    })()
-  }, [vendor])
+  useEffect(()=>{ (async()=>{
+    try{
+      const { token } = loadSession(); if (!token) return
+      if (vendor==='smartthings'){
+        const s = await integrationsApi.stStatus(token)
+        const scopes = String(s?.scopes||'')
+        setCanControl(scopes.includes('devices:commands') || scopes.includes('x:devices:*'))
+      } else if (vendor==='tuya'){
+        setCanControl(true) // temos /tuya/commands
+      } else {
+        setCanControl(false)
+      }
+    }catch{}
+  })() }, [vendor])
 
   async function fetchStatus(id){
     try{
@@ -137,9 +121,9 @@ export default function Dispositivos(){
     const f = await integrationsApi.tuyaFunctions(token, id)
     const funcs = f?.result?.functions || []
     const onoff =
-      funcs.find(x => /^switch(_\d+)?$/.test(x.code) && x.type?.toLowerCase()==='bool') ||
-      funcs.find(x => x.code==='switch_led' && x.type?.toLowerCase()==='bool') ||
-      funcs.find(x => x.type?.toLowerCase()==='bool')
+      funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase()==='bool') ||
+      funcs.find(x => x.code==='switch_led' && String(x.type).toLowerCase()==='bool') ||
+      funcs.find(x => String(x.type).toLowerCase()==='bool')
     if (onoff?.code){
       setTuyaCodeMap(m => ({ ...m, [id]: onoff.code }))
       return onoff.code
@@ -157,15 +141,12 @@ export default function Dispositivos(){
         await fetchStatus(id)
 
       } else if (vendor === 'tuya'){
-        // impede comando se offline (UX melhor)
         const dev = items.find(x => x.id===id)
         if (dev && dev.online === false) throw new Error('Dispositivo offline')
 
-        // pega code do cache ou descobre
-        let code = tuyaCodeMap[id]
-        if (!code) code = await resolveTuyaCodeOnce(id)
+        let code = tuyaCodeMap[id] || await resolveTuyaCodeOnce(id)
         if (!code) {
-          // fallback clássico
+          // fallbacks clássicos (casos raros)
           const fallbacks = ['switch', 'switch_1', 'switch_led']
           let ok = false, lastErr = null
           for (const c of fallbacks){
@@ -179,8 +160,7 @@ export default function Dispositivos(){
         } else {
           await integrationsApi.tuyaSendCommands(token, id, [{ code, value: !!on }])
         }
-
-        // status otimista para refletir na UI
+        // status otimista
         setStatusMap(m => ({
           ...m,
           [id]: {
@@ -189,7 +169,6 @@ export default function Dispositivos(){
             }
           }
         }))
-
       } else {
         throw new Error('Comando não suportado para este fornecedor')
       }
@@ -198,7 +177,7 @@ export default function Dispositivos(){
   }
 
   const list = useMemo(()=>{
-    const qq = q.trim().toLowerCase();
+    const qq = q.trim().toLowerCase()
     let arr = items
       .filter(d => !vendor || String(d.vendor||'')===vendor)
       .filter(d => !qq || (String(d.name||'').toLowerCase().includes(qq) || String(d.id||'').includes(qq)))
@@ -248,11 +227,7 @@ export default function Dispositivos(){
           </div>
         )}
 
-        {err && (
-          <div className="text-red-600 text-sm mb-2">
-            {err}
-          </div>
-        )}
+        {err && <div className="text-red-600 text-sm mb-2">{err}</div>}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {list.map(d => {
@@ -269,12 +244,8 @@ export default function Dispositivos(){
                     {(d.deviceTypeName || d.manufacturer || d.category || 'Dispositivo')}
                   </div>
                   <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || (d.roomId ? d.roomId : '—')}</div>
-                  {d.vendor==='tuya' && d.online===false && (
-                    <div className="text-[11px] text-red-500 mt-1">Offline</div>
-                  )}
-                  {d.vendor==='tuya' && tuyaCodeMap[d.id] && (
-                    <div className="text-[11px] text-gray-500 mt-1">code: {tuyaCodeMap[d.id]}</div>
-                  )}
+                  {d.vendor==='tuya' && d.online===false && <div className="text-[11px] text-red-500 mt-1">Offline</div>}
+                  {d.vendor==='tuya' && tuyaCodeMap[d.id] && <div className="text-[11px] text-gray-500 mt-1">code: {tuyaCodeMap[d.id]}</div>}
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   {hasSwitch ? (
