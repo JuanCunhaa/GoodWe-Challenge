@@ -1760,23 +1760,23 @@ export function createRoutes(gw, dbApi) {
           const token = await ensureStAccess(user);
           const apiBase = (process.env.ST_API_BASE || 'https://api.smartthings.com/v1').replace(/\/$/, '');
 
-          // Modo simplificado: action on/off
+          // get device details (name + components) para acertar componente e já ter o nome
+          const rDev = await fetch(`${apiBase}/devices/${encodeURIComponent(device_id)}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000))
+          });
+          const dev = await rDev.json().catch(() => ({}));
+          const device_name = String(dev?.label || dev?.name || 'Dispositivo');
+
+          // modo simplificado on/off
           if (!capability && (action === 'on' || action === 'off')) {
-            // Tenta descobrir componente com 'switch'
-            const rDev = await fetch(`${apiBase}/devices/${encodeURIComponent(device_id)}`, {
-              headers: { 'Authorization': `Bearer ${token}` },
-              signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000))
-            });
-            const dev = await rDev.json().catch(() => ({}));
             let compId = 'main';
             const comps = Array.isArray(dev?.components) ? dev.components : [];
             for (const c of comps) {
               const caps = (c?.capabilities || []).map(x => x?.id || x?.capability || '');
               if (caps.includes('switch')) { compId = c?.id || 'main'; break; }
             }
-            capability = 'switch';
-            command = action;
-            component = compId;
+            capability = 'switch'; command = action; component = compId;
           }
 
           const payload = {
@@ -1796,8 +1796,26 @@ export function createRoutes(gw, dbApi) {
           });
           const j = await r.json().catch(() => ({}));
           if (!r.ok) return { ok: false, status: r.status, error: 'smartthings command failed', details: j };
-          return { ok: true, result: j };
+
+          // lê status pós-comando p/ confirmar
+          let state = '';
+          try {
+            const rSt = await fetch(`${apiBase}/devices/${encodeURIComponent(device_id)}/status`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+              signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000))
+            });
+            const st = await rSt.json().catch(() => ({}));
+            const sw = st?.components?.main?.switch?.switch?.value;
+            if (sw === 'on' || sw === 'off') state = sw;
+          } catch { }
+
+          // ação inferida (on/off) se não veio explicitamente
+          const inferredAction = (action || command || '').toLowerCase();
+          const finalAction = (inferredAction === 'on' || inferredAction === 'off') ? inferredAction : (state || '');
+
+          return { ok: true, result: j, device_id, device_name, action: finalAction, state };
         },
+
 
         // --- TUYA ---
         async tuya_list_devices() {
@@ -1837,14 +1855,39 @@ export function createRoutes(gw, dbApi) {
           const token = await tuyaEnsureAppToken();
           const id = String(device_id);
           const act = String(action).toLowerCase();
+
+          // (opcional) tentar nome do device
+          let device_name = 'Dispositivo';
+          try {
+            const { uid } = await ensureTuyaLinkedUser(user);
+            let r = await tuyaSignAndFetch(`/v1.0/users/${encodeURIComponent(uid)}/devices`, { method: 'GET', accessToken: token });
+            if (!(r.status === 200 && r.json?.success === true)) {
+              r = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(uid)}/devices`, { method: 'GET', accessToken: token });
+            }
+            const items = Array.isArray(r?.json?.result) ? r.json.result : [];
+            const found = items.find(d => (String(d.id || d.uuid || '') === id));
+            if (found) device_name = String(found.name || 'Dispositivo');
+          } catch { }
+
           const code = await tuyaFindSwitchCode(id, token);
           if (!code) return { ok: false, error: 'no switch code found for this device' };
+
           const payload = { commands: [{ code, value: act === 'on' }] };
           const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/commands`;
           const { status, json } = await tuyaSignAndFetch(path, { method: 'POST', bodyObj: payload, accessToken: token });
           if (status !== 200 || json?.success !== true) return { ok: false, status, error: 'tuya command failed', details: json || {} };
-          return { ok: true, result: json?.result, code };
+
+          // confirma status
+          let state = '';
+          try {
+            const list = await tuyaGetStatus(id, token);
+            const map = Object.fromEntries(list.map(it => [it.code, it.value]));
+            state = map[code] ? 'on' : 'off';
+          } catch { }
+
+          return { ok: true, result: json?.result, device_id: id, device_name, action: act, state, code };
         },
+
 
       };
 
@@ -1867,12 +1910,12 @@ export function createRoutes(gw, dbApi) {
         { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string', 'null'] } }, required: ['id'], additionalProperties: false } },
         { name: 'debug_auth', description: 'Info de autenticação GoodWe no servidor (token/cookies mascarados)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuário atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'st_device_status', description: 'Status de um dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'st_command', description: 'Envia comando para um dispositivo SmartThings. Use action on/off para simplificar.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] }, component: { type: 'string' }, capability: { type: 'string' }, command: { type: 'string' }, args: { type: 'array', items: {} } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya do usuário (via UID vinculado).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'tuya_device_status', description: 'Status (on/off + mapa bruto) de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya (auto-detecta o code do switch).', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] } }, required: ['device_id', 'action'], additionalProperties: false } },
+        { name: 'st_list_devices', description: 'Lista dispositivos vinculados do SmartThings.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_device_status', description: 'Status do dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'st_command', description: 'Envia comando p/ SmartThings (on/off simples ou capability/command).', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] }, component: { type: 'string' }, capability: { type: 'string' }, command: { type: 'string' }, args: { type: ['array', 'string', 'number', 'boolean', 'null'] } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'tuya_list_devices', description: 'Lista dispositivos vinculados do Tuya.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'tuya_device_status', description: 'Status do dispositivo Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'tuya_command', description: 'Liga/desliga um dispositivo Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] } }, required: ['device_id', 'action'], additionalProperties: false } },
         { name: 'cross_login_raw', description: 'Retorna JSON cru do CrossLogin SEMS', parameters: { type: 'object', properties: { version: { type: 'string' } }, additionalProperties: false } },
       ];
 
@@ -1880,6 +1923,7 @@ export function createRoutes(gw, dbApi) {
 Use ferramentas registradas sempre que a pergunta demandar dados reais (renda, geração, métricas, status, etc.).
 Não invente valores. Se faltar permissão/credencial, peça para o usuário conectar/entrar.
 Ao responder métricas, informe apenas o período (ex.: Hoje, Ontem, Esta Semana, Este Mês, Total), sem incluir a data por extenso ou o local/origem dos dados (não cite endpoints, APIs ou fontes técnicas).
+Quando executar um comando de dispositivo (SmartThings/Tuya), SEMPRE confirme em linguagem natural no fim: "Dispositivo {nome} ligado/desligado com sucesso." Se possível, valide o estado pós-comando e reflita o resultado.
 Seja breve, direto e útil. Liste passos acionáveis quando fizer sentido.
 Idioma padrão: pt-BR; use o tom do produto; não exponha segredos.
 Nunca utilize o caractere ** em nenhuma resposta.
@@ -1890,6 +1934,7 @@ EUR para BRL: 6.00
 GBP para BRL: 7.00
 CNY para BRL: 0.80
 Exemplo: " US$ 10 = R$ 55,00"`;
+
       const messages = [
         { role: 'system', content: SYSTEM_PROMPT },
         ...prev.filter(m => m && m.role && m.content),
@@ -1972,12 +2017,12 @@ Exemplo: " US$ 10 = R$ 55,00"`;
         { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string', 'null'] } }, required: ['id'], additionalProperties: false } },
         { name: 'debug_auth', description: 'Info de autenticação GoodWe no servidor (token/cookies mascarados)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuário atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'st_device_status', description: 'Status de um dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'st_command', description: 'Envia comando para um dispositivo SmartThings. Use action on/off para simplificar.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] }, component: { type: 'string' }, capability: { type: 'string' }, command: { type: 'string' }, args: { type: 'array', items: {} } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya do usuário (via UID vinculado).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'tuya_device_status', description: 'Status (on/off + mapa bruto) de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya (auto-detecta o code do switch).', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] } }, required: ['device_id', 'action'], additionalProperties: false } },
+        { name: 'st_list_devices', description: 'Lista dispositivos vinculados do SmartThings.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_device_status', description: 'Status do dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'st_command', description: 'Envia comando p/ SmartThings (on/off simples ou capability/command).', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] }, component: { type: 'string' }, capability: { type: 'string' }, command: { type: 'string' }, args: { type: ['array', 'string', 'number', 'boolean', 'null'] } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'tuya_list_devices', description: 'Lista dispositivos vinculados do Tuya.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'tuya_device_status', description: 'Status do dispositivo Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'tuya_command', description: 'Liga/desliga um dispositivo Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] } }, required: ['device_id', 'action'], additionalProperties: false } },
         { name: 'cross_login_raw', description: 'Retorna JSON cru do CrossLogin SEMS', parameters: { type: 'object', properties: { version: { type: 'string' } }, additionalProperties: false } },
       ];
       res.json({ items });
