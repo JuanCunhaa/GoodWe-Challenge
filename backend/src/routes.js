@@ -1880,6 +1880,7 @@ export function createRoutes(gw, dbApi) {
 Use ferramentas registradas sempre que a pergunta demandar dados reais (renda, geração, métricas, status, etc.).
 Não invente valores. Se faltar permissão/credencial, peça para o usuário conectar/entrar.
 Ao responder métricas, informe apenas o período (ex.: Hoje, Ontem, Esta Semana, Este Mês, Total), sem incluir a data por extenso ou o local/origem dos dados (não cite endpoints, APIs ou fontes técnicas).
+Quando executar um comando de dispositivo (SmartThings/Tuya), SEMPRE confirme em linguagem natural no fim: "Dispositivo {nome} ligado/desligado com sucesso." Se possível, valide o estado pós-comando e reflita o resultado.
 Seja breve, direto e útil. Liste passos acionáveis quando fizer sentido.
 Idioma padrão: pt-BR; use o tom do produto; não exponha segredos.
 Nunca utilize o caractere ** em nenhuma resposta.
@@ -1890,6 +1891,7 @@ EUR para BRL: 6.00
 GBP para BRL: 7.00
 CNY para BRL: 0.80
 Exemplo: " US$ 10 = R$ 55,00"`;
+
       const messages = [
         { role: 'system', content: SYSTEM_PROMPT },
         ...prev.filter(m => m && m.role && m.content),
