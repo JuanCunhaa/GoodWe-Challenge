@@ -1576,16 +1576,56 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const token = await tuyaEnsureAppToken()
       const id = String(req.params.id || '').trim()
       if (!id) return res.status(400).json({ ok: false, error: 'device id required' })
-      const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/status`
-      const { status, json } = await tuyaSignAndFetch(path, { method: 'GET', accessToken: token })
-      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false })
-      res.json({ ok: true, result: json.result || [] })
+
+      // 1) pega status bruto
+      const statusPath = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/status`
+      const s = await tuyaSignAndFetch(statusPath, { method: 'GET', accessToken: token })
+      if (s.status !== 200 || s.json?.success !== true) return res.status(s.status).json(s.json || { ok: false })
+      const arr = Array.isArray(s.json?.result) ? s.json.result : []
+
+      // 2) decide qual "code" representa on/off
+      let code = null
+      const known = ['switch', 'switch_1', 'switch_led', 'power']
+      for (const k of known) { if (arr.some(x => x?.code === k)) { code = k; break } }
+
+      // 3) se não achou, consulta as "functions" e tenta inferir
+      if (!code) {
+        const fnPath = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/functions`
+        const f = await tuyaSignAndFetch(fnPath, { method: 'GET', accessToken: token })
+        const funcs = f?.json?.result?.functions || []
+        const onoff =
+          funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase() === 'bool') ||
+          funcs.find(x => x.code === 'switch_led' && String(x.type).toLowerCase() === 'bool') ||
+          funcs.find(x => x.code === 'power' && String(x.type).toLowerCase() === 'bool') ||
+          funcs.find(x => String(x.type).toLowerCase() === 'bool')
+        if (onoff?.code) code = onoff.code
+      }
+
+      // 4) extrai valor e normaliza para { components.main.switch.switch.value: "on"|"off" }
+      const entry = code ? arr.find(x => x?.code === code) : null
+      const v = entry?.value
+      const isOn = (v === true) ||
+        (v === 1) ||
+        (String(v).toLowerCase() === 'true') ||
+        (String(v).toLowerCase() === 'on')
+      const value = (entry == null) ? '' : (isOn ? 'on' : 'off')
+
+      const normalized = {
+        components: {
+          main: {
+            switch: { switch: { value } }
+          }
+        }
+      }
+
+      res.json({ ok: true, code: code || '', status: normalized })
     } catch (e) {
       const code = String(e?.code || '')
       if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() })
       res.status(500).json({ ok: false, error: String(e?.message || e) })
     }
   })
+
 
   // Envia comandos genéricos: body { device_id, commands: [{ code, value }] }
   router.post('/tuya/commands', async (req, res) => {
@@ -1597,15 +1637,33 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const commands = Array.isArray(req.body?.commands) ? req.body.commands : []
       if (!id || commands.length === 0) return res.status(400).json({ ok: false, error: 'device_id and commands required' })
       const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/commands`
-      const { status, json } = await tuyaSignAndFetch(path, { method: 'POST', bodyObj: { commands }, accessToken: token })
-      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false })
-      res.json({ ok: true, result: json.result })
+      const r = await tuyaSignAndFetch(path, { method: 'POST', bodyObj: { commands }, accessToken: token })
+      if (r.status !== 200 || r.json?.success !== true) return res.status(r.status).json(r.json || { ok: false })
+
+      // (opcional) leitura do status normalizado logo após o comando
+      const statusPath = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/status`
+      const s = await tuyaSignAndFetch(statusPath, { method: 'GET', accessToken: token })
+      let normalized = null
+      if (s.status === 200 && s.json?.success === true) {
+        const arr = Array.isArray(s.json?.result) ? s.json.result : []
+        const known = ['switch', 'switch_1', 'switch_led', 'power']
+        let code = known.find(k => arr.some(x => x?.code === k)) || ''
+        const entry = code ? arr.find(x => x?.code === code) : null
+        const v = entry?.value
+        const isOn = (v === true) || (v === 1) ||
+          (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on')
+        const value = (entry == null) ? '' : (isOn ? 'on' : 'off')
+        normalized = { components: { main: { switch: { switch: { value } } } } }
+      }
+
+      res.json({ ok: true, result: r.json?.result, status: normalized })
     } catch (e) {
       const code = String(e?.code || '')
       if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() })
       res.status(500).json({ ok: false, error: String(e?.message || e) })
     }
   })
+
   // ========== Fim Tuya ==========
 
 

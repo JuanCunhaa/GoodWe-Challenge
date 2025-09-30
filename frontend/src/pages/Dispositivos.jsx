@@ -71,7 +71,8 @@ export default function Dispositivos(){
         setItems(list)
         setRooms({})
         setStatusMap({})
-        // pré-descobre code on/off para quem parece switch
+
+        // 1) pré-descobre code on/off para quem parece switch
         const candidates = list.filter(d => (d.components?.[0]?.capabilities||[]).some(c=> (c.id||c.capability)==='switch'))
         for (let i=0;i<candidates.length;i+=6){
           await Promise.all(candidates.slice(i,i+6).map(async d=>{
@@ -81,10 +82,19 @@ export default function Dispositivos(){
               const onoff =
                 funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase()==='bool') ||
                 funcs.find(x => x.code==='switch_led' && String(x.type).toLowerCase()==='bool') ||
+                funcs.find(x => x.code==='power' && String(x.type).toLowerCase()==='bool') ||
                 funcs.find(x => String(x.type).toLowerCase()==='bool')
               if (onoff?.code) setTuyaCodeMap(m => ({ ...m, [d.id]: onoff.code }))
             }catch{}
           }))
+        }
+
+        // 2) carrega STATUS real para quem tem switch (lotes de 6)
+        const ids = list
+          .filter(d => (d.components?.[0]?.capabilities||[]).some(c => (c.id||c.capability)==='switch'))
+          .map(d => d.id)
+        for (let i=0;i<ids.length;i+=6){
+          await Promise.all(ids.slice(i,i+6).map(id => fetchTuyaStatus(id)))
         }
       }
     }catch(e){ setErr(String(e.message||e)) }
@@ -116,6 +126,14 @@ export default function Dispositivos(){
     }catch{}
   }
 
+  async function fetchTuyaStatus(id){
+    try{
+      const { token } = loadSession(); if (!token) return
+      const j = await integrationsApi.tuyaDeviceStatus(token, id) // { ok, code, status }
+      if (j?.status) setStatusMap(m => ({ ...m, [id]: j.status }))
+    }catch{}
+  }
+
   async function resolveTuyaCodeOnce(id){
     const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
     const f = await integrationsApi.tuyaFunctions(token, id)
@@ -123,6 +141,7 @@ export default function Dispositivos(){
     const onoff =
       funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase()==='bool') ||
       funcs.find(x => x.code==='switch_led' && String(x.type).toLowerCase()==='bool') ||
+      funcs.find(x => x.code==='power' && String(x.type).toLowerCase()==='bool') ||
       funcs.find(x => String(x.type).toLowerCase()==='bool')
     if (onoff?.code){
       setTuyaCodeMap(m => ({ ...m, [id]: onoff.code }))
@@ -144,10 +163,10 @@ export default function Dispositivos(){
         const dev = items.find(x => x.id===id)
         if (dev && dev.online === false) throw new Error('Dispositivo offline')
 
+        // usa code cacheado/descoberto; se não tiver, tenta descobrir agora; se não, fallbacks
         let code = tuyaCodeMap[id] || await resolveTuyaCodeOnce(id)
         if (!code) {
-          // fallbacks clássicos (casos raros)
-          const fallbacks = ['switch', 'switch_1', 'switch_led']
+          const fallbacks = ['switch', 'switch_1', 'switch_led', 'power']
           let ok = false, lastErr = null
           for (const c of fallbacks){
             try{
@@ -160,15 +179,10 @@ export default function Dispositivos(){
         } else {
           await integrationsApi.tuyaSendCommands(token, id, [{ code, value: !!on }])
         }
-        // status otimista
-        setStatusMap(m => ({
-          ...m,
-          [id]: {
-            components: {
-              [component || 'main']: { switch: { switch: { value: on ? 'on' : 'off' } } }
-            }
-          }
-        }))
+
+        // após enviar, busca STATUS real (sem otimista)
+        await fetchTuyaStatus(id)
+
       } else {
         throw new Error('Comando não suportado para este fornecedor')
       }
