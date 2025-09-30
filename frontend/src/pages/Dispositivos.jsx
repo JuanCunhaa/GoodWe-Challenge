@@ -15,7 +15,9 @@ export default function Dispositivos(){
   const [room, setRoom] = useState('')
 
   // cache do "code" ON/OFF por device Tuya
-  const [tuyaCodeMap, setTuyaCodeMap] = useState({})
+  const [tuyaCodeMap, setTuyaCodeMap] = useState({}) // { [id]: 'switch' | 'switch_1' | ... }
+  // cache do schema por device Tuya: { [id]: { [code]: { type, valuesRaw, valuesParsed } } }
+  const [tuyaFuncMap, setTuyaFuncMap] = useState({})
 
   function normalizeTuyaDevice(d){
     const id = String(d.id || d.uuid || '')
@@ -71,19 +73,36 @@ export default function Dispositivos(){
         setItems(list)
         setRooms({})
         setStatusMap({})
+        setTuyaFuncMap({})
 
-        // 1) pré-descobre code on/off para quem parece switch
+        // 1) pré-descobre code on/off e schema para quem parece switch
         const candidates = list.filter(d => (d.components?.[0]?.capabilities||[]).some(c=> (c.id||c.capability)==='switch'))
         for (let i=0;i<candidates.length;i+=6){
           await Promise.all(candidates.slice(i,i+6).map(async d=>{
             try{
               const f = await integrationsApi.tuyaFunctions(token, d.id)
               const funcs = f?.result?.functions || []
+              // guarda schema
+              setTuyaFuncMap(m => {
+                const mm = { ...(m[d.id]||{}) }
+                for (const fn of funcs){
+                  mm[fn.code] = {
+                    type: String(fn.type||'').toLowerCase(), // 'boolean' | 'enum' | 'integer' ...
+                    valuesRaw: fn.values || '',
+                    valuesParsed: safeParse(fn.values)
+                  }
+                }
+                return { ...m, [d.id]: mm }
+              })
+              // escolhe um code provável de on/off
               const onoff =
                 funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase()==='bool') ||
                 funcs.find(x => x.code==='switch_led' && String(x.type).toLowerCase()==='bool') ||
                 funcs.find(x => x.code==='power' && String(x.type).toLowerCase()==='bool') ||
-                funcs.find(x => String(x.type).toLowerCase()==='bool')
+                // às vezes é enum 'on'/'off'
+                funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase()==='enum') ||
+                funcs.find(x => x.code==='switch_led' && String(x.type).toLowerCase()==='enum') ||
+                funcs.find(x => x.code==='power' && String(x.type).toLowerCase()==='enum')
               if (onoff?.code) setTuyaCodeMap(m => ({ ...m, [d.id]: onoff.code }))
             }catch{}
           }))
@@ -131,18 +150,76 @@ export default function Dispositivos(){
       const { token } = loadSession(); if (!token) return
       const j = await integrationsApi.tuyaDeviceStatus(token, id) // { ok, code, status }
       if (j?.status) setStatusMap(m => ({ ...m, [id]: j.status }))
+      if (j?.code && !tuyaCodeMap[id]) setTuyaCodeMap(m => ({ ...m, [id]: j.code }))
     }catch{}
+  }
+
+  function safeParse(s){
+    try{
+      if (!s || typeof s !== 'string') return null
+      return JSON.parse(s)
+    }catch{ return null }
+  }
+
+  function makeTuyaValue(id, code, on){
+    // Escolhe o valor adequado baseado no schema do code
+    const devMap = tuyaFuncMap[id] || {}
+    const fn = devMap[code]
+    const t = String(fn?.type||'').toLowerCase()
+    const parsed = fn?.valuesParsed
+
+    if (t === 'boolean' || t === 'bool') {
+      return !!on
+    }
+    if (t === 'enum') {
+      // Ex.: {"range":["on","off"]} ou ["off","on"] dependendo do produto
+      const range = Array.isArray(parsed?.range) ? parsed.range.map(x=>String(x)) : []
+      if (range.includes('on') && range.includes('off')) {
+        return on ? 'on' : 'off'
+      }
+      // se não tiver on/off, tenta primeiro/segundo como on/off
+      if (range.length >= 2) return on ? String(range[0]) : String(range[1])
+      // fallback seguro:
+      return on ? 'on' : 'off'
+    }
+    if (t === 'integer' || t === 'value') {
+      // Alguns produtos usam 1/0 como inteiro
+      const min = Number(parsed?.min ?? 0)
+      const max = Number(parsed?.max ?? 1)
+      if (min === 0 && max === 1) return on ? 1 : 0
+      // fallback: 1/0
+      return on ? 1 : 0
+    }
+    // sem schema → tente boolean
+    return !!on
   }
 
   async function resolveTuyaCodeOnce(id){
     const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
     const f = await integrationsApi.tuyaFunctions(token, id)
     const funcs = f?.result?.functions || []
+
+    // popula funcMap
+    setTuyaFuncMap(m => {
+      const mm = { ...(m[id]||{}) }
+      for (const fn of funcs){
+        mm[fn.code] = {
+          type: String(fn.type||'').toLowerCase(),
+          valuesRaw: fn.values || '',
+          valuesParsed: safeParse(fn.values)
+        }
+      }
+      return { ...m, [id]: mm }
+    })
+
     const onoff =
       funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase()==='bool') ||
       funcs.find(x => x.code==='switch_led' && String(x.type).toLowerCase()==='bool') ||
       funcs.find(x => x.code==='power' && String(x.type).toLowerCase()==='bool') ||
-      funcs.find(x => String(x.type).toLowerCase()==='bool')
+      funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase()==='enum') ||
+      funcs.find(x => x.code==='switch_led' && String(x.type).toLowerCase()==='enum') ||
+      funcs.find(x => x.code==='power' && String(x.type).toLowerCase()==='enum')
+
     if (onoff?.code){
       setTuyaCodeMap(m => ({ ...m, [id]: onoff.code }))
       return onoff.code
@@ -163,24 +240,27 @@ export default function Dispositivos(){
         const dev = items.find(x => x.id===id)
         if (dev && dev.online === false) throw new Error('Dispositivo offline')
 
-        // usa code cacheado/descoberto; se não tiver, tenta descobrir agora; se não, fallbacks
+        // code via cache/schema; se não houver, resolve agora
         let code = tuyaCodeMap[id] || await resolveTuyaCodeOnce(id)
-        if (!code) {
-          const fallbacks = ['switch', 'switch_1', 'switch_led', 'power']
-          let ok = false, lastErr = null
-          for (const c of fallbacks){
-            try{
-              await integrationsApi.tuyaSendCommands(token, id, [{ code: c, value: !!on }])
-              code = c; ok = true; break
-            }catch(e){ lastErr = e }
-          }
-          if (!ok) throw lastErr || new Error('Não foi possível determinar o code de on/off')
-          setTuyaCodeMap(m => ({ ...m, [id]: code }))
-        } else {
-          await integrationsApi.tuyaSendCommands(token, id, [{ code, value: !!on }])
-        }
 
-        // após enviar, busca STATUS real (sem otimista)
+        // Se ainda não tiver code, tenta fallbacks de mercado
+        const fallbackCodes = ['switch', 'switch_1', 'switch_led', 'power']
+        const codesToTry = code ? [code, ...fallbackCodes.filter(c=>c!==code)] : fallbackCodes
+
+        let sent = false, lastErr = null
+        for (const c of codesToTry){
+          try{
+            const value = makeTuyaValue(id, c, on)
+            await integrationsApi.tuyaSendCommands(token, id, [{ code: c, value }])
+            // cacheia o code que funcionou
+            if (!tuyaCodeMap[id]) setTuyaCodeMap(m => ({ ...m, [id]: c }))
+            sent = true
+            break
+          }catch(e){ lastErr = e }
+        }
+        if (!sent) throw lastErr || new Error('Falha ao enviar comando')
+
+        // pega STATUS real após enviar
         await fetchTuyaStatus(id)
 
       } else {
