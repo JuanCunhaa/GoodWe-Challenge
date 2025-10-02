@@ -32,7 +32,9 @@ export function registerTtsRoutes(router, { helpers }) {
 
   router.all('/tts', async (req, res) => {
     const raw = req.method === 'GET' ? String(req.query?.text || '') : String(req.body?.text || '');
-    const text = (raw && typeof raw.normalize === 'function') ? raw.normalize('NFC').trim() : String(raw).trim();
+    let text = (raw && typeof raw.normalize === 'function') ? raw.normalize('NFC').trim() : String(raw).trim();
+    // Sanitizar caracteres problemáticos para TTS (ex.: '*')
+    if (text.includes('*')) text = text.replace(/\*/g, '');
     if (!text) return res.status(400).json({ ok: false, error: 'text is required' });
 
     const key = cacheKey(text);
@@ -107,4 +109,3 @@ export function registerTtsRoutes(router, { helpers }) {
     return res.status(501).json({ ok: false, error: 'TTS not configured. Set PIPER_PATH and PIPER_VOICE, or PIPER_HTTP_URL/TTS_SERVER_URL.' });
   });
 }
-

@@ -123,7 +123,11 @@ export default function Dispositivos(){
             const st = statusMap[d.id]
             const hasSwitch = caps.includes('switch')
             const comp = getSwitchComponent(d)
-            const isOn = String(st?.components?.[comp]?.switch?.switch?.value||'').toLowerCase()==='on'
+            const rawVal = st?.components?.[comp]?.switch?.switch?.value
+            let isOn = false
+            if (typeof rawVal === 'string') isOn = rawVal.toLowerCase() === 'on'
+            else if (typeof rawVal === 'boolean') isOn = !!rawVal
+            else if (typeof rawVal === 'number') isOn = rawVal === 1
 
             return (
               <div key={d.id} className="panel h-full flex flex-col gap-2">
@@ -132,7 +136,7 @@ export default function Dispositivos(){
                   <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||d.category||''}>
                     {(d.deviceTypeName || d.manufacturer || d.category || 'Dispositivo')}
                   </div>
-                  <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || (d.roomId ? d.roomId : '—')}</div>
+                  <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || 'Não especificado'}</div>
                   {d.vendor==='tuya' && d.online===false && <div className="text-[11px] text-red-500 mt-1">Offline</div>}
                 </div>
                 <div className="mt-1 flex items-center gap-2">

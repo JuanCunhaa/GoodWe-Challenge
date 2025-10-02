@@ -128,7 +128,16 @@
         async cross_login() { const a = await gw.crossLogin(); return { api_base: a.api_base, uid: a.uid, timestamp: a.timestamp }; },
 
         // SmartThings tools (via internal API)
-        async st_list_devices() { const j = await apiJson('/smartthings/devices'); return { items: j.items || [], total: j.total || 0 }; },
+        async st_list_devices() {
+          const j = await apiJson('/smartthings/devices');
+          let rooms = {};
+          try {
+            const r = await apiJson('/smartthings/rooms');
+            rooms = Object.fromEntries((Array.isArray(r.items)? r.items: []).map(it => [it.id, it.name || '']));
+          } catch {}
+          const items = (j.items || []).map(d => ({ ...d, roomName: rooms[d.roomId] || '' }));
+          return { items, total: items.length };
+        },
         async st_device_status({ device_id }) { if (!device_id) throw new Error('device_id required'); return await apiJson(`/smartthings/device/${encodeURIComponent(device_id)}/status`); },
         async st_command({ device_id, action, component }) {
           if (!device_id || !action) throw new Error('device_id and action required');
@@ -169,7 +178,7 @@
         { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string','null'] } }, required: ['id'], additionalProperties: false } },
         { name: 'debug_auth', description: 'Info GoodWe (mascarado)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuÃ¡rio atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuário atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'st_device_status', description: 'Status de um dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
         { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] }, component: { type: 'string' } }, required: ['device_id','action'], additionalProperties: false } },
         { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya (UID vinculado).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -178,6 +187,11 @@
       ];
 
       const messages = [ { role: 'system', content: `VocÃª Ã© o Assistente Virtual deste painel. Siga as regras:\nUse ferramentas registradas sempre que a pergunta demandar dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status, etc.).\nNÃ£o invente valores. Se faltar permissÃ£o/credencial, peÃ§a para o usuÃ¡rio conectar/entrar.\nAo responder mÃ©tricas, informe apenas o perÃ­odo (ex.: Hoje, Ontem, Esta Semana, Este MÃªs, Total).\nSeja breve e Ãºtil.\nIdioma: pt-BR; nÃ£o exponha segredos.\nNÃ£o utilize "*" em nenhuma resposta.` }, ...prev.filter(m => m && m.role && m.content), input ? { role: 'user', content: input } : null ].filter(Boolean);
+
+      // Regras adicionais fortes (sem depender do texto original com acentuação)
+      try {
+        messages.unshift({ role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos (SmartThings/Tuya), responda apenas os nomes, um por linha.' });
+      } catch {}
 
       const steps = [];
       let assistantMsg = null;
@@ -203,6 +217,14 @@
         assistantMsg = msg; break;
       }
       let answer = assistantMsg?.content || '';
+      // Se houve listagem de dispositivos, retorne somente os nomes (um por linha)
+      try {
+        const listStep = steps.find(s => s && s.ok && (s.name === 'st_list_devices' || s.name === 'tuya_list_devices'));
+        if (listStep && listStep.result && Array.isArray(listStep.result.items)) {
+          const names = listStep.result.items.map(d => String(d?.name || '').trim()).filter(Boolean);
+          if (names.length) answer = names.join('\n');
+        }
+      } catch {}
       try {
         const cmd = steps.find(s => s && s.ok && (s.name === 'st_command' || s.name === 'tuya_command'));
         if (cmd) {
@@ -213,6 +235,10 @@
           if (!answer || !/\b(ligado|desligado)\b/i.test(answer)) { answer = answer ? `${answer}\n${label}` : label; }
         }
       } catch {}
+      // Sanitização final: remover asteriscos (evita bold/markdown e problemas no TTS)
+      if (typeof answer === 'string' && answer.includes('*')) {
+        answer = answer.replace(/\*/g, '');
+      }
       res.json({ ok: true, answer, steps });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
@@ -242,4 +268,5 @@
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
 }
+
 
