@@ -140,7 +140,49 @@ const openapi = {
       get: { tags: ['Assistant'], summary: 'Assistant service availability', responses: { '200': { description: 'OK' } } },
     },
     '/assistant/tools': {
-      get: { tags: ['Assistant'], summary: 'List assistant tool descriptors', responses: { '200': { description: 'OK' } } },
+      get: {
+        tags: ['Assistant'],
+        summary: 'List assistant tool descriptors',
+        responses: {
+          '200': {
+            description: 'OK',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object', properties: { items: { type: 'array', items: { type: 'object' } } }
+                },
+                example: {
+                  items: [
+                    { name: 'get_income_today' },
+                    { name: 'get_total_income' },
+                    { name: 'get_generation' },
+                    { name: 'get_monitor' },
+                    { name: 'get_inverters' },
+                    { name: 'get_weather' },
+                    { name: 'get_powerflow' },
+                    { name: 'get_evcharger_count' },
+                    { name: 'get_plant_detail' },
+                    { name: 'get_chart_by_plant' },
+                    { name: 'get_power_chart' },
+                    { name: 'get_warnings' },
+                    { name: 'list_powerstations' },
+                    { name: 'set_powerstation_name' },
+                    { name: 'debug_auth' },
+                    { name: 'cross_login' },
+                    { name: 'st_list_devices' },
+                    { name: 'st_device_status' },
+                    { name: 'st_command' },
+                    { name: 'st_find_device_room' },
+                    { name: 'tuya_list_devices' },
+                    { name: 'tuya_device_status' },
+                    { name: 'tuya_command' },
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
     },
     '/assistant/help': {
       get: { tags: ['Assistant'], summary: 'Return system prompt/guidance', responses: { '200': { description: 'OK' } } },

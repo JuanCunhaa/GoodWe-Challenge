@@ -122,12 +122,26 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       if (Object.keys(uidMap).length === 0 && uid) uidMap[String(uid)] = 'default'
       const aggregate = []
       for (const [uidVal, label] of Object.entries(uidMap)) {
-        const q = `page_no=1&page_size=100&uid=${encodeURIComponent(uidVal)}`
-        const r = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method:'GET', query: q, accessToken: token })
-        if (r.status === 200 && r.json?.success === true) {
-          const list = Array.isArray(r.json?.result?.list) ? r.json.result.list : []
-          for (const d of list) aggregate.push({ ...d, _app: label })
+        // 1) Preferred: users/{uid}/devices
+        let list = []
+        {
+          const q = `page_no=1&page_size=100`
+          const r = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(uidVal)}/devices`, { method:'GET', query: q, accessToken: token })
+          if (r.status === 200 && r.json?.success === true) {
+            const res = r.json?.result
+            list = Array.isArray(res?.list) ? res.list : (Array.isArray(res?.devices) ? res.devices : [])
+          }
         }
+        // 2) Fallback: /devices?uid=
+        if (!list || list.length === 0) {
+          const q2 = `page_no=1&page_size=100&uid=${encodeURIComponent(uidVal)}`
+          const r2 = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method:'GET', query: q2, accessToken: token })
+          if (r2.status === 200 && r2.json?.success === true) {
+            const res2 = r2.json?.result
+            list = Array.isArray(res2?.list) ? res2.list : []
+          }
+        }
+        for (const d of (list || [])) aggregate.push({ ...d, _app: label })
       }
       const seen = new Set(); const items = []
       for (const d of aggregate) { const id = String(d?.id || d?.uuid || ''); if (!id) continue; if (seen.has(id)) continue; seen.add(id); items.push(d) }
