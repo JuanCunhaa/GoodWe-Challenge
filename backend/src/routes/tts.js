@@ -30,6 +30,71 @@ export function registerTtsRoutes(router, { helpers }) {
   function cacheGet(key) { if (!TTS_CACHE_MAX) return null; const it = ttsCache.get(key); if (!it) return null; if (Date.now() >= it.exp) { ttsCache.delete(key); return null; } return it.buf; }
   function cacheSet(key, buf) { if (!TTS_CACHE_MAX || !buf) return; ttsCache.set(key, { buf, exp: Date.now() + TTS_CACHE_TTL_MS }); if (ttsCache.size > TTS_CACHE_MAX) { const firstKey = ttsCache.keys().next().value; if (firstKey) ttsCache.delete(firstKey); } }
 
+  // Try to auto-detect bundled Piper if env vars are not set
+  async function detectBundledPiper() {
+    try {
+      const fs2 = await import('node:fs/promises');
+      const path2 = await import('node:path');
+      const cwd = process.cwd();
+      const candidates = [
+        path2.resolve(cwd, '../piper'), // repo root piper/
+        path2.resolve(cwd, 'vendor/piper'), // backend/vendor/piper
+      ];
+      async function findExe(root) {
+        const exeNames = process.platform === 'win32' ? ['piper.exe', 'piper'] : ['piper', 'piper-linux', 'piper-amd64'];
+        const stack = [root];
+        const seen = new Set();
+        while (stack.length) {
+          const dir = stack.shift();
+          if (!dir || seen.has(dir)) continue; seen.add(dir);
+          let entries = [];
+          try { entries = await fs2.readdir(dir, { withFileTypes: true }); } catch { continue; }
+          for (const ent of entries) {
+            const full = path2.join(dir, ent.name);
+            if (ent.isFile() && exeNames.includes(ent.name)) return full;
+          }
+          for (const ent of entries) if (ent.isDirectory()) stack.push(path2.join(dir, ent.name));
+        }
+        return '';
+      }
+      async function findVoice(root) {
+        const stack = [root];
+        const seen = new Set();
+        let best = '';
+        while (stack.length) {
+          const dir = stack.shift();
+          if (!dir || seen.has(dir)) continue; seen.add(dir);
+          let entries = [];
+          try { entries = await fs2.readdir(dir, { withFileTypes: true }); } catch { continue; }
+          for (const ent of entries) {
+            const full = path2.join(dir, ent.name);
+            if (ent.isFile() && /\.onnx$/i.test(ent.name)) {
+              if (/pt[_-]?br/i.test(ent.name)) return full; // prefer pt-BR
+              if (!best) best = full;
+            }
+          }
+          for (const ent of entries) if (ent.isDirectory()) stack.push(path2.join(dir, ent.name));
+        }
+        return best;
+      }
+      let exe = '';
+      for (const root of candidates) { if (exe) break; exe = await findExe(root); }
+      if (!exe) return { piperPath: '', voicePath: '', voiceJson: '' };
+      const voice = await findVoice(path2.dirname(exe));
+      let vjson = '';
+      if (voice) {
+        const j1 = voice + '.json';
+        const j2 = voice.replace(/\.onnx$/i, '.onnx.json');
+        try { await fs2.access(j1); vjson = j1; } catch { try { await fs2.access(j2); vjson = j2; } catch {} }
+      }
+      // Ensure executable perms on Unix
+      if (exe && process.platform !== 'win32') {
+        try { await fs2.chmod(exe, 0o755); } catch {}
+      }
+      return { piperPath: exe, voicePath: voice || '', voiceJson: vjson || '' };
+    } catch { return { piperPath: '', voicePath: '', voiceJson: '' } }
+  }
+
   router.all('/tts', async (req, res) => {
     const raw = req.method === 'GET' ? String(req.query?.text || '') : String(req.body?.text || '');
     let text = (raw && typeof raw.normalize === 'function') ? raw.normalize('NFC').trim() : String(raw).trim();
@@ -45,14 +110,25 @@ export function registerTtsRoutes(router, { helpers }) {
       catch (e) { return res.status(500).json({ ok: false, error: String(e) }); }
     }
 
-    const PIPER_PATH = resolveEnvPath('PIPER_PATH') || '';
-    const PIPER_VOICE = resolveEnvPath('PIPER_VOICE') || '';
-    const PIPER_VOICE_JSON = resolveEnvPath('PIPER_VOICE_JSON') || '';
+    let PIPER_PATH = resolveEnvPath('PIPER_PATH') || '';
+    let PIPER_VOICE = resolveEnvPath('PIPER_VOICE') || '';
+    let PIPER_VOICE_JSON = resolveEnvPath('PIPER_VOICE_JSON') || '';
     const PIPER_SPEAKER = process.env.PIPER_SPEAKER || '';
     const PIPER_LENGTH_SCALE = process.env.PIPER_LENGTH_SCALE || '';
     const PIPER_NOISE_SCALE = process.env.PIPER_NOISE_SCALE || '';
     const PIPER_NOISE_W = process.env.PIPER_NOISE_W || '';
 
+    // Auto-detect if not configured
+    if (!PIPER_PATH || !PIPER_VOICE) {
+      try {
+        const det = await detectBundledPiper();
+        if (det.piperPath && det.voicePath) {
+          PIPER_PATH = det.piperPath;
+          PIPER_VOICE = det.voicePath;
+          PIPER_VOICE_JSON = det.voiceJson || PIPER_VOICE_JSON;
+        }
+      } catch {}
+    }
     const canUsePiper = !!(PIPER_PATH && PIPER_VOICE);
     if (canUsePiper) {
       try {

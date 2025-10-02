@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+﻿import crypto from 'node:crypto';
 
 export function registerTuyaRoutes(router, { dbApi, helpers }) {
   const { requireUser } = helpers;
@@ -74,23 +74,30 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     if (!row) throw Object.assign(new Error('not linked'), { code: 'NOT_LINKED' })
     const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {}
     const uid = String(meta.uid || '')
-    if (!uid) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' })
-    return { uid, row }
+    const uids = (meta.uids && typeof meta.uids === 'object') ? meta.uids : null
+    if (!uid && (!uids || Object.keys(uids).length === 0)) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' })
+    return { uid, uids, row }
   }
 
   router.post('/auth/tuya/link', async (req, res) => {
     if (!TUYA_ENABLED) return res.status(501).json({ ok: false, error: 'Tuya integration disabled' })
     const user = await requireUser(req, res); if (!user) return
     const uid = String(req.body?.uid || '').trim()
+    const app = String(req.body?.app || '').trim().toLowerCase() || 'default'
     if (!uid) return res.status(400).json({ ok: false, error: 'uid required' })
-    const meta = { uid }
-    await dbApi.upsertLinkedAccount({ user_id: user.id, vendor: 'tuya', access_token: null, refresh_token: null, expires_at: null, scopes: null, meta })
-    res.json({ ok: true })
+    const row = await dbApi.getLinkedAccount(user.id, 'tuya').catch(()=>null)
+    let meta = {}
+    try { meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {} } catch {}
+    if (!meta.uids || typeof meta.uids !== 'object') meta.uids = {}
+    meta.uids[app] = uid
+    if (!meta.uid) meta.uid = uid
+    await dbApi.upsertLinkedAccount({ user_id: user.id, vendor: 'tuya', access_token: row?.access_token ?? null, refresh_token: row?.refresh_token ?? null, expires_at: row?.expires_at ?? null, scopes: row?.scopes ?? null, meta })
+    res.json({ ok: true, uids: meta.uids })
   })
 
   router.get('/auth/tuya/status', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return
-    try { const row = await dbApi.getLinkedAccount(user.id, 'tuya'); const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {}; res.json({ ok: true, connected: !!(row && meta.uid), uid: meta.uid || '' }) }
+    try { const row = await dbApi.getLinkedAccount(user.id, 'tuya'); const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {}; const uids = (meta.uids && typeof meta.uids==='object') ? meta.uids : (meta.uid ? { default: meta.uid } : {}); res.json({ ok: true, connected: !!(row && Object.keys(uids).length>0), uid: meta.uid || '', uids }) }
     catch { res.json({ ok: true, connected: false }) }
   })
 
@@ -102,13 +109,29 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
   router.get('/tuya/devices', async (req, res) => {
     try {
       const user = await requireUser(req, res); if (!user) return
-      const { uid } = await ensureTuyaLinkedUser(user)
+      const { uid, uids } = await ensureTuyaLinkedUser(user)
       const token = await tuyaEnsureAppToken()
-      const q = `page_no=1&page_size=100&uid=${encodeURIComponent(uid)}`
-      const { status, json } = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method:'GET', query: q, accessToken: token })
-      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok:false })
-      const items = Array.isArray(json?.result?.list) ? json.result.list : []
-      res.json({ ok: true, items })
+      const appPick = String(req.query.app || 'all').toLowerCase()
+      const uidMap = {}
+      if (uids && typeof uids === 'object') {
+        for (const [label, id] of Object.entries(uids)) {
+          if (!id) continue
+          if (appPick === 'all' || appPick === String(label).toLowerCase()) uidMap[String(id)] = label
+        }
+      }
+      if (Object.keys(uidMap).length === 0 && uid) uidMap[String(uid)] = 'default'
+      const aggregate = []
+      for (const [uidVal, label] of Object.entries(uidMap)) {
+        const q = `page_no=1&page_size=100&uid=${encodeURIComponent(uidVal)}`
+        const r = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method:'GET', query: q, accessToken: token })
+        if (r.status === 200 && r.json?.success === true) {
+          const list = Array.isArray(r.json?.result?.list) ? r.json.result.list : []
+          for (const d of list) aggregate.push({ ...d, _app: label })
+        }
+      }
+      const seen = new Set(); const items = []
+      for (const d of aggregate) { const id = String(d?.id || d?.uuid || ''); if (!id) continue; if (seen.has(id)) continue; seen.add(id); items.push(d) }
+      res.json({ ok: true, items, total: items.length })
     } catch (e) {
       const code = String(e?.code || '')
       if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() })
@@ -194,4 +217,5 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 }
+
 
