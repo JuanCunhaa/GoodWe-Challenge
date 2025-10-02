@@ -8,6 +8,7 @@ import { registerSmartThingsRoutes } from './integrations/smartthings.js';
 import { registerHueRoutes } from './integrations/hue.js';
 import { registerTuyaRoutes } from './integrations/tuya.js';
 import { createHelpers } from './helpers.js';
+import { registerIoTRoutes } from './iot.js';
 
 export function registerAllRoutes(router, { gw, dbApi }) {
   const helpers = createHelpers({ gw, dbApi });
@@ -27,6 +28,7 @@ export function registerAllRoutes(router, { gw, dbApi }) {
   registerSmartThingsRoutes(router, { dbApi, helpers });
   registerHueRoutes(router, { dbApi, helpers });
   registerTuyaRoutes(router, { dbApi, helpers });
+  registerIoTRoutes(router, { helpers });
 
   return router;
 }

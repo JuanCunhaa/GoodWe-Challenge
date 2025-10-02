@@ -215,6 +215,28 @@ const openapi = {
         responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
       },
     },
+    '/iot/device/{vendor}/{id}/uptime': {
+      get: {
+        tags: ['AI/Analytics'],
+        summary: 'Uptime (tempo ligado) de um dispositivo no intervalo informado',
+        parameters: [
+          { name:'vendor', in:'path', required:true, schema:{ type:'string', enum:['smartthings','tuya'] } },
+          { name:'id', in:'path', required:true, schema:{ type:'string' } },
+          { name:'window', in:'query', schema:{ type:'string', example:'24h', description:'minutos ou sufixo h/d (ex.: 90, 2h, 1d)' } },
+        ],
+        security: [{ bearerAuth: [] }],
+        responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
+      }
+    },
+    '/iot/top-consumers': {
+      get: {
+        tags: ['AI/Analytics'],
+        summary: 'Top consumidores (potência atual) considerando amostras recentes',
+        parameters: [ { name:'window', in:'query', schema:{ type:'string', example:'60' } } ],
+        security: [{ bearerAuth: [] }],
+        responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
+      }
+    },
     '/tts': {
       post: {
         tags: ['Assistant'],
