@@ -1,25 +1,28 @@
-﻿export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
-
-  const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
-
-
-  const r = String(findStep.result.roomName || 'local não especificado').trim();
-  if (n) answer = `O dispositivo ${n} está no cômodo ${r}.`;
+export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
+  const { getBearerToken, requireUser, deriveBaseUrl } = helpers;
 
   router.post('/assistant/chat', async (req, res) => {
     try {
       const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY || '';
       if (!OPENAI_API_KEY) return res.status(501).json({ ok: false, error: 'assistant unavailable: missing OPENAI_API_KEY' });
+
       const bearer = getBearerToken(req);
       const svcToken = process.env.ASSIST_TOKEN || '';
       let user = null;
       if (svcToken && bearer === svcToken) {
         const plantId = String(
-          req.query.powerstation_id || req.query.powerStationId || req.query.pw_id || process.env.ASSIST_PLANT_ID || process.env.PLANT_ID || ''
+          req.query.powerstation_id ||
+          req.query.powerStationId ||
+          req.query.pw_id ||
+          process.env.ASSIST_PLANT_ID ||
+          process.env.PLANT_ID ||
+          ''
         );
         if (!plantId) return res.status(400).json({ ok: false, error: 'missing plant id (set ASSIST_PLANT_ID/PLANT_ID or pass ?powerstation_id=...)' });
         user = { id: 0, email: 'assistant@service', powerstation_id: plantId };
-      } else { user = await requireUser(req, res); if (!user) return; }
+      } else {
+        user = await requireUser(req, res); if (!user) return;
+      }
 
       const input = String(req.body?.input || '').trim();
       const prev = Array.isArray(req.body?.messages) ? req.body.messages : [];
@@ -27,7 +30,6 @@
 
       const authHeader = req.headers['authorization'] || '';
       const apiBase = deriveBaseUrl(req).replace(/\/$/, '') + '/api';
-
       async function apiJson(path, opts = {}) {
         const r = await fetch(apiBase + path, {
           method: opts.method || 'GET',
@@ -83,8 +85,12 @@
           if (range === 'this_month') {
             const { genMap, inHouseMap, gridSellMap } = await parseGenFromChart(today);
             const ym = dateLocal(today).slice(0, 7);
-            let sum = 0; for (const [k, v] of genMap.entries()) { if (k.startsWith(ym)) sum += Number(v) || 0; }
-            if (sum === 0) { for (const [k, v] of inHouseMap.entries()) { if (k.startsWith(ym)) sum += Number(v) || 0; } for (const [k, v] of gridSellMap.entries()) { if (k.startsWith(ym)) sum += Number(v) || 0; } }
+            let sum = 0;
+            for (const [k, v] of genMap.entries()) if (k.startsWith(ym)) sum += Number(v) || 0;
+            if (sum === 0) {
+              for (const [k, v] of inHouseMap.entries()) if (k.startsWith(ym)) sum += Number(v) || 0;
+              for (const [k, v] of gridSellMap.entries()) if (k.startsWith(ym)) sum += Number(v) || 0;
+            }
             return { kwh: sum, period: 'this_month', source: '/api/chart-by-plant?range=2' };
           }
           if (range === 'this_week') {
@@ -92,8 +98,12 @@
             const base = new Date(today); const day = base.getDay();
             const startD = new Date(base); startD.setDate(base.getDate() - day);
             const endD = new Date(startD); endD.setDate(startD.getDate() + 6);
-            let sum = 0; for (const [k, v] of genMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; }
-            if (sum === 0) { for (const [k, v] of inHouseMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; } for (const [k, v] of gridSellMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; } }
+            let sum = 0;
+            for (const [k, v] of genMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; }
+            if (sum === 0) {
+              for (const [k, v] of inHouseMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; }
+              for (const [k, v] of gridSellMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; }
+            }
             return { kwh: sum, period: 'this_week', source: '/api/chart-by-plant?range=2' };
           }
           if (range === 'yesterday') {
@@ -113,6 +123,7 @@
           }
           return { kwh: 0, period: String(range || 'unknown') };
         },
+
         async get_monitor(params) {
           const body = { powerstation_id: psId, key: params?.key || '', orderby: params?.orderby || '', powerstation_type: params?.powerstation_type || '', powerstation_status: params?.powerstation_status || '', page_index: Number(params?.page_index || 1), page_size: Number(params?.page_size || 14), adcode: params?.adcode || '', org_id: params?.org_id || '', condition: params?.condition || '' };
           return await gw.postJson('PowerStationMonitor/QueryPowerStationMonitor', body);
@@ -132,21 +143,16 @@
         },
         async cross_login() { const a = await gw.crossLogin(); return { api_base: a.api_base, uid: a.uid, timestamp: a.timestamp }; },
 
-        // SmartThings tools (via internal API)
+        // SmartThings (via API interna)
         async st_list_devices() {
           const j = await apiJson('/smartthings/devices');
-          let rooms = {};
-          try {
-            const r = await apiJson('/smartthings/rooms');
-            rooms = Object.fromEntries((Array.isArray(r.items) ? r.items : []).map(it => [it.id, it.name || '']));
-          } catch { }
-          const items = (j.items || []).map(d => ({ ...d, roomName: rooms[d.roomId] || '' }));
+          // rooms já são resolvidos no backend; manter compat
+          const items = (j.items || []).map(d => ({ ...d, roomName: d.roomName || '' }));
           return { items, total: items.length };
         },
         async st_device_status({ device_id }) { if (!device_id) throw new Error('device_id required'); return await apiJson(`/smartthings/device/${encodeURIComponent(device_id)}/status`); },
         async st_command({ device_id, action, component }) {
           if (!device_id || !action) throw new Error('device_id and action required');
-          // Choose component: prefer provided, else first component with 'switch'
           let useComponent = component || 'main';
           try {
             const devs = await tools.st_list_devices();
@@ -155,31 +161,26 @@
               const cand = found.components.find(c => Array.isArray(c.capabilities) && c.capabilities.some(x => (x.id || x.capability) === 'switch'));
               if (cand && cand.id) useComponent = cand.id;
             }
-          } catch { }
+          } catch {}
           await apiJson('/smartthings/commands', { method: 'POST', body: { deviceId: device_id, action, component: useComponent } });
           const status = await tools.st_device_status({ device_id });
-          let name = ''; try { const devs = await tools.st_list_devices(); const found = (devs.items || []).find(d => String(d.id) === String(device_id)); name = found?.name || ''; } catch { }
+          let name = ''; try { const devs = await tools.st_list_devices(); const found = (devs.items || []).find(d => String(d.id) === String(device_id)); name = found?.name || ''; } catch {}
           return { ok: true, device_id, name, action, status };
         },
         async st_find_device_room({ query, device_id }) {
-          const j = await apiJson('/smartthings/devices');
+          const j = await tools.st_list_devices();
           const devices = Array.isArray(j.items) ? j.items : [];
-          let rooms = {};
-          try {
-            const r = await apiJson('/smartthings/rooms');
-            rooms = Object.fromEntries((Array.isArray(r.items) ? r.items : []).map(it => [it.id, it.name || '']));
-          } catch { }
           let chosen = null;
           if (device_id) chosen = devices.find(d => String(d.id) === String(device_id));
           const q = String(query || '').toLowerCase().trim();
-          if (!chosen && q) chosen = devices.find(d => String(d.name || '').toLowerCase().includes(q));
+          if (!chosen && q) chosen = devices.find(d => String(d.name||'').toLowerCase().includes(q));
           if (!chosen) return { ok: false, error: 'device not found' };
-          const roomName = rooms[chosen.roomId] || '';
+          const roomName = chosen.roomName || '';
           return { ok: true, name: chosen.name || '', roomName: roomName || '' };
         },
 
-        // Tuya tools (via internal API)
-        async tuya_list_devices() { const j = await apiJson('/tuya/devices'); return { items: j.items || [], total: (j.items || []).length }; },
+        // Tuya (via API interna)
+        async tuya_list_devices() { const j = await apiJson('/tuya/devices'); return { items: j.items || [], total: (j.items||[]).length }; },
         async tuya_device_status({ device_id }) { if (!device_id) throw new Error('device_id required'); return await apiJson(`/tuya/device/${encodeURIComponent(device_id)}/status`); },
         async tuya_command({ device_id, action }) {
           if (!device_id || !action) throw new Error('device_id and action required');
@@ -187,7 +188,7 @@
             const value = action === 'on'; await apiJson('/tuya/commands', { method: 'POST', body: { device_id, commands: [{ code: 'switch', value }] } });
           });
           const status = await tools.tuya_device_status({ device_id });
-          let name = ''; try { const devs = await tools.tuya_list_devices(); const found = (devs.items || []).find(d => String(d.id || d.uuid) === String(device_id)); name = found?.name || ''; } catch { }
+          let name = ''; try { const devs = await tools.tuya_list_devices(); const found = (devs.items || []).find(d => String(d.id||d.uuid) === String(device_id)); name = found?.name || ''; } catch {}
           return { ok: true, device_id, name, action, status };
         },
       };
@@ -195,7 +196,7 @@
       const toolSchemas = [
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month', 'total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geracao para um intervalo padrao.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
         { name: 'get_monitor', description: 'QueryPowerStationMonitor', parameters: { type: 'object', properties: { page_index: { type: 'number' }, page_size: { type: 'number' }, key: { type: 'string' }, orderby: { type: 'string' }, powerstation_type: { type: 'string' }, powerstation_status: { type: 'string' }, adcode: { type: 'string' }, org_id: { type: 'string' }, condition: { type: 'string' } }, additionalProperties: false } },
         { name: 'get_inverters', description: 'GetInverterAllPoint', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_weather', description: 'GetWeather', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -206,24 +207,23 @@
         { name: 'get_power_chart', description: 'Charts/GetPlantPowerChart', parameters: { type: 'object', properties: { date: { type: 'string' }, full_script: { type: 'boolean' } }, additionalProperties: false } },
         { name: 'get_warnings', description: 'warning/PowerstationWarningsQuery', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'list_powerstations', description: 'Lista powerstations locais', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string', 'null'] } }, required: ['id'], additionalProperties: false } },
+        { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string','null'] } }, required: ['id'], additionalProperties: false } },
         { name: 'debug_auth', description: 'Info GoodWe (mascarado)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuário atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuario atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'st_device_status', description: 'Status de um dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] }, component: { type: 'string' } }, required: ['device_id', 'action'], additionalProperties: false } },
-        { name: 'st_find_device_room', description: 'Encontra o cômodo (nome) de um dispositivo SmartThings pelo nome ou id.', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
-        { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya (UID vinculado).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] }, component: { type: 'string' } }, required: ['device_id','action'], additionalProperties: false } },
+        { name: 'st_find_device_room', description: 'Encontra o comodo (nome) de um dispositivo SmartThings (por nome ou id).', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
+        { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya vinculados (Smart Life e/ou Tuya app).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] } }, required: ['device_id', 'action'], additionalProperties: false } },
+        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] } }, required: ['device_id','action'], additionalProperties: false } },
       ];
 
-      const messages = [{ role: 'system', content: `VocÃª Ã© o Assistente Virtual deste painel. Siga as regras:\nUse ferramentas registradas sempre que a pergunta demandar dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status, etc.).\nNÃ£o invente valores. Se faltar permissÃ£o/credencial, peÃ§a para o usuÃ¡rio conectar/entrar.\nAo responder mÃ©tricas, informe apenas o perÃ­odo (ex.: Hoje, Ontem, Esta Semana, Este MÃªs, Total).\nSeja breve e Ãºtil.\nIdioma: pt-BR; nÃ£o exponha segredos.\nNÃ£o utilize "*" em nenhuma resposta.` }, ...prev.filter(m => m && m.role && m.content), input ? { role: 'user', content: input } : null].filter(Boolean);
-
-      // Regras adicionais fortes (sem depender do texto original com acentuação)
-      try {
-        messages.unshift({ role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos (SmartThings/Tuya), responda apenas os nomes, um por linha. Quando o usuário perguntar em qual cômodo está um dispositivo, chame a ferramenta st_find_device_room com query igual ao nome do dispositivo e responda no formato "<NOME> está em <CÔMODO>."' });
-      } catch { }
+      const messages = [
+        { role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos, responda apenas os nomes (um por linha). Quando perguntarem o cômodo de um dispositivo, responda no formato "O dispositivo \"NOME\" está no cômodo SALA.". Seja breve, direto e útil.' },
+        ...prev.filter(m => m && m.role && m.content),
+        input ? { role: 'user', content: input } : null,
+      ].filter(Boolean);
 
       const steps = [];
       let assistantMsg = null;
@@ -240,7 +240,7 @@
           messages.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
           for (const call of msg.tool_calls) {
             const name = call.function?.name; let args = {};
-            try { args = JSON.parse(call.function?.arguments || '{}'); } catch { }
+            try { args = JSON.parse(call.function?.arguments || '{}'); } catch {}
             let result; try { if (typeof tools[name] !== 'function') throw new Error('unknown tool'); const started = Date.now(); result = await tools[name](args || {}); steps.push({ name, args, ok: true, result, ms: Date.now() - started }); } catch (e) { result = { ok: false, error: String(e) }; steps.push({ name, args, ok: false, error: String(e) }); }
             messages.push({ role: 'tool', tool_call_id: call.id, name, content: JSON.stringify(result) });
           }
@@ -248,8 +248,8 @@
         }
         assistantMsg = msg; break;
       }
+
       let answer = assistantMsg?.content || '';
-      // Se o usuário pediu para LISTAR dispositivos, retorne só os nomes (um por linha)
       try {
         const low = input.toLowerCase();
         const listIntent = /(lista(r)?|mostrar|ver)\b.*\bdispositiv/.test(low) || /\bdispositivos\b/.test(low);
@@ -261,30 +261,29 @@
             if (names.length) answer = `No SmartThings você possui:\n` + names.join('\n');
           }
         }
-      } catch { }
-      // Para perguntas de cômodo específicas, use resultado dedicado quando existir
+      } catch {}
+
       try {
         const findStep = steps.find(s => s && s.ok && s.name === 'st_find_device_room');
         if (findStep && findStep.result && findStep.result.ok) {
           const n = String(findStep.result.name || '').trim();
           const r = String(findStep.result.roomName || 'local não especificado').trim();
-          if (n) answer = `${n} está em ${r}.`;
+          if (n) answer = `O dispositivo "${n}" está no cômodo ${r}.`;
         }
-      } catch { }
+      } catch {}
+
       try {
         const cmd = steps.find(s => s && s.ok && (s.name === 'st_command' || s.name === 'tuya_command'));
         if (cmd) {
           const action = String(cmd?.args?.action || '').toLowerCase();
           const verb = action === 'on' ? 'ligado' : 'desligado';
           const name = (cmd?.result && typeof cmd.result === 'object' && cmd.result.name) ? cmd.result.name : '';
-          const label = name ? `Prontinho! Dispositivo  \"' \\\ foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
+          const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
           if (!answer || !/\b(ligado|desligado)\b/i.test(answer)) { answer = answer ? `${answer}\n${label}` : label; }
         }
-      } catch { }
-      // Sanitização final: remover asteriscos (evita bold/markdown e problemas no TTS)
-      if (typeof answer === 'string' && answer.includes('*')) {
-        answer = answer.replace(/\*/g, '');
-      }
+      } catch {}
+
+      if (typeof answer === 'string' && answer.includes('*')) answer = answer.replace(/\*/g, '');
       res.json({ ok: true, answer, steps });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
@@ -294,7 +293,7 @@
       const items = [
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month', 'total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geracao para um intervalo padrao.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
         { name: 'get_monitor', description: 'QueryPowerStationMonitor', parameters: { type: 'object', properties: { page_index: { type: 'number' }, page_size: { type: 'number' }, key: { type: 'string' }, orderby: { type: 'string' }, powerstation_type: { type: 'string' }, powerstation_status: { type: 'string' }, adcode: { type: 'string' }, org_id: { type: 'string' }, condition: { type: 'string' } }, additionalProperties: false } },
         { name: 'get_inverters', description: 'GetInverterAllPoint', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_weather', description: 'GetWeather', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -305,23 +304,30 @@
         { name: 'get_power_chart', description: 'Charts/GetPlantPowerChart', parameters: { type: 'object', properties: { date: { type: 'string' }, full_script: { type: 'boolean' } }, additionalProperties: false } },
         { name: 'get_warnings', description: 'warning/PowerstationWarningsQuery', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'list_powerstations', description: 'Lista powerstations locais', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string', 'null'] } }, required: ['id'], additionalProperties: false } },
-        { name: 'debug_auth', description: 'Info GoodWe (mascarado)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string','null'] } }, required: ['id'], additionalProperties: false } },
+        { name: 'debug_auth', description: 'Info GoodWe no servidor (mascarado)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuário atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuario atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'st_device_status', description: 'Status de um dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] }, component: { type: 'string' } }, required: ['device_id', 'action'], additionalProperties: false } },
-        { name: 'st_find_device_room', description: 'Encontra o cômodo (nome) de um dispositivo SmartThings pelo nome ou id.', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
-        { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya (UID vinculado).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] }, component: { type: 'string' } }, required: ['device_id','action'], additionalProperties: false } },
+        { name: 'st_find_device_room', description: 'Encontra o comodo (nome) de um dispositivo SmartThings (por nome ou id).', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
+        { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya vinculados (Smart Life e/ou Tuya app).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] } }, required: ['device_id', 'action'], additionalProperties: false } },
+        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] } }, required: ['device_id','action'], additionalProperties: false } },
       ];
       res.json({ items });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }) }
   });
 
   router.get('/assistant/help', (req, res) => {
-    const SYSTEM_PROMPT = `VocÃª Ã© o Assistente Virtual deste painel. Regras:\n1) Use ferramentas para dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status).\n2) NÃ£o invente valores; se faltar permissÃ£o, peÃ§a login/conexÃ£o.\n3) MÃ©tricas: cite sÃ³ o perÃ­odo (Hoje/Ontem/Esta Semana/Este MÃªs/Total).\n4) Seja curto e prÃ¡tico; use listas quando ajudar.\n5) Idioma: pt-BR; nÃ£o exponha segredos.\n6) NÃ£o utilize "*" em nenhuma de suas respostas.`;
+    const SYSTEM_PROMPT = `Você é o Assistente Virtual deste painel.
+Regras:
+1) Use ferramentas para dados reais (renda, geração, métricas, status, dispositivos).
+2) Não invente valores; se faltar permissão/credencial, solicite conexão/login.
+3) Métricas: cite apenas o período (Hoje/Ontem/Esta Semana/Este Mês/Total).
+4) Ao listar dispositivos, responda apenas os nomes (um por linha).
+5) Nunca utilize o caractere * e não use markdown/bold.
+6) Seja breve, direto e útil. Idioma: pt-BR.`;
     res.json({ system_prompt: SYSTEM_PROMPT });
   });
 
@@ -334,3 +340,4 @@
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
 }
+
