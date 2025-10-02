@@ -136,7 +136,7 @@ export default function Dispositivos(){
                   <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||d.category||''}>
                     {(d.deviceTypeName || d.manufacturer || d.category || 'Dispositivo')}
                   </div>
-                  <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || 'Não especificado'}</div>
+                  <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || d.roomName || 'Não especificado'}</div>
                   {d.vendor==='tuya' && d.online===false && <div className="text-[11px] text-red-500 mt-1">Offline</div>}
                 </div>
                 <div className="mt-1 flex items-center gap-2">

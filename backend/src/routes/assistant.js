@@ -1,5 +1,12 @@
 ﻿export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
-  const { getBearerToken, requireUser, deriveBaseUrl } = helpers;
+
+
+          const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
+export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
+
+
+          const r = String(findStep.result.roomName || 'local não especificado').trim();
+          if (n) answer =  `O dispositivo ${n} está no cômodo ${r}.`; 
 
   router.post('/assistant/chat', async (req, res) => {
     try {
@@ -141,10 +148,36 @@
         async st_device_status({ device_id }) { if (!device_id) throw new Error('device_id required'); return await apiJson(`/smartthings/device/${encodeURIComponent(device_id)}/status`); },
         async st_command({ device_id, action, component }) {
           if (!device_id || !action) throw new Error('device_id and action required');
-          await apiJson('/smartthings/commands', { method: 'POST', body: { deviceId: device_id, action, component: component || 'main' } });
+          // Choose component: prefer provided, else first component with 'switch'
+          let useComponent = component || 'main';
+          try {
+            const devs = await tools.st_list_devices();
+            const found = (devs.items || []).find(d => String(d.id) === String(device_id));
+            if (found && Array.isArray(found.components)) {
+              const cand = found.components.find(c => Array.isArray(c.capabilities) && c.capabilities.some(x => (x.id || x.capability) === 'switch'));
+              if (cand && cand.id) useComponent = cand.id;
+            }
+          } catch {}
+          await apiJson('/smartthings/commands', { method: 'POST', body: { deviceId: device_id, action, component: useComponent } });
           const status = await tools.st_device_status({ device_id });
           let name = ''; try { const devs = await tools.st_list_devices(); const found = (devs.items || []).find(d => String(d.id) === String(device_id)); name = found?.name || ''; } catch {}
           return { ok: true, device_id, name, action, status };
+        },
+        async st_find_device_room({ query, device_id }) {
+          const j = await apiJson('/smartthings/devices');
+          const devices = Array.isArray(j.items) ? j.items : [];
+          let rooms = {};
+          try {
+            const r = await apiJson('/smartthings/rooms');
+            rooms = Object.fromEntries((Array.isArray(r.items)? r.items: []).map(it => [it.id, it.name || '']));
+          } catch {}
+          let chosen = null;
+          if (device_id) chosen = devices.find(d => String(d.id) === String(device_id));
+          const q = String(query || '').toLowerCase().trim();
+          if (!chosen && q) chosen = devices.find(d => String(d.name||'').toLowerCase().includes(q));
+          if (!chosen) return { ok: false, error: 'device not found' };
+          const roomName = rooms[chosen.roomId] || '';
+          return { ok: true, name: chosen.name || '', roomName: roomName || '' };
         },
 
         // Tuya tools (via internal API)
@@ -181,6 +214,7 @@
         { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuário atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'st_device_status', description: 'Status de um dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
         { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] }, component: { type: 'string' } }, required: ['device_id','action'], additionalProperties: false } },
+        { name: 'st_find_device_room', description: 'Encontra o cômodo (nome) de um dispositivo SmartThings pelo nome ou id.', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
         { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya (UID vinculado).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
         { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] } }, required: ['device_id','action'], additionalProperties: false } },
@@ -190,7 +224,7 @@
 
       // Regras adicionais fortes (sem depender do texto original com acentuação)
       try {
-        messages.unshift({ role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos (SmartThings/Tuya), responda apenas os nomes, um por linha.' });
+        messages.unshift({ role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos (SmartThings/Tuya), responda apenas os nomes, um por linha. Quando o usuário perguntar em qual cômodo está um dispositivo, chame a ferramenta st_find_device_room com query igual ao nome do dispositivo e responda no formato "<NOME> está em <CÔMODO>."' });
       } catch {}
 
       const steps = [];
@@ -217,12 +251,26 @@
         assistantMsg = msg; break;
       }
       let answer = assistantMsg?.content || '';
-      // Se houve listagem de dispositivos, retorne somente os nomes (um por linha)
+      // Se o usuário pediu para LISTAR dispositivos, retorne só os nomes (um por linha)
       try {
-        const listStep = steps.find(s => s && s.ok && (s.name === 'st_list_devices' || s.name === 'tuya_list_devices'));
-        if (listStep && listStep.result && Array.isArray(listStep.result.items)) {
-          const names = listStep.result.items.map(d => String(d?.name || '').trim()).filter(Boolean);
-          if (names.length) answer = names.join('\n');
+        const low = input.toLowerCase();
+        const listIntent = /(lista(r)?|mostrar|ver)\b.*\bdispositiv/.test(low) || /\bdispositivos\b/.test(low);
+        const wantRoom = /(c[ôo]modo|comodo|sala|localiza|onde|qual)/.test(low);
+        if (listIntent && !wantRoom) {
+          const listStep = steps.find(s => s && s.ok && (s.name === 'st_list_devices' || s.name === 'tuya_list_devices'));
+          if (listStep && listStep.result && Array.isArray(listStep.result.items)) {
+            const names = listStep.result.items.map(d => String(d?.name || '').trim()).filter(Boolean);
+            if (names.length) answer = `No SmartThings você possui:\n` + names.join('\n');
+          }
+        }
+      } catch {}
+      // Para perguntas de cômodo específicas, use resultado dedicado quando existir
+      try {
+        const findStep = steps.find(s => s && s.ok && s.name === 'st_find_device_room');
+        if (findStep && findStep.result && findStep.result.ok) {
+          const n = String(findStep.result.name || '').trim();
+          const r = String(findStep.result.roomName || 'local não especificado').trim();
+          if (n) answer = `${n} está em ${r}.`;
         }
       } catch {}
       try {
@@ -231,7 +279,7 @@
           const action = String(cmd?.args?.action || '').toLowerCase();
           const verb = action === 'on' ? 'ligado' : 'desligado';
           const name = (cmd?.result && typeof cmd.result === 'object' && cmd.result.name) ? cmd.result.name : '';
-          const label = name ? `Dispositivo "${name}" ${verb} com sucesso.` : `Dispositivo ${verb} com sucesso.`;
+          const label = name ?  `Prontinho! Dispositivo  \"' \\\ foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
           if (!answer || !/\b(ligado|desligado)\b/i.test(answer)) { answer = answer ? `${answer}\n${label}` : label; }
         }
       } catch {}
@@ -268,5 +316,6 @@
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
 }
+
 
 

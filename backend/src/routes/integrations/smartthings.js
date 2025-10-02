@@ -148,18 +148,33 @@ export function registerSmartThingsRoutes(router, { dbApi, helpers }) {
       const j = await r.json();
       if (!r.ok) return res.status(r.status).json(j);
       const list = Array.isArray(j?.items) ? j.items : [];
-      const norm = list.map(d => ({
-        id: String(d?.deviceId || d?.device_id || ''),
-        name: String(d?.label || d?.name || ''),
-        roomId: d?.roomId || null,
-        locationId: d?.locationId || null,
-        manufacturer: d?.manufacturerName || null,
-        profileId: d?.profileId || null,
-        deviceTypeName: d?.deviceTypeName || d?.type || null,
-        vendor: 'smartthings',
-        components: d?.components || [],
-        raw: d,
-      }));
+      // Build rooms map (roomId -> name) per location
+      const locSet = Array.from(new Set(list.map(d => d?.locationId).filter(Boolean)));
+      const roomNameById = new Map();
+      for (const loc of locSet) {
+        try {
+          const rr = await fetch(`${apiBase}/locations/${encodeURIComponent(loc)}/rooms`, { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+          const jj = await rr.json();
+          const items = Array.isArray(jj?.items) ? jj.items : [];
+          for (const it of items) {
+            const rid = it?.roomId || it?.id;
+            const nm = it?.name || it?.label || '';
+            if (rid) roomNameById.set(rid, nm);
+          }
+        } catch {}
+      }
+      const norm = list.map(d => {
+        const id = String(d?.deviceId || d?.device_id || '');
+        const name = String(d?.label || d?.name || '');
+        const roomId = d?.roomId || null;
+        const locationId = d?.locationId || null;
+        const manufacturer = d?.manufacturerName || null;
+        const profileId = d?.profileId || null;
+        const deviceTypeName = d?.deviceTypeName || d?.type || null;
+        const components = d?.components || [];
+        const roomName = roomId ? (roomNameById.get(roomId) || '') : '';
+        return { id, name, roomId, roomName, locationId, manufacturer, profileId, deviceTypeName, vendor: 'smartthings', components, raw: d };
+      });
       res.json({ ok: true, items: norm, total: norm.length, ts: Date.now() });
     } catch (e) {
       if (String(e?.code) === 'NOT_LINKED') return res.status(401).json({ ok: false, error: 'not linked' });
@@ -253,4 +268,3 @@ export function registerSmartThingsRoutes(router, { dbApi, helpers }) {
     } catch (e) { if (String(e?.code) === 'NOT_LINKED') return res.status(401).json({ ok: false, error: 'not linked' }); res.status(500).json({ ok: false, error: 'failed to send command' }); }
   });
 }
-
