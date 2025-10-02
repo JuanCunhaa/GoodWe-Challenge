@@ -316,3 +316,4 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
 }
+}

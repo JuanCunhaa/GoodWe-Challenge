@@ -42,12 +42,14 @@ export function createHelpers({ gw, dbApi }) {
   };
 
   const getPsId = async (req) => {
+    // Always prefer the powerstation linked to the authenticated user
     const user = await tryGetUser(req);
+    if (user?.powerstation_id) return user.powerstation_id;
+    // As a fallback (e.g., service mode), accept query
     return (
       req.query.powerStationId ||
       req.query.powerstation_id ||
       req.query.pw_id ||
-      user?.powerstation_id ||
       ''
     );
   };
