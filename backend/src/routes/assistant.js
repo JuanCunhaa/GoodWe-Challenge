@@ -44,6 +44,15 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       }
 
       const tools = {
+        async get_forecast({ hours }){
+          const h = Number(hours || 24);
+          const data = await apiJson(`/ai/forecast?hours=${encodeURIComponent(h)}`);
+          return { ok: true, ...data };
+        },
+        async get_recommendations(){
+          const data = await apiJson(`/ai/recommendations`);
+          return { ok: true, ...data };
+        },
         async get_income_today() {
           const body = { powerstation_id: psId, key: '', orderby: '', powerstation_type: '', powerstation_status: '', page_index: 1, page_size: 14, adcode: '', org_id: '', condition: '' };
           const j = await gw.postJson('PowerStationMonitor/QueryPowerStationMonitor', body);
@@ -194,6 +203,8 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       };
 
       const toolSchemas = [
+        { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
+        { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_generation', description: 'Retorna a geracao para um intervalo padrao.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
@@ -291,6 +302,8 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
   router.get('/assistant/tools', (req, res) => {
     try {
       const items = [
+        { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
+        { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_generation', description: 'Retorna a geracao para um intervalo padrao.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
@@ -340,4 +353,3 @@ Regras:
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
 }
-

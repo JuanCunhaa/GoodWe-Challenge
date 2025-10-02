@@ -51,7 +51,44 @@ async function initPg() {
     meta TEXT,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY(user_id, vendor)
-  );`;
+  );
+
+  -- History tables (also created by Sequelize migrations; keep as fallback)
+  CREATE TABLE IF NOT EXISTS generation_history (
+    id BIGSERIAL PRIMARY KEY,
+    plant_id TEXT NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
+    kwh DOUBLE PRECISION NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS generation_history_plant_ts ON generation_history(plant_id, timestamp);
+
+  CREATE TABLE IF NOT EXISTS consumption_history (
+    id BIGSERIAL PRIMARY KEY,
+    plant_id TEXT NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
+    kwh DOUBLE PRECISION NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS consumption_history_plant_ts ON consumption_history(plant_id, timestamp);
+
+  CREATE TABLE IF NOT EXISTS battery_history (
+    id BIGSERIAL PRIMARY KEY,
+    plant_id TEXT NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
+    soc DOUBLE PRECISION,
+    power_kw DOUBLE PRECISION
+  );
+  CREATE INDEX IF NOT EXISTS battery_history_plant_ts ON battery_history(plant_id, timestamp);
+
+  CREATE TABLE IF NOT EXISTS grid_history (
+    id BIGSERIAL PRIMARY KEY,
+    plant_id TEXT NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
+    power_kw DOUBLE PRECISION,
+    import_kw DOUBLE PRECISION,
+    export_kw DOUBLE PRECISION
+  );
+  CREATE INDEX IF NOT EXISTS grid_history_plant_ts ON grid_history(plant_id, timestamp);
+  `;
   await pgPool.query(ddl);
 }
 
@@ -120,7 +157,44 @@ async function initSqlite() {
     meta TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY(user_id, vendor)
-  );`);
+  );
+
+  -- History tables (sqlite fallback when Postgres is not configured)
+  CREATE TABLE IF NOT EXISTS generation_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plant_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    kwh REAL NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS generation_history_plant_ts ON generation_history(plant_id, timestamp);
+
+  CREATE TABLE IF NOT EXISTS consumption_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plant_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    kwh REAL NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS consumption_history_plant_ts ON consumption_history(plant_id, timestamp);
+
+  CREATE TABLE IF NOT EXISTS battery_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plant_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    soc REAL,
+    power_kw REAL
+  );
+  CREATE INDEX IF NOT EXISTS battery_history_plant_ts ON battery_history(plant_id, timestamp);
+
+  CREATE TABLE IF NOT EXISTS grid_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plant_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    power_kw REAL,
+    import_kw REAL,
+    export_kw REAL
+  );
+  CREATE INDEX IF NOT EXISTS grid_history_plant_ts ON grid_history(plant_id, timestamp);
+  `);
 }
 
 // Initialize selected engine
@@ -313,5 +387,40 @@ export async function deleteLinkedAccount(user_id, vendor){
     await pgPool.query('DELETE FROM linked_accounts WHERE user_id = $1 AND vendor = $2', [user_id, vendor]);
   } else {
     sqliteDb.prepare('DELETE FROM linked_accounts WHERE user_id = ? AND vendor = ?').run(user_id, vendor);
+  }
+}
+
+// --------- Engine Introspection (for analytics) ---------
+export function getDbEngine() {
+  return { type: USE_PG ? 'pg' : 'sqlite', pgPool, sqliteDb };
+}
+
+// --------- History write helpers (cross-engine) ---------
+export async function insertGenerationHistory({ plant_id, timestamp, kwh }){
+  if (USE_PG) {
+    await pgPool.query('INSERT INTO generation_history(plant_id, timestamp, kwh) VALUES($1,$2,$3)', [plant_id, new Date(timestamp), Number(kwh)||0]);
+  } else {
+    sqliteDb.prepare('INSERT INTO generation_history(plant_id, timestamp, kwh) VALUES(?,?,?)').run(plant_id, new Date(timestamp).toISOString(), Number(kwh)||0);
+  }
+}
+export async function insertConsumptionHistory({ plant_id, timestamp, kwh }){
+  if (USE_PG) {
+    await pgPool.query('INSERT INTO consumption_history(plant_id, timestamp, kwh) VALUES($1,$2,$3)', [plant_id, new Date(timestamp), Number(kwh)||0]);
+  } else {
+    sqliteDb.prepare('INSERT INTO consumption_history(plant_id, timestamp, kwh) VALUES(?,?,?)').run(plant_id, new Date(timestamp).toISOString(), Number(kwh)||0);
+  }
+}
+export async function insertBatteryHistory({ plant_id, timestamp, soc, power_kw }){
+  if (USE_PG) {
+    await pgPool.query('INSERT INTO battery_history(plant_id, timestamp, soc, power_kw) VALUES($1,$2,$3,$4)', [plant_id, new Date(timestamp), (soc!=null?Number(soc):null), (power_kw!=null?Number(power_kw):null)]);
+  } else {
+    sqliteDb.prepare('INSERT INTO battery_history(plant_id, timestamp, soc, power_kw) VALUES(?,?,?,?)').run(plant_id, new Date(timestamp).toISOString(), (soc!=null?Number(soc):null), (power_kw!=null?Number(power_kw):null));
+  }
+}
+export async function insertGridHistory({ plant_id, timestamp, power_kw, import_kw, export_kw }){
+  if (USE_PG) {
+    await pgPool.query('INSERT INTO grid_history(plant_id, timestamp, power_kw, import_kw, export_kw) VALUES($1,$2,$3,$4,$5)', [plant_id, new Date(timestamp), (power_kw!=null?Number(power_kw):null), (import_kw!=null?Number(import_kw):null), (export_kw!=null?Number(export_kw):null)]);
+  } else {
+    sqliteDb.prepare('INSERT INTO grid_history(plant_id, timestamp, power_kw, import_kw, export_kw) VALUES(?,?,?,?,?)').run(plant_id, new Date(timestamp).toISOString(), (power_kw!=null?Number(power_kw):null), (import_kw!=null?Number(import_kw):null), (export_kw!=null?Number(export_kw):null));
   }
 }

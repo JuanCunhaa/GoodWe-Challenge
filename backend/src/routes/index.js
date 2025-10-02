@@ -3,6 +3,7 @@ import { registerAppAuthRoutes } from './appAuth.js';
 import { registerGoodWeRoutes } from './goodwe.js';
 import { registerTtsRoutes } from './tts.js';
 import { registerAssistantRoutes } from './assistant.js';
+import { registerAiRoutes } from './ai.js';
 import { registerSmartThingsRoutes } from './integrations/smartthings.js';
 import { registerHueRoutes } from './integrations/hue.js';
 import { registerTuyaRoutes } from './integrations/tuya.js';
@@ -20,6 +21,7 @@ export function registerAllRoutes(router, { gw, dbApi }) {
   registerGoodWeRoutes(router, { gw, helpers });
   registerTtsRoutes(router, { helpers });
   registerAssistantRoutes(router, { gw, helpers, dbApi });
+  registerAiRoutes(router, { gw, helpers });
 
   // Integrations
   registerSmartThingsRoutes(router, { dbApi, helpers });
@@ -28,4 +30,3 @@ export function registerAllRoutes(router, { gw, dbApi }) {
 
   return router;
 }
-

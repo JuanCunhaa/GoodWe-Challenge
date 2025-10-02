@@ -1,194 +1,133 @@
-# GoodWe App — Backend + Frontend (pt-BR)
+# GoodWe App — Painel de Energia + Assistente + Integrações (pt‑BR)
 
-Aplicação completa para monitoramento GoodWe/SEMS com:
-- Backend Node 18+ (Express) que autentica no SEMS, expõe endpoints amigáveis, cacheia chamadas e serve a UI em produção.
-- Banco local SQLite (usuários, sessões e rótulos de powerstations) ou Postgres (via `DATABASE_URL`).
-- Frontend React + Vite + Tailwind com dashboard moderno, 14 páginas e painel de Assistente.
-- Assistente opcional (OpenAI) com ferramentas que consultam a API em tempo real.
-- TTS opcional (voz) via Piper local ou servidor HTTP externo.
+Aplicação completa para monitorar plantas GoodWe/SEMS, com painel React moderno, backend Node/Express, Assistente com ferramentas em tempo real, TTS, integrações residenciais (SmartThings, Tuya, Hue) e publicação em MQTT para automação doméstica.
 
 
-## Requisitos
-- Node.js 18 ou superior (usa `fetch` global).
-- Acesso a uma conta SEMS (GoodWe) para `GOODWE_EMAIL` e `GOODWE_PASSWORD`.
-- (Opcional) Chave OpenAI (`OPENAI_API_KEY`) para habilitar o Assistente.
-- (Opcional) Piper TTS instalado ou um servidor TTS HTTP.
+## Sumário
+- Visão Geral
+- Recursos (Backend, Frontend, Assistente, Integrações, MQTT)
+- Banco de Dados e Autenticação do App
+- APIs (principais rotas)
+- AI/Analytics (previsão e sugestões)
+- Variáveis de Ambiente
+- Como Rodar (Dev e Produção)
+- Deploy (Vercel + Render/Railway)
+- Solução de Problemas
 
 
-## Como rodar (rápido)
-1) Clone o projeto e acesse a pasta `goodwe-app`.
-2) Backend: copie `backend/.env.exemple` para `backend/.env` e preencha `GOODWE_EMAIL` e `GOODWE_PASSWORD`.
-3) Seed do banco (cria/atualiza powerstations locais):
-   - `npm run seed`
-4) Desenvolvimento:
-   - API: `npm run dev` (porta padrão `3000`)
-   - UI: `npm --prefix frontend run dev` (porta padrão `5173`)
-5) Produção (porta única):
-   - `npm start`  → compila o frontend e o backend serve tudo em `/:index.html` e `/api/*`.
+## Visão Geral
+- Backend (Node 20+/Express): autentica no SEMS (GoodWe), expõe rotas amigáveis, integra SmartThings/Tuya/Hue, serve a UI em produção e publica métricas em MQTT.
+- Frontend (React + Vite + Tailwind): dashboard com páginas de geração, consumo, inversores, alertas, perfil (integrações) e “Dispositivos”.
+- Assistente (OpenAI opcional): conversa em português e executa ferramentas (income, geração, status, ligar/desligar, etc.).
+- TTS: voz local via Piper (auto‑detecção do binário/voz) ou servidor HTTP.
 
 
-## Scripts (root)
-- `npm run dev` → roda backend em watch (`3000`).
-- `npm run start` → build do frontend + inicia o backend servindo estáticos.
-- `npm run build` → build apenas do frontend (saida em `frontend/dist`).
-- `npm run seed` → executa `backend/src/seed.js` (popular powerstations e gerar `logins.txt`).
+## Recursos
+
+### Backend
+- Express com CORS dinâmico, compressão e Swagger (OpenAPI em `/api/openapi.json` e UI em `/api/docs`).
+- Cliente SEMS (CrossLogin v1/v2/v3, cookies, throttling, cache TTL por endpoint).
+- TTS `/api/tts` (Piper local ou servidor HTTP). Auto‑detecta binário/voz quando não há envs; higieniza texto (remove `*`).
+- Assistente `/api/assistant/*` com ferramentas completas (GoodWe/SmartThings/Tuya) e respostas amigáveis (sem `*`).
+- Integrações:
+  - SmartThings: OAuth2, listagem de devices com roomName, status e comandos (liga/desliga; autodetecção do componente com ‘switch’).
+  - Tuya/Smart Life: link por UID, listagem robusta (v1.0/users e iot‑03), enriquecimento com cômodos (homes/rooms + details), status normalizado (on/off) e comandos. Rota para functions (DP codes) disponível.
+  - Hue (opcional): OAuth remoto, devices e toggle.
+- MQTT (Home Assistant): publica métricas em tópicos com discovery.
+
+### Frontend
+- Páginas: Dashboard, Live, Fluxo, Geração, Consumo, Inversores, Alertas, Manutenção, Relatórios, Faturamento, Admin, Auditoria, Configurações, Perfil (Integrações), Dispositivos.
+- Dispositivos: lista de SmartThings/Tuya com filtro por cômodo, busca, status ON/OFF (normalizado) e controle de ligar/desligar.
+- Perfil → Integrações: SmartThings/Tuya (vincular, sincronizar, desvincular) e estado/contagem de devices.
+
+### Assistente
+- Ferramentas GoodWe: get_income_today, get_total_income, get_generation (today/yesterday/this_week/this_month/total), get_monitor, get_inverters, get_weather, get_powerflow, get_evcharger_count, get_plant_detail, get_chart_by_plant, get_power_chart, get_warnings, list_powerstations, set_powerstation_name, debug_auth, cross_login.
+- Ferramentas SmartThings: st_list_devices (com roomName), st_device_status, st_command (autodetecta componente switch), st_find_device_room.
+- Ferramentas Tuya: tuya_list_devices (multi‑UID, com cômodos), tuya_device_status (normalizado), tuya_command (toggle com validação), tuya/device/:id/functions.
+- Regras: respostas em pt‑BR, sem markdown/bold, frases amigáveis (“Prontinho! ... foi ligado/desligado.”). Lista de ferramentas em `/api/assistant/tools`.
+- Novas ferramentas: `get_forecast` e `get_recommendations` (baseadas no histórico local).
+
+### MQTT (opcional)
+- Publica sensores (PV Power, Load Power, Grid Power, Battery Power, SOC, Generation Today) com discovery HA.
+- Config: `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_PREFIX`, `MQTT_DISCOVERY_PREFIX`, `MQTT_PLANT_ID` (ou usa a primeira powerstation local).
 
 
-## Configuração (variáveis de ambiente)
-
-Arquivo `backend/.env` (exemplos em `backend/.env.exemple`):
-- `GOODWE_EMAIL` e `GOODWE_PASSWORD` — credenciais SEMS utilizadas pelo servidor para realizar o CrossLogin e assinar chamadas.
-- `PORT` — porta do backend (padrão `3000`).
-- `TOKEN_CACHE` — caminho do JSON de cache do token (padrão `.cache/goodwe_token.json`).
-- `TIMEOUT_MS` — timeout HTTP em ms (padrão `30000`).
-- `CORS_ORIGIN` — origem permitida em dev (ex.: `http://localhost:5173`).
-- `OPENAI_API_KEY` — se definido, habilita `/api/assistant/chat`.
-- `ASSIST_TOKEN` — token de serviço para consumir o Assistente sem sessão de usuário (ex.: Alexa).
-- TTS (opcional, modo Node/Piper):
-  - `PIPER_PATH` — caminho do executável Piper (ex.: `C:\tools\piper\piper.exe`).
-  - `PIPER_VOICE` — caminho do modelo `.onnx` da voz pt-BR.
-  - `PIPER_VOICE_JSON` — `.onnx.json` correspondente (opcional, recomendado).
-  - Ajustes finos: `PIPER_SPEAKER`, `PIPER_LENGTH_SCALE`, `PIPER_NOISE_SCALE`, `PIPER_NOISE_W`.
-- TTS (opcional, fallback HTTP):
-  - `PIPER_HTTP_URL` ou `TTS_SERVER_URL` (ex.: `http://127.0.0.1:5002/tts`).
-
-- Banco de Dados:
-  - Por padrão, usa SQLite no arquivo `backend/data/app.db` (ou caminho legado `backend/backend/data`).
-  - Para Postgres (Render/Neon): defina `DATABASE_URL` (ex.: `postgresql://user:pass@host:5432/dbname?sslmode=require`).
-    O backend detecta e inicializa o schema automaticamente.
-
-Arquivo `frontend/.env` (exemplos em `frontend/.env.example`):
-- `VITE_API_BASE` — base da API (ex.: `http://localhost:3000/api`).
-- Taxas de câmbio para conversões (usadas em estimativas): `VITE_RATE_USD_BRL`, `VITE_RATE_EUR_BRL`, `VITE_RATE_GBP_BRL`, `VITE_RATE_CNY_BRL`.
-- Tarifas energéticas e feed-in por moeda (ex.: `VITE_TARIFF_BRL_KWH`, `VITE_FEEDIN_BRL_KWH`).
-- Parâmetros de atualização/cache do front (intervalos TTL e pré-carregamento histórico).
+## Banco de Dados e Autenticação do App
+- Banco: SQLite por padrão (`backend/data/app.db`) — compat com caminho legado `backend/backend/data`. Postgres via `DATABASE_URL`.
+- Tabelas: `powerstations`, `users` (scrypt), `sessions`, `oauth_states`, `linked_accounts`.
+- Autenticação do App: `/api/auth/register`, `/api/auth/login`, `/api/auth/me`, `/api/auth/change-password`.
+- Seed: `npm run seed` cria/atualiza powerstations e `backend/data/logins.txt`.
 
 
-## Arquitetura (visão geral)
-- Backend (`backend/src`):
-  - `server.js` — Express com CORS, compressão, rotas `/api/*`, OpenAPI em `/api/openapi.json` e Swagger em `/api/docs`. Em produção serve `frontend/dist` no mesmo processo.
-  - `routes.js` — endpoints GoodWe (monitor, inverters, charts, powerflow, weather, warnings), autenticação do app (register/login/me/change-password), Assistente (`/assistant/*`) e TTS (`/tts`).
-  - `goodweClient.js` — cliente SEMS com CrossLogin v1/v2/v3, jar de cookies, throttling, dedupe e cache com TTL por endpoint; suporta `postJson`, `postForm` e versões absolutas (EU/US) como fallback.
-  - `db.js` — SQLite (tabelas: `powerstations`, `users`, `sessions`). Persiste em `backend/backend/data/app.db` por compatibilidade; migra para `backend/data/app.db` quando existir.
-  - `openapi.js` — especificação mínima dos endpoints para Swagger UI.
-  - `seed.js` — semeia powerstations e escreve `backend/backend/data/logins.txt`.
-  - `tts_server.py` — servidor Flask opcional com Coqui TTS (caso prefira voz neural via Python).
-- Frontend (`frontend/src`):
-  - React + Vite + Tailwind. Rotas protegidas por login. Páginas de dashboard, geração, inversores, alertas, perfil etc.
-  - `services/goodweApi.js` — wrappers para os endpoints `/api/*`.
-  - `services/energyService.js` e `services/dayCache.js` — agregação de curvas (dia/semana/mês) e cache em `localStorage` com pré-aquecimento e atualização incremental.
-  - `components/AssistantPanel.jsx` — chat com Assistente, STT (Web Speech) e TTS (via `/api/tts`).
-- Lambda (opcional):
-  - `index.mjs` — handler para Alexa: recebe intents, chama `/api/assistant/chat` com `ASSIST_TOKEN` e responde em fala curta pt-BR.
+## APIs — principais rotas
+
+### Health e OpenAPI
+- `GET /api/health` — status.
+- `GET /api/openapi.json` e `GET /api/docs` — documentação Swagger.
+
+### GoodWe
+- `GET /api/monitor`, `/inverters`, `/weather`, `/powerflow`, `/evchargers/count`.
+- `GET /api/chart-by-plant`, `/plant-detail`, `/power-chart`, `/warnings`, `/monitor-abs`.
+- `POST /api/auth/crosslogin`, `POST /api/auth/crosslogin/raw`, `GET /api/debug/auth`.
+
+### Assistente
+- `POST /api/assistant/chat` — conversa + ferramentas.
+- `GET /api/assistant/tools` — descrições das ferramentas.
+- `GET /api/assistant/help|ping|health` — utilitários.
+
+### TTS
+- `POST/GET /api/tts` — áudio WAV; Piper local quando presente, fallback HTTP se configurado.
+
+## AI/Analytics
+- Coleta histórica automática: as rotas GoodWe (`/powerflow`, `/chart-by-plant`, `/power-chart`) agora alimentam tabelas de histórico (Postgres via Sequelize; SQLite fallback) com geração, consumo, bateria (SOC/potência) e rede (import/export).
+- Previsão: `GET /api/ai/forecast?hours=24` — retorna previsão horária de geração e consumo para as próximas N horas (média móvel recente; ajuste simples por clima quando disponível).
+- Recomendações: `GET /api/ai/recommendations` — retorna sugestões de economia com justificativas numéricas.
+- Frontend: nova página “Sugestoes” exibindo previsão e dicas com indicadores visuais.
+
+### SmartThings
+- OAuth: `GET /api/auth/smartthings` (redirect) + callback; `POST /api/auth/smartthings/unlink`; `GET /api/auth/smartthings/status`.
+- Devices/Rooms/Status/Commands: `GET /api/smartthings/devices`, `GET /api/smartthings/rooms`, `GET /api/smartthings/device/:id/status`, `POST /api/smartthings/commands`, `POST /api/smartthings/device/:id/on|off`.
+
+### Tuya / Smart Life
+- Link/Status/Unlink: `POST /api/auth/tuya/link { uid, app? }`, `GET /api/auth/tuya/status`, `POST /api/auth/tuya/unlink`.
+- Devices: `GET /api/tuya/devices` — tenta `/v1.0/users/{uid}/devices` (antigo), depois iot‑03; enriquece com cômodos (homes/rooms + details) e retorna `{ items, total }`.
+- Status/Toggle/Functions: `GET /api/tuya/device/:id/status` (normalizado), `POST /api/tuya/device/:id/on|off`, `POST /api/tuya/commands`, `GET /api/tuya/device/:id/functions`.
 
 
-## Fluxo de autenticação
-- Autenticação de app: usuários e sessões no SQLite.
-  - `POST /api/auth/register` → cria usuário e retorna `token`.
-  - `POST /api/auth/login` → valida senha (scrypt), cria sessão e retorna `token`.
-  - `GET /api/auth/me` e `POST /api/auth/change-password` exigem `Authorization: Bearer <token>`.
-- Autenticação GoodWe: realizada no servidor com a conta do `.env` (CrossLogin). O cliente não envia credenciais SEMS.
+## Variáveis de Ambiente (backend)
+- Gerais: `PORT`, `CORS_ORIGIN`, `TIMEOUT_MS`, `TOKEN_CACHE`.
+- GoodWe: `GOODWE_EMAIL`, `GOODWE_PASSWORD`.
+- Assistente: `OPENAI_API_KEY` (obrigatório p/ chat), `ASSIST_TOKEN` (modo serviço, sem integrações residenciais), `ASSIST_PLANT_ID`/`PLANT_ID` (service‑mode).
+- TTS Piper: `PIPER_PATH`, `PIPER_VOICE`, `PIPER_VOICE_JSON`, `PIPER_SPEAKER`, `PIPER_LENGTH_SCALE`, `PIPER_NOISE_SCALE`, `PIPER_NOISE_W`, `PIPER_HTTP_URL`/`TTS_SERVER_URL`.
+- Tuya: `TUYA_ACCESS_ID`, `TUYA_ACCESS_SECRET`, `TUYA_API_BASE` (us/weu/in/cn), `TUYA_SIGN_VERSION`, `TUYA_LANG`.
+- SmartThings: `ST_CLIENT_ID`, `ST_CLIENT_SECRET`, `ST_AUTH_URL`, `ST_TOKEN_URL`, `ST_API_BASE`, `ST_SCOPES`, `ST_REDIRECT_PATH`.
+- Hue (opcional): `HUE_CLIENT_ID`, `HUE_CLIENT_SECRET`, `HUE_AUTH_URL`, `HUE_TOKEN_URL`, `HUE_API_BASE`, `HUE_APP_KEY`.
+- MQTT (opcional): `MQTT_URL`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_PREFIX`, `MQTT_DISCOVERY_PREFIX`, `MQTT_INTERVAL_MS`.
+- Banco: `DATABASE_URL` (Postgres) — se ausente, usa SQLite.
 
 
-## Endpoints principais
-- Saúde: `GET /api/health`.
-- Powerstations (locais): `GET /api/powerstations`, `POST /api/powerstations/:id/name`.
-- GoodWe: `GET /api/monitor`, `GET /api/inverters`, `GET /api/weather`, `GET /api/powerflow`, `GET /api/evchargers/count`, `GET /api/chart-by-plant`, `GET /api/power-chart`, `GET /api/plant-detail`, `GET /api/warnings`.
-- Assistente: `POST /api/assistant/chat`, `GET /api/assistant/tools`, `GET /api/assistant/health`, `GET /api/assistant/help`.
-- TTS: `GET/POST /api/tts` → retorna `audio/wav` quando configurado.
-- Documentação: `GET /api/openapi.json` e `GET /api/docs` (Swagger UI dark).
+## Como Rodar
+1) Backend: copie `backend/.env.exemple` → `backend/.env` e preencha as envs mínimas (GoodWe + CORS).
+2) Seed do banco: `npm run seed`.
+3) Dev:
+   - Backend: `npm run dev` (porta 3000)
+   - Frontend: `npm --prefix frontend run dev` (porta 5173) e `VITE_API_BASE=http://localhost:3000/api`
+4) Produção (uma porta): `npm start` no root (build do front + serve estáticos e `/api/*`).
 
 
-## Assistente (opcional)
-- Requer `OPENAI_API_KEY`.
-- Modelo padrão: `gpt-4o-mini` (configurável via `OPENAI_MODEL`).
-- O agente usa ferramentas para buscar dados reais (renda do dia, total, geração por período, monitor, inverters, clima, powerflow etc.).
-- Modo serviço (sem login de usuário): defina `ASSIST_TOKEN` no backend e envie `Authorization: Bearer <ASSIST_TOKEN>` ao chamar `/api/assistant/chat`. A planta pode vir por `?powerstation_id=...` ou pelas envs `ASSIST_PLANT_ID`/`PLANT_ID`.
+## Deploy (Vercel + Render/Railway)
+- Backend (Render): Node 20.x (recomendado). Root Directory = `backend`. Build `npm ci`. Start `npm run start`.
+- Frontend (Vercel): Project Root = repo; `vercel.json` reescreve `/api/*` para o backend.
+- Piper: coloque os binários/vozes em `piper/` e deixe o auto‑detector encontrar. Pode forçar com `PIPER_*`.
 
 
-## TTS (voz)
-Você pode:
-1) Usar Piper local (recomendado, tudo em Node): configure `PIPER_PATH` e `PIPER_VOICE` no `backend/.env`.
-2) Usar um servidor HTTP TTS (ex.: `tts_server.py` com Coqui): configure `PIPER_HTTP_URL`/`TTS_SERVER_URL`.
-O frontend faz requisições a `/api/tts` e reproduz o áudio concatendando frases longas.
+## Solução de Problemas
+- 401 nas rotas: envie `Authorization: Bearer <token>` (login do app). `ASSIST_TOKEN` funciona só p/ Assistente sem integrações.
+- GoodWe sem dados no Assistente: verifique pwid do usuário (helpers já prioriza `user.powerstation_id`). `GET /api/assistant/ping` indica se há auth SEMS.
+- Tuya “0 devices”: confirme `TUYA_API_BASE` do seu projeto (us/weu/in/cn), o UID vinculado (Linked Users) e refaça `/auth/tuya/link` se necessário.
+- TTS 501: adicione Piper ou configure `PIPER_HTTP_URL`.
+- Render e ESM: use Node 20+ e Root Directory `backend` (para honrar "type": "module").
 
 
-## Banco de dados
-- Arquivo SQLite em `backend/backend/data/app.db` (compat) ou `backend/data/app.db` (novo caminho quando existir).
-- Rodar seed: `npm run seed` → cria/atualiza powerstations e gera `logins.txt`.
-- Usuários são criados via `/api/auth/register` (UI de Registro ou cURL).
-
-
-## Desenvolvimento vs Produção
-- Dev (dois processos):
-  - Backend: `npm run dev` (porta `3000`).
-  - Frontend: `npm --prefix frontend run dev` (porta `5173`).
-  - Em `frontend/.env`, aponte `VITE_API_BASE` para `http://localhost:3000/api`.
-- Produção (um processo, porta única):
-  - `npm start` no root. O backend compila o frontend e serve estáticos de `frontend/dist`.
-
-
-## Deploy (Vercel + Render/Railway) — 100% free com Piper
-
-Recomendado: Frontend na Vercel (estático) e Backend em Render/Railway/Fly (processo longo) — mantém Piper 100% funcional.
-
-1) Backend (Render como exemplo)
-- Service → Web Service
-- Root Directory: `goodwe-app/backend`
-- Environment: Node 18
-- Build Command: `npm ci`
-- Start Command: `npm run start`
-- Env obrigatórias:
-  - `GOODWE_EMAIL`, `GOODWE_PASSWORD`
-  - `PORT=3000`
-  - `CORS_ORIGIN=https://SEU_PROJETO.vercel.app`
-  - (Opcional) `OPENAI_API_KEY` e `ASSIST_TOKEN`
-- Piper (bundled no repo):
-  - Coloque o binário/vozes em `goodwe-app/piper/` (ex.: `piper`, `voices/pt_BR.onnx`, `pt_BR.onnx.json`).
-  - O backend detecta automaticamente. Se quiser forçar: `PIPER_PATH`, `PIPER_VOICE`, `PIPER_VOICE_JSON`.
-
-2) Frontend (Vercel)
-- Project Root: `goodwe-app`
-- O arquivo `vercel.json` já está preparado para:
-  - Build: `frontend` → `frontend/dist`
-  - Rewrite: `/api/*` → seu backend. Edite `goodwe-app/vercel.json` e troque `https://SEU_BACKEND_HOST` pela URL do Render.
-- Em “Environment Variables” da Vercel, opcionalmente defina `VITE_API_BASE=/api` (ou já deixe no `.env.production`).
-
-3) Teste
-- Abra a URL da Vercel → a UI carrega do Vercel e todas as chamadas a `/api/*` são roteadas para o backend.
-- Teste `/api/tts` (se Piper/voz estiverem presentes) e `/api/docs` (Swagger).
-
-Notas
-- Se o backend hibernar (plano free), a primeira chamada pode demorar (cold start).
-- O `/api/tts` cai em fallback HTTP ou responde 501 se Piper/voz não forem encontrados. O front usa Web Speech como fallback quando recebe 501.
-
-
-## Handler Alexa (opcional)
-- Arquivo `index.mjs` pronto para Lambda.
-- Envs: `API_BASE` (exponha seu backend com túnel/ingress), `ASSIST_TOKEN`, `PLANT_ID` (opcional), `HTTP_TIMEOUT_MS`, `HTTP_RETRIES`.
-- Dica: use Cloudflare Tunnel para expor `/api` de forma segura sem abrir portas públicas.
-
-
-## Estrutura de pastas (essencial)
-```
-goodwe-app/
-  backend/
-    src/ (server.js, routes.js, goodweClient.js, db.js, openapi.js, seed.js, tts_server.py)
-    .env[.exemple]  data/  vendor/
-  frontend/
-    src/ (components, pages, services, state)
-    .env[.example]  dist/
-  index.mjs   package.json
-```
-
-
-## Solução de problemas
-- 401 nas rotas `/api/*`: verifique se está enviando `Authorization: Bearer <token>` após login, ou use `ASSIST_TOKEN` no modo serviço do Assistente.
-- Falha no CrossLogin: confira `GOODWE_EMAIL/GOODWE_PASSWORD` e conectividade com `semsportal.com`.
-- TTS 501: defina Piper (`PIPER_*`) ou `PIPER_HTTP_URL/TTS_SERVER_URL`.
-- Frontend em branco em produção: confirme que `frontend/dist` existe; `npm start` no root já compila antes de iniciar.
-- Banco não encontrado: a app usa caminho legacy `backend/backend/data` se `backend/data` não existir. Crie `backend/data` para adotar o novo caminho.
-
-
-## Licença
-Sem cabeçalho de licença explícito neste repositório. Consulte o autor antes de redistribuir.
+—
+Projeto sem cabeçalho de licença explícito. Consulte o autor antes de redistribuir.

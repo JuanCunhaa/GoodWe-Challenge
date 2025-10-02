@@ -1,5 +1,17 @@
+import { initHistoryRepo } from '../analytics/historyRepo.js';
+import { createGoodWeCollector } from '../analytics/collector.js';
+
 export function registerGoodWeRoutes(router, { gw, helpers }) {
   const { tryGetUser, getPsId } = helpers;
+
+  // Lazy init collector (does not block requests)
+  let _collector = null;
+  async function getCollector(){
+    if (_collector) return _collector;
+    const repo = await initHistoryRepo();
+    _collector = createGoodWeCollector(repo);
+    return _collector;
+  }
 
   router.get('/debug/auth', (req, res) => {
     const auth = gw.auth || null;
@@ -77,7 +89,10 @@ export function registerGoodWeRoutes(router, { gw, helpers }) {
 
   router.get('/powerflow', async (req, res) => {
     const psId = await getPsId(req);
-    try { const j = await gw.postJson('v2/PowerStation/GetPowerflow', { PowerStationId: psId }); res.json(j); }
+    try { const j = await gw.postJson('v2/PowerStation/GetPowerflow', { PowerStationId: psId });
+      try { (await getCollector()).onResponse('powerflow', { plant_id: psId, response: j }); } catch {}
+      res.json(j);
+    }
     catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 
@@ -96,6 +111,7 @@ export function registerGoodWeRoutes(router, { gw, helpers }) {
     try {
       const body = { id, date, range: Number(range), chartIndexId: String(chartIndexId), isDetailFull: false };
       const j = await gw.postJson('v2/Charts/GetChartByPlant', body);
+      try { (await getCollector()).onResponse('chart-by-plant', { plant_id: id, date, response: j }); } catch {}
       res.json(j);
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
@@ -112,7 +128,10 @@ export function registerGoodWeRoutes(router, { gw, helpers }) {
     const date = req.query.date || '';
     const full_script = String(req.query.full_script || 'true') === 'true';
     const payload = { id, date, full_script };
-    try { const j = await gw.postJson('v2/Charts/GetPlantPowerChart', payload); res.json(j); }
+    try { const j = await gw.postJson('v2/Charts/GetPlantPowerChart', payload);
+      try { (await getCollector()).onResponse('power-chart', { plant_id: id, date, response: j }); } catch {}
+      res.json(j);
+    }
     catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 
@@ -130,4 +149,3 @@ export function registerGoodWeRoutes(router, { gw, helpers }) {
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 }
-

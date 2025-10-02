@@ -190,6 +190,23 @@ const openapi = {
     '/assistant/ping': {
       get: { tags: ['Assistant'], summary: 'Ping + auth status', responses: { '200': { description: 'OK' } } },
     },
+    '/ai/forecast': {
+      get: {
+        tags: ['AI/Analytics'],
+        summary: 'Previsão de geração e consumo (próximas horas)',
+        parameters: [ { name: 'hours', in: 'query', schema: { type: 'integer', default: 24 } } ],
+        security: [{ bearerAuth: [] }],
+        responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
+      },
+    },
+    '/ai/recommendations': {
+      get: {
+        tags: ['AI/Analytics'],
+        summary: 'Recomendações de economia',
+        security: [{ bearerAuth: [] }],
+        responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
+      },
+    },
     '/tts': {
       post: {
         tags: ['Assistant'],

@@ -15,6 +15,7 @@ const NAV = [
   //{ to: '/consumo', label: 'Consumo', icon: Activity },
   { to: '/inversores', label: 'Inversores', icon: Factory },
   { to: '/alertas', label: 'Alertas', icon: Bell },
+  { to: '/sugestoes', label: 'Sugestoes', icon: ShieldCheck },
   { to: '/dispositivos', label: 'Dispositivos', icon: Activity },
   //{ to: '/configuracoes', label: 'Configurações', icon: Settings },
   { to: '/perfil', label: 'Perfil', icon: User },
