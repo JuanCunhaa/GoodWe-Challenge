@@ -207,6 +207,14 @@ const openapi = {
         responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
       },
     },
+    '/ai/devices/overview': {
+      get: {
+        tags: ['AI/Analytics'],
+        summary: 'Visão geral de dispositivos (SmartThings + Tuya) com status e métricas',
+        security: [{ bearerAuth: [] }],
+        responses: { '200': { description: 'OK' }, '401': { description: 'Unauthorized' } },
+      },
+    },
     '/tts': {
       post: {
         tags: ['Assistant'],

@@ -76,6 +76,23 @@ export async function getRecommendations({ plant_id }){
     recs.push({ text: 'Nenhum padrão crítico encontrado recentemente. Bons hábitos energéticos!', metric: {} });
   }
 
+  // Climate-based advice (GoodWe weather)
+  try {
+    let weather = null;
+    if (typeof fetchWeather === 'function') {
+      weather = await fetchWeather();
+    }
+    // If not provided, try lightweight fetch via Charts weather endpoint is not always accessible; we skip heavy fetch here.
+    const sky = String(weather?.data?.weather?.forecast?.[0]?.skycon || weather?.data?.weather?.skycon || '').toLowerCase();
+    const clouds = Number(weather?.data?.weather?.cloudrate ?? NaN);
+    let lowGen = false; let reason = '';
+    if (!Number.isNaN(clouds) && clouds >= 0.7) { lowGen = true; reason = `cobertura de nuvens alta (${Math.round(clouds*100)}%)`; }
+    else if (sky.includes('rain') || sky.includes('storm')) { lowGen = true; reason = 'chuva prevista'; }
+    else if (sky.includes('cloud')) { lowGen = true; reason = 'tempo nublado'; }
+    if (lowGen) {
+      recs.unshift({ text: `Previsão climática indica ${reason}. Evite usar dispositivos não críticos no período de pico solar (11h–15h) para não depender de geração instável.`, metric: { sky, clouds: isFinite(clouds) ? +clouds.toFixed(2) : null } });
+    }
+  } catch {}
+
   return { plant_id, recommendations: recs };
 }
-

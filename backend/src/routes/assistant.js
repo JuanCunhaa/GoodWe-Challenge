@@ -44,6 +44,10 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       }
 
       const tools = {
+        async get_devices_overview(){
+          const data = await apiJson(`/ai/devices/overview`);
+          return { ok: true, ...data };
+        },
         async get_forecast({ hours }){
           const h = Number(hours || 24);
           const data = await apiJson(`/ai/forecast?hours=${encodeURIComponent(h)}`);
@@ -203,6 +207,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       };
 
       const toolSchemas = [
+        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuário com status e métricas (quando disponíveis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
         { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
         { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -232,6 +237,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
 
       const messages = [
         { role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos, responda apenas os nomes (um por linha). Quando perguntarem o cômodo de um dispositivo, responda no formato "O dispositivo \"NOME\" está no cômodo SALA.". Seja breve, direto e útil.' },
+        { role: 'system', content: 'Para perguntas sobre dispositivos, use get_devices_overview para basear-se em dispositivos realmente vinculados (SmartThings/Tuya); inclua status on/off e, quando disponivel, potencia (W) e energia (kWh). Considere previsao do clima para sugerir evitar dispositivos nao criticos em caso de nebulosidade/chuva.' },
         ...prev.filter(m => m && m.role && m.content),
         input ? { role: 'user', content: input } : null,
       ].filter(Boolean);
@@ -302,6 +308,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
   router.get('/assistant/tools', (req, res) => {
     try {
       const items = [
+        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuário com status e métricas (quando disponíveis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
         { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
         { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
