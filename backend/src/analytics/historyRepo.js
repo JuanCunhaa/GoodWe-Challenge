@@ -3,10 +3,18 @@ import { getDbEngine } from '../db.js';
 
 function toDate(d){ return (d instanceof Date) ? d : new Date(d); }
 
+let useSequelize = false;
 export async function initHistoryRepo() {
   if (isPostgres) {
-    await initSequelize();
-    await ensureSynced();
+    try {
+      await initSequelize();
+      await ensureSynced();
+      useSequelize = true;
+    } catch (e) {
+      // Fallback to raw pg via db.js
+      console.warn('[analytics] Sequelize init failed, falling back to raw PG:', e?.message || e);
+      useSequelize = false;
+    }
   }
   // sqlite tables are created by db.js on startup
   return createRepo();
@@ -23,20 +31,38 @@ export function createRepo() {
 
   async function bulkInsert(table, rows) {
     if (!rows || !rows.length) return { inserted: 0 };
-    if (isPostgres && models[table]) {
+    if (isPostgres && useSequelize && models[table]) {
       await models[table].bulkCreate(rows.map(r => ({ ...r, timestamp: toDate(r.timestamp) })), { validate: false });
       return { inserted: rows.length };
     }
-    // sqlite fallback via direct SQL
-    const db = engine.sqliteDb;
-    if (!db) return { inserted: 0 };
     const cols = Object.keys(rows[0]);
-    const placeholders = '(' + cols.map(()=> '?').join(',') + ')';
     const tableName = camelToSnake(table);
-    const stmt = db.prepare(`INSERT INTO ${tableName} (${cols.join(',')}) VALUES ${placeholders}`);
-    const tx = db.transaction((items)=> { for (const it of items){ const vals = cols.map((c)=> c==='timestamp' ? new Date(it[c]).toISOString() : it[c]); stmt.run(...vals); } });
-    tx(rows);
-    return { inserted: rows.length };
+    if (engine.type === 'pg') {
+      // raw PG multi-insert
+      const { pgPool } = engine;
+      const chunks = [];
+      const params = [];
+      let p = 1;
+      for (const r of rows) {
+        const vals = cols.map((c)=> c==='timestamp' ? toDate(r[c]) : r[c]);
+        const ph = '(' + vals.map(()=> `$${p++}`).join(',') + ')';
+        chunks.push(ph);
+        params.push(...vals);
+      }
+      const sql = `INSERT INTO ${tableName} (${cols.join(',')}) VALUES ${chunks.join(',')}`;
+      await pgPool.query(sql, params);
+      return { inserted: rows.length };
+    }
+    if (engine.type === 'sqlite') {
+      // sqlite fallback via direct SQL
+      const db = engine.sqliteDb;
+      const placeholders = '(' + cols.map(()=> '?').join(',') + ')';
+      const stmt = db.prepare(`INSERT INTO ${tableName} (${cols.join(',')}) VALUES ${placeholders}`);
+      const tx = db.transaction((items)=> { for (const it of items){ const vals = cols.map((c)=> c==='timestamp' ? new Date(it[c]).toISOString() : it[c]); stmt.run(...vals); } });
+      tx(rows);
+      return { inserted: rows.length };
+    }
+    return { inserted: 0 };
   }
 
   async function queryAll(sqlPg, sqlSqlite, params = []) {
@@ -98,5 +124,17 @@ export function createRepo() {
       const rows = await queryAll(pg, lite, [plant_id, String(lookbackDays)]);
       return rows.map(r => ({ day: new Date(r.day).toISOString().slice(0,10), kwh: Number(r.kwh)||0 }));
     },
+
+    async getTableStats(table){
+      const snake = camelToSnake(table);
+      if (engine.type === 'pg'){
+        const r = await engine.pgPool.query(`SELECT COUNT(*)::bigint AS count, MAX(timestamp) AS last_ts FROM ${snake}`);
+        const row = r.rows[0] || {};
+        return { count: Number(row.count||0), last_ts: row.last_ts ? new Date(row.last_ts).toISOString() : null };
+      }
+      const db = engine.sqliteDb;
+      const row = db.prepare(`SELECT COUNT(*) AS count, MAX(timestamp) AS last_ts FROM ${snake}`).get();
+      return { count: Number(row?.count||0), last_ts: row?.last_ts || null };
+    }
   };
 }

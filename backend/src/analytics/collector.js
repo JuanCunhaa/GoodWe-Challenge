@@ -58,7 +58,9 @@ export function createGoodWeCollector(repo){
         const export_kw = w < 0 ? Math.abs(w)/1000 : 0;
         await repo.insertGridSample({ plant_id, timestamp: ts || new Date(), power_kw, import_kw, export_kw });
       }
-    } catch {}
+    } catch (e) {
+      console.warn('[collector] handlePowerChart failed:', e?.message || e);
+    }
   }
 
   async function handlePowerflow({ plant_id, response }){
@@ -73,7 +75,9 @@ export function createGoodWeCollector(repo){
       // write grid
       const power_kw = Math.abs(gridW)/1000; const import_kw = gridW>0?Math.abs(gridW)/1000:0; const export_kw = gridW<0?Math.abs(gridW)/1000:0;
       await repo.insertGridSample({ plant_id, timestamp: now, power_kw, import_kw, export_kw });
-    } catch {}
+    } catch (e) {
+      console.warn('[collector] handlePowerflow failed:', e?.message || e);
+    }
   }
 
   return {
@@ -94,4 +98,3 @@ export function createGoodWeCollector(repo){
     }
   };
 }
-
