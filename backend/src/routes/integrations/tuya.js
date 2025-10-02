@@ -201,8 +201,31 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
         const funcs = Array.isArray(f.json?.result?.functions) ? f.json.result.functions : []
         code = (['switch_led','switch','switch_1','power'].find(k => funcs.some(x => x?.code === k))) || ''
       }
-      const on = code ? !!map[code] : null;
-      res.json({ ok: true, on, status: map, code });
+      let isOn = null;
+      if (code && Object.prototype.hasOwnProperty.call(map, code)) {
+        const v = map[code];
+        isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on');
+      }
+      // Normalize to SmartThings-like shape so the UI consegue ler 'components.main.switch.switch.value'
+      const normalized = (isOn == null)
+        ? null
+        : { components: { main: { switch: { switch: { value: isOn ? 'on' : 'off' } } } } };
+      res.json({ ok: true, on: isOn, status: normalized || map, code });
+    } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
+  });
+
+  // Tuya: list available functions (DP codes) for a device
+  router.get('/tuya/device/:id/functions', async (req, res) => {
+    try {
+      const user = await requireUser(req, res); if (!user) return;
+      await ensureTuyaLinkedUser(user);
+      const token = await tuyaEnsureAppToken();
+      const id = String(req.params.id || '');
+      const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/functions`;
+      const { status, json } = await tuyaSignAndFetch(path, { method: 'GET', accessToken: token });
+      if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok:false });
+      const funcs = Array.isArray(json?.result?.functions) ? json.result.functions : [];
+      res.json({ ok: true, functions: funcs });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 
