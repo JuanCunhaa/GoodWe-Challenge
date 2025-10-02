@@ -9,6 +9,7 @@ import openapi from './openapi.js';
 import compression from 'compression';
 import { startMqttPublisher } from './mqttPublisher.js';
 import { startIngestor } from './analytics/ingestor.js';
+import { startIotIngestor } from './analytics/iotIngestor.js';
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -141,3 +142,4 @@ if (process.env.MQTT_URL) {
 
 // Start analytics ingestor (optional, default enabled)
 try { startIngestor({ gw, dbApi }); } catch (e) { console.warn('[ingestor] init failed', e?.message || e) }
+try { startIotIngestor({ helpers: null }); } catch (e) { console.warn('[iot-ingestor] init failed', e?.message || e) }

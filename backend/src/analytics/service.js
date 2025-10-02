@@ -30,12 +30,40 @@ export async function getForecast({ plant_id, hours = 24, fetchWeather }){
   const consProfile = await repo.getHourlyProfile({ table: 'consumption_history', plant_id, lookbackDays: 14 });
 
   const slots = nextHoursList(hours);
-  const hourlyGen = slots.map(t => genProfile.get(t.getHours()) || 0);
+  // Base: average kWh per hour across recent days
+  let hourlyGen = slots.map(t => genProfile.get(t.getHours()) || 0);
   const hourlyCons = slots.map(t => consProfile.get(t.getHours()) || 0);
 
   let weather = null;
   if (typeof fetchWeather === 'function'){
     try { weather = await fetchWeather(); } catch {}
+  }
+  // Apply clear-sky daylight shaping if base is too flat or zero
+  const dayShape = (() => {
+    const sunrise = 6, sunset = 18; // fallback; without geo we keep simple
+    const arr = slots.map(t => {
+      const h = t.getHours();
+      if (h <= sunrise || h >= sunset) return 0;
+      const x = (h - sunrise) / (sunset - sunrise);
+      // smooth bell (sinus)
+      return Math.sin(Math.PI * x);
+    });
+    return arr;
+  })();
+  const genSum = hourlyGen.reduce((a,b)=>a+b,0);
+  if (genSum < 0.01) {
+    // Estimate daily energy from historical totals
+    const days = await repo.getDailyTotals({ table: 'generation_history', plant_id, lookbackDays: 14 });
+    const meanDaily = days.length ? (days.reduce((s,it)=>s+it.kwh,0)/days.length) : 0;
+    const shapeSum = dayShape.reduce((a,b)=>a+b,0) || 1;
+    hourlyGen = dayShape.map(v => (meanDaily * (v/shapeSum)));
+  } else {
+    // Blend a bit of shape to push generation to daylight hours
+    const blend = 0.3;
+    const baseSum = hourlyGen.reduce((a,b)=>a+b,0) || 1;
+    const shapeSum = dayShape.reduce((a,b)=>a+b,0) || 1;
+    const shaped = dayShape.map(v => (genSum * (v/shapeSum)));
+    hourlyGen = hourlyGen.map((v,i)=> (1-blend)*v + blend*(shaped[i] * (v>0? v/baseSum : 1)));
   }
   const adjGen = weather ? adjustByWeather(hourlyGen, weather) : hourlyGen;
 

@@ -57,6 +57,11 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           const data = await apiJson(`/ai/recommendations`);
           return { ok: true, ...data };
         },
+        async device_toggle({ name, action }){
+          const payload = { name: String(name||'').trim(), action: String(action||'').toLowerCase() };
+          const data = await apiJson(`/ai/device/toggle`, { method:'POST', body: payload });
+          return { ok: true, ...data };
+        },
         async get_income_today() {
           const body = { powerstation_id: psId, key: '', orderby: '', powerstation_type: '', powerstation_status: '', page_index: 1, page_size: 14, adcode: '', org_id: '', condition: '' };
           const j = await gw.postJson('PowerStationMonitor/QueryPowerStationMonitor', body);
@@ -207,6 +212,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       };
 
       const toolSchemas = [
+        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondência aproximada.', parameters: { type:'object', properties: { name: { type:'string' }, action:{ type:'string', enum:['on','off'] } }, required:['name','action'], additionalProperties:false } },
         { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuário com status e métricas (quando disponíveis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
         { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
         { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -237,7 +243,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
 
       const messages = [
         { role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos, responda apenas os nomes (um por linha). Quando perguntarem o cômodo de um dispositivo, responda no formato "O dispositivo \"NOME\" está no cômodo SALA.". Seja breve, direto e útil.' },
-        { role: 'system', content: 'Para perguntas sobre dispositivos, use get_devices_overview para basear-se em dispositivos realmente vinculados (SmartThings/Tuya); inclua status on/off e, quando disponivel, potencia (W) e energia (kWh). Considere previsao do clima para sugerir evitar dispositivos nao criticos em caso de nebulosidade/chuva.' },
+        { role: 'system', content: 'Para perguntas sobre dispositivos, use get_devices_overview para basear-se em dispositivos realmente vinculados (SmartThings/Tuya); inclua status on/off e, quando disponivel, potencia (W) e energia (kWh). Para ligar/desligar por nome (ex.: "desligue minha TV"), use a ferramenta device_toggle fornecendo name e action. Considere previsao do clima para sugerir evitar dispositivos nao criticos em caso de nebulosidade/chuva.' },
         ...prev.filter(m => m && m.role && m.content),
         input ? { role: 'user', content: input } : null,
       ].filter(Boolean);
@@ -290,7 +296,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       } catch {}
 
       try {
-        const cmd = steps.find(s => s && s.ok && (s.name === 'st_command' || s.name === 'tuya_command'));
+        const cmd = steps.find(s => s && s.ok && (s.name === 'st_command' || s.name === 'tuya_command' || s.name === 'device_toggle'));
         if (cmd) {
           const action = String(cmd?.args?.action || '').toLowerCase();
           const verb = action === 'on' ? 'ligado' : 'desligado';
@@ -308,6 +314,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
   router.get('/assistant/tools', (req, res) => {
     try {
       const items = [
+        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondência aproximada.', parameters: { type:'object', properties: { name: { type:'string' }, action:{ type:'string', enum:['on','off'] } }, required:['name','action'], additionalProperties:false } },
         { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuário com status e métricas (quando disponíveis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
         { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
         { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },

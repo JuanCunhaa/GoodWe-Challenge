@@ -100,20 +100,29 @@ export function createRepo() {
 
     // reads
     async getHourlyProfile({ table, plant_id, lookbackDays = 14 }){
+      // Average hourly energy by summing slices per hour per day and dividing by distinct days
       const pg = `
-        SELECT EXTRACT(HOUR FROM timestamp) AS hour, AVG(kwh) AS kwh
-        FROM ${table}
-        WHERE plant_id = $1 AND timestamp >= (now() - ($2::text || ' days')::interval)
+        WITH h AS (
+          SELECT DATE(timestamp) AS d, EXTRACT(HOUR FROM timestamp) AS hour, SUM(kwh) AS s
+          FROM ${table}
+          WHERE plant_id = $1 AND timestamp >= (now() - ($2::text || ' days')::interval)
+          GROUP BY 1,2
+        )
+        SELECT hour, COALESCE(SUM(s)/NULLIF(COUNT(DISTINCT d),0),0) AS kwh
+        FROM h
         GROUP BY hour
-        ORDER BY hour
-      `;
+        ORDER BY hour`;
       const lite = `
-        SELECT CAST(STRFTIME('%H', timestamp) AS INTEGER) AS hour, AVG(kwh) AS kwh
-        FROM ${table}
-        WHERE plant_id = ? AND timestamp >= DATETIME('now', '-' || ? || ' days')
+        WITH h AS (
+          SELECT DATE(timestamp) AS d, CAST(STRFTIME('%H', timestamp) AS INTEGER) AS hour, SUM(kwh) AS s
+          FROM ${table}
+          WHERE plant_id = ? AND timestamp >= DATETIME('now', '-' || ? || ' days')
+          GROUP BY 1,2
+        )
+        SELECT hour, COALESCE(SUM(s)/NULLIF(COUNT(DISTINCT d),0),0) AS kwh
+        FROM h
         GROUP BY hour
-        ORDER BY hour
-      `;
+        ORDER BY hour`;
       const rows = await queryAll(pg, lite, [plant_id, String(lookbackDays)]);
       const map = new Map();
       for (const r of rows) map.set(Number(r.hour), Number(r.kwh) || 0);

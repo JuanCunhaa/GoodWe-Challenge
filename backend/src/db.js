@@ -100,6 +100,24 @@ async function initPg() {
   DO $$ BEGIN
     CREATE UNIQUE INDEX IF NOT EXISTS grid_history_unique ON grid_history(plant_id, timestamp);
   EXCEPTION WHEN others THEN END $$;
+
+  -- Device history (IoT)
+  CREATE TABLE IF NOT EXISTS device_history (
+    id BIGSERIAL PRIMARY KEY,
+    vendor TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    name TEXT,
+    room TEXT,
+    ts TIMESTAMPTZ NOT NULL,
+    state_on BOOLEAN,
+    power_w DOUBLE PRECISION,
+    energy_wh DOUBLE PRECISION,
+    source TEXT
+  );
+  CREATE INDEX IF NOT EXISTS device_history_idx ON device_history(vendor, device_id, ts);
+  DO $$ BEGIN
+    CREATE UNIQUE INDEX IF NOT EXISTS device_history_unique ON device_history(vendor, device_id, ts);
+  EXCEPTION WHEN others THEN END $$;
   `;
   await pgPool.query(ddl);
 }
@@ -210,6 +228,22 @@ async function initSqlite() {
   );
   CREATE INDEX IF NOT EXISTS grid_history_plant_ts ON grid_history(plant_id, timestamp);
   CREATE UNIQUE INDEX IF NOT EXISTS grid_history_unique ON grid_history(plant_id, timestamp);
+
+  -- Device history (IoT)
+  CREATE TABLE IF NOT EXISTS device_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vendor TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    name TEXT,
+    room TEXT,
+    ts TEXT NOT NULL,
+    state_on INTEGER,
+    power_w REAL,
+    energy_wh REAL,
+    source TEXT
+  );
+  CREATE INDEX IF NOT EXISTS device_history_idx ON device_history(vendor, device_id, ts);
+  CREATE UNIQUE INDEX IF NOT EXISTS device_history_unique ON device_history(vendor, device_id, ts);
   `);
 }
 
@@ -438,5 +472,23 @@ export async function insertGridHistory({ plant_id, timestamp, power_kw, import_
     await pgPool.query('INSERT INTO grid_history(plant_id, timestamp, power_kw, import_kw, export_kw) VALUES($1,$2,$3,$4,$5)', [plant_id, new Date(timestamp), (power_kw!=null?Number(power_kw):null), (import_kw!=null?Number(import_kw):null), (export_kw!=null?Number(export_kw):null)]);
   } else {
     sqliteDb.prepare('INSERT INTO grid_history(plant_id, timestamp, power_kw, import_kw, export_kw) VALUES(?,?,?,?,?)').run(plant_id, new Date(timestamp).toISOString(), (power_kw!=null?Number(power_kw):null), (import_kw!=null?Number(import_kw):null), (export_kw!=null?Number(export_kw):null));
+  }
+}
+
+// --------- Device history helpers ---------
+export async function insertDeviceHistory({ vendor, device_id, name, room, ts, state_on, power_w, energy_wh, source }){
+  const tDate = new Date(ts);
+  if (USE_PG) {
+    try {
+      await pgPool.query(
+        'INSERT INTO device_history(vendor, device_id, name, room, ts, state_on, power_w, energy_wh, source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (vendor, device_id, ts) DO NOTHING',
+        [vendor, device_id, name ?? null, room ?? null, tDate, (state_on==null? null : !!state_on), (power_w!=null? Number(power_w): null), (energy_wh!=null? Number(energy_wh): null), source ?? null]
+      );
+    } catch {}
+  } else {
+    try {
+      sqliteDb.prepare('INSERT OR IGNORE INTO device_history(vendor, device_id, name, room, ts, state_on, power_w, energy_wh, source) VALUES(?,?,?,?,?,?,?,?,?)')
+        .run(vendor, device_id, name ?? null, room ?? null, tDate.toISOString(), (state_on==null? null : (!!state_on?1:0)), (power_w!=null? Number(power_w): null), (energy_wh!=null? Number(energy_wh): null), source ?? null);
+    } catch {}
   }
 }

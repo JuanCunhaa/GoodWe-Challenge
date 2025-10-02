@@ -120,4 +120,54 @@ export function registerAiRoutes(router, { gw, helpers }){
     const data = await devicesOverviewInternal(req, helpers);
     res.json(data);
   });
+
+  // Toggle device by fuzzy name across SmartThings + Tuya
+  router.post('/ai/device/toggle', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const name = String(req.body?.name || req.query?.name || '').trim();
+      const action = String(req.body?.action || req.query?.action || '').toLowerCase();
+      if (!name || !['on','off'].includes(action)) return res.status(422).json({ ok:false, error:'name and action (on/off) required' });
+
+      const data = await devicesOverviewInternal(req, helpers);
+      const items = Array.isArray(data?.items) ? data.items : [];
+
+      function norm(s){ return String(s||'').toLowerCase().normalize('NFKD').replace(/\p{Diacritic}/gu,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+      const q = norm(name);
+      function score(d){
+        const n = norm(d.name);
+        let sc = 0;
+        if (n === q) sc = 100;
+        else if (n.includes(q)) sc = 80;
+        else {
+          const parts = q.split(' ').filter(Boolean);
+          let hit = 0; for (const p of parts){ if (n.includes(p)) hit++; }
+          sc = hit * 10 + (d.roomName && norm(d.roomName).includes(q) ? 5 : 0);
+        }
+        // prefer on devices when turning off
+        if (action==='off' && d.on===true) sc += 3;
+        return sc;
+      }
+      const ranked = items.map(d=>({ d, s: score(d) })).sort((a,b)=> b.s-a.s);
+      const best = ranked[0] && ranked[0].s>=10 ? ranked[0].d : null;
+      if (!best) return res.status(404).json({ ok:false, error:'device not found', tried: items.length });
+
+      const authHeader = req.headers['authorization'] || '';
+      const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+      const headers = { 'Authorization': authHeader };
+      let resp = null;
+      if (best.vendor === 'smartthings') {
+        const r = await fetch(`${base}/smartthings/device/${encodeURIComponent(best.id)}/${action}`, { method:'POST', headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+        resp = await r.json().catch(()=>null);
+        if (!r.ok) return res.status(r.status).json(resp||{ ok:false });
+      } else if (best.vendor === 'tuya') {
+        const r = await fetch(`${base}/tuya/device/${encodeURIComponent(best.id)}/${action}`, { method:'POST', headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+        resp = await r.json().catch(()=>null);
+        if (!r.ok) return res.status(r.status).json(resp||{ ok:false });
+      } else {
+        return res.status(400).json({ ok:false, error:'unknown vendor' });
+      }
+      res.json({ ok:true, vendor: best.vendor, device_id: best.id, name: best.name, roomName: best.roomName||'', action, result: resp });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
 }
