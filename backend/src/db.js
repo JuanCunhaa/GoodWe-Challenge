@@ -61,6 +61,9 @@ async function initPg() {
     kwh DOUBLE PRECISION NOT NULL
   );
   CREATE INDEX IF NOT EXISTS generation_history_plant_ts ON generation_history(plant_id, timestamp);
+  DO $$ BEGIN
+    CREATE UNIQUE INDEX IF NOT EXISTS generation_history_unique ON generation_history(plant_id, timestamp);
+  EXCEPTION WHEN others THEN END $$;
 
   CREATE TABLE IF NOT EXISTS consumption_history (
     id BIGSERIAL PRIMARY KEY,
@@ -69,6 +72,9 @@ async function initPg() {
     kwh DOUBLE PRECISION NOT NULL
   );
   CREATE INDEX IF NOT EXISTS consumption_history_plant_ts ON consumption_history(plant_id, timestamp);
+  DO $$ BEGIN
+    CREATE UNIQUE INDEX IF NOT EXISTS consumption_history_unique ON consumption_history(plant_id, timestamp);
+  EXCEPTION WHEN others THEN END $$;
 
   CREATE TABLE IF NOT EXISTS battery_history (
     id BIGSERIAL PRIMARY KEY,
@@ -78,6 +84,9 @@ async function initPg() {
     power_kw DOUBLE PRECISION
   );
   CREATE INDEX IF NOT EXISTS battery_history_plant_ts ON battery_history(plant_id, timestamp);
+  DO $$ BEGIN
+    CREATE UNIQUE INDEX IF NOT EXISTS battery_history_unique ON battery_history(plant_id, timestamp);
+  EXCEPTION WHEN others THEN END $$;
 
   CREATE TABLE IF NOT EXISTS grid_history (
     id BIGSERIAL PRIMARY KEY,
@@ -88,6 +97,9 @@ async function initPg() {
     export_kw DOUBLE PRECISION
   );
   CREATE INDEX IF NOT EXISTS grid_history_plant_ts ON grid_history(plant_id, timestamp);
+  DO $$ BEGIN
+    CREATE UNIQUE INDEX IF NOT EXISTS grid_history_unique ON grid_history(plant_id, timestamp);
+  EXCEPTION WHEN others THEN END $$;
   `;
   await pgPool.query(ddl);
 }
@@ -167,6 +179,7 @@ async function initSqlite() {
     kwh REAL NOT NULL
   );
   CREATE INDEX IF NOT EXISTS generation_history_plant_ts ON generation_history(plant_id, timestamp);
+  CREATE UNIQUE INDEX IF NOT EXISTS generation_history_unique ON generation_history(plant_id, timestamp);
 
   CREATE TABLE IF NOT EXISTS consumption_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -175,6 +188,7 @@ async function initSqlite() {
     kwh REAL NOT NULL
   );
   CREATE INDEX IF NOT EXISTS consumption_history_plant_ts ON consumption_history(plant_id, timestamp);
+  CREATE UNIQUE INDEX IF NOT EXISTS consumption_history_unique ON consumption_history(plant_id, timestamp);
 
   CREATE TABLE IF NOT EXISTS battery_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -184,6 +198,7 @@ async function initSqlite() {
     power_kw REAL
   );
   CREATE INDEX IF NOT EXISTS battery_history_plant_ts ON battery_history(plant_id, timestamp);
+  CREATE UNIQUE INDEX IF NOT EXISTS battery_history_unique ON battery_history(plant_id, timestamp);
 
   CREATE TABLE IF NOT EXISTS grid_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -194,6 +209,7 @@ async function initSqlite() {
     export_kw REAL
   );
   CREATE INDEX IF NOT EXISTS grid_history_plant_ts ON grid_history(plant_id, timestamp);
+  CREATE UNIQUE INDEX IF NOT EXISTS grid_history_unique ON grid_history(plant_id, timestamp);
   `);
 }
 

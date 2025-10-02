@@ -49,7 +49,9 @@ export function createRepo() {
         chunks.push(ph);
         params.push(...vals);
       }
-      const sql = `INSERT INTO ${tableName} (${cols.join(',')}) VALUES ${chunks.join(',')}`;
+      const conflict = (tableName === 'generation_history' || tableName === 'consumption_history' || tableName === 'battery_history' || tableName === 'grid_history')
+        ? ' ON CONFLICT (plant_id, timestamp) DO NOTHING' : '';
+      const sql = `INSERT INTO ${tableName} (${cols.join(',')}) VALUES ${chunks.join(',')}${conflict}`;
       await pgPool.query(sql, params);
       return { inserted: rows.length };
     }

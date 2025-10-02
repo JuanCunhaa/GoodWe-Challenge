@@ -1,0 +1,45 @@
+{
+  "session": {
+    "new": true,
+    "sessionId": "SessionId.testEnergy",
+    "application": {
+      "applicationId": "amzn1.ask.skill.SEU-SKILL-ID"
+    },
+    "user": {
+      "userId": "amzn1.ask.account.testuser"
+    }
+  },
+  "context": {
+    "System": {
+      "application": {
+        "applicationId": "amzn1.ask.skill.SEU-SKILL-ID"
+      },
+      "user": {
+        "userId": "amzn1.ask.account.testuser"
+      },
+      "device": {
+        "deviceId": "testDeviceId",
+        "supportedInterfaces": {}
+      }
+    }
+  },
+  "request": {
+    "type": "IntentRequest",
+    "requestId": "EdwRequestId.testEnergy",
+    "locale": "pt-BR",
+    "timestamp": "2025-10-02T06:00:00Z",
+    "intent": {
+      "name": "RouteIntent",
+      "slots": {
+        "query": {
+          "name": "query",
+          "value": "SUA PERGUNTA FICA BEM AQUI TA OK? SEJA INTELIGENTE"
+        },
+        "planta": {
+          "name": "planta",
+          "value": "PWID-123"
+        }
+      }
+    }
+  }
+}

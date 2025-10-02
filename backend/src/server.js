@@ -8,6 +8,7 @@ import { createRoutes } from './routes.js';
 import openapi from './openapi.js';
 import compression from 'compression';
 import { startMqttPublisher } from './mqttPublisher.js';
+import { startIngestor } from './analytics/ingestor.js';
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -137,3 +138,6 @@ app.listen(PORT, "0.0.0.0", () => {
 if (process.env.MQTT_URL) {
   try { startMqttPublisher({ gw, dbApi }); } catch (e) { console.warn('[mqtt] init failed', e?.message || e); }
 }
+
+// Start analytics ingestor (optional, default enabled)
+try { startIngestor({ gw, dbApi }); } catch (e) { console.warn('[ingestor] init failed', e?.message || e) }
