@@ -37,8 +37,17 @@ export function createRepo() {
   async function bulkInsert(table, rows) {
     if (!rows || !rows.length) return { inserted: 0 };
     if (isPostgres && useSequelize && models[table]) {
-      await models[table].bulkCreate(rows.map(r => ({ ...r, timestamp: toDate(r.timestamp) })), { validate: false });
-      return { inserted: rows.length };
+      try {
+        await models[table].bulkCreate(
+          rows.map(r => ({ ...r, timestamp: toDate(r.timestamp) })),
+          { validate: false, ignoreDuplicates: true }
+        );
+        return { inserted: rows.length };
+      } catch (e) {
+        console.warn('[analytics] Sequelize bulkCreate failed; falling back to raw PG:', e?.message || e);
+        // One-time downgrade during runtime
+        useSequelize = false;
+      }
     }
     const cols = Object.keys(rows[0]);
     const tableName = camelToSnake(table);
