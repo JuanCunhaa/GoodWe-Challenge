@@ -17,13 +17,56 @@ export function registerAiRoutes(router, { gw, helpers }){
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
+  async function devicesOverviewInternal(req, helpers){
+    const authHeader = req.headers['authorization'] || '';
+    const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+    async function api(path){
+      const r = await fetch(base + path, { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+      const j = await r.json().catch(()=>null); if (!r.ok) throw new Error(j?.error || `${r.status}`); return j;
+    }
+    const items = [];
+    try {
+      const st = await api('/smartthings/devices');
+      const list = Array.isArray(st?.items) ? st.items : [];
+      const lim = Math.min(list.length, 30);
+      for (let i=0; i<lim; i++){
+        const d = list[i]; const id = d.id;
+        let status = null; try { status = await api(`/smartthings/device/${encodeURIComponent(id)}/status`); } catch {}
+        const c = status?.status?.components?.main || {};
+        const sw = c?.switch?.switch?.value || '';
+        const power = Number(c?.powerMeter?.power?.value ?? NaN);
+        const energy = Number(c?.energyMeter?.energy?.value ?? NaN);
+        items.push({ vendor:'smartthings', id, name: d.name, roomName: d.roomName||'', on: sw==='on', power_w: Number.isFinite(power)? power : null, energy_kwh: Number.isFinite(energy)? energy : null });
+      }
+    } catch {}
+    try {
+      const tu = await api('/tuya/devices');
+      const list = Array.isArray(tu?.items) ? tu.items : [];
+      const lim = Math.min(list.length, 30);
+      for (let i=0; i<lim; i++){
+        const d = list[i]; const id = d.id || d.device_id || d.devId || '';
+        let status = null; try { status = await api(`/tuya/device/${encodeURIComponent(id)}/status`); } catch {}
+        let on = null; let power_w = null; let energy_kwh = null;
+        const comp = status?.status?.components?.main;
+        if (comp && comp.switch?.switch?.value) on = String(comp.switch.switch.value) === 'on';
+        const map = (comp? null : (status?.status && typeof status.status === 'object' ? status.status : null)) || {};
+        const powerCandidates = ['cur_power','power','power_w','pwr','va_power'];
+        for (const k of powerCandidates){ if (map && map[k]!=null && Number.isFinite(Number(map[k]))) { power_w = Number(map[k]); break; } }
+        const energyCandidates = ['add_ele','energy','kwh','elec_total'];
+        for (const k of energyCandidates){ if (map && map[k]!=null && Number.isFinite(Number(map[k]))) { energy_kwh = Number(map[k]); break; } }
+        items.push({ vendor:'tuya', id, name: d.name, roomName: d.roomName||'', on, power_w, energy_kwh });
+      }
+    } catch {}
+    return { ok: true, items };
+  }
+
   router.get('/ai/recommendations', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
     const plant_id = user.powerstation_id;
     try {
       const data = await getRecommendations({ plant_id, fetchWeather: async () => {
         try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null }
-      }});
+      }, fetchDevices: async () => devicesOverviewInternal(req, helpers) });
       res.json({ ok: true, ...data });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
@@ -74,48 +117,7 @@ export function registerAiRoutes(router, { gw, helpers }){
   // Devices overview (SmartThings + Tuya), with basic status and metrics when available
   router.get('/ai/devices/overview', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
-    const authHeader = req.headers['authorization'] || '';
-    const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
-    async function api(path){
-      const r = await fetch(base + path, { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
-      const j = await r.json().catch(()=>null); if (!r.ok) throw new Error(j?.error || `${r.status}`); return j;
-    }
-    const items = [];
-    // SmartThings
-    try {
-      const st = await api('/smartthings/devices');
-      const list = Array.isArray(st?.items) ? st.items : [];
-      const lim = Math.min(list.length, 30);
-      for (let i=0; i<lim; i++){
-        const d = list[i]; const id = d.id;
-        let status = null; try { status = await api(`/smartthings/device/${encodeURIComponent(id)}/status`); } catch {}
-        const c = status?.status?.components?.main || {};
-        const sw = c?.switch?.switch?.value || '';
-        const power = Number(c?.powerMeter?.power?.value ?? NaN);
-        const energy = Number(c?.energyMeter?.energy?.value ?? NaN);
-        items.push({ vendor:'smartthings', id, name: d.name, roomName: d.roomName||'', on: sw==='on', power_w: Number.isFinite(power)? power : null, energy_kwh: Number.isFinite(energy)? energy : null });
-      }
-    } catch {}
-    // Tuya
-    try {
-      const tu = await api('/tuya/devices');
-      const list = Array.isArray(tu?.items) ? tu.items : [];
-      const lim = Math.min(list.length, 30);
-      for (let i=0; i<lim; i++){
-        const d = list[i]; const id = d.id || d.device_id || d.devId || '';
-        let status = null; try { status = await api(`/tuya/device/${encodeURIComponent(id)}/status`); } catch {}
-        // normalized -> components.main.switch.switch.value OR raw map with possible power codes
-        let on = null; let power_w = null; let energy_kwh = null;
-        const comp = status?.status?.components?.main;
-        if (comp && comp.switch?.switch?.value) on = String(comp.switch.switch.value) === 'on';
-        const map = (comp? null : (status?.status && typeof status.status === 'object' ? status.status : null)) || {};
-        const powerCandidates = ['cur_power','power','power_w','pwr','va_power'];
-        for (const k of powerCandidates){ if (map && map[k]!=null && Number.isFinite(Number(map[k]))) { power_w = Number(map[k]); break; } }
-        const energyCandidates = ['add_ele','energy','kwh','elec_total'];
-        for (const k of energyCandidates){ if (map && map[k]!=null && Number.isFinite(Number(map[k]))) { energy_kwh = Number(map[k]); break; } }
-        items.push({ vendor:'tuya', id, name: d.name, roomName: d.roomName||'', on, power_w, energy_kwh });
-      }
-    } catch {}
-    res.json({ ok: true, items });
+    const data = await devicesOverviewInternal(req, helpers);
+    res.json(data);
   });
 }

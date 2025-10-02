@@ -45,7 +45,7 @@ export async function getForecast({ plant_id, hours = 24, fetchWeather }){
   return { plant_id, hours: Number(hours||24), items, total_generation_kwh, total_consumption_kwh, weather_used: !!weather };
 }
 
-export async function getRecommendations({ plant_id }){
+export async function getRecommendations({ plant_id, fetchWeather, fetchDevices }){
   const repo = await getRepo();
   const consDaily = await repo.getDailyTotals({ table: 'consumption_history', plant_id, lookbackDays: 30 });
   const byHour = await repo.getHourlyProfile({ table: 'consumption_history', plant_id, lookbackDays: 14 });
@@ -67,7 +67,7 @@ export async function getRecommendations({ plant_id }){
 
   if (meanDaily > 0) {
     recs.push({
-      text: `Consumo médio diário de ${meanDaily.toFixed(1)} kWh. Avalie programar máquinas de lavar e secadoras fora do pico para reduzir custo.`,
+      text: `Consumo médio diário de ${meanDaily.toFixed(1)} kWh. Priorize o uso de dispositivos não essenciais fora do pico para reduzir custo.`,
       metric: { mean_daily_kwh: +meanDaily.toFixed(2) }
     });
   }
@@ -91,6 +91,40 @@ export async function getRecommendations({ plant_id }){
     else if (sky.includes('cloud')) { lowGen = true; reason = 'tempo nublado'; }
     if (lowGen) {
       recs.unshift({ text: `Previsão climática indica ${reason}. Evite usar dispositivos não críticos no período de pico solar (11h–15h) para não depender de geração instável.`, metric: { sky, clouds: isFinite(clouds) ? +clouds.toFixed(2) : null } });
+    }
+  } catch {}
+
+  // Device-aware suggestions (SmartThings/Tuya)
+  try {
+    if (typeof fetchDevices === 'function'){
+      const devices = await fetchDevices();
+      const list = Array.isArray(devices?.items) ? devices.items : [];
+      const withPower = list.filter(d => Number.isFinite(Number(d.power_w))).map(d => ({ ...d, power_w: Number(d.power_w) }));
+      // Top consumidores agora
+      const top = withPower.filter(d => d.on === true && d.power_w >= 30).sort((a,b)=> b.power_w - a.power_w).slice(0, 5);
+      for (const d of top){
+        const nm = d.name || 'Dispositivo';
+        const room = d.roomName ? ` (${d.roomName})` : '';
+        recs.unshift({
+          text: `"${nm}"${room} está consumindo ~${Math.round(d.power_w)} W agora. Se não for essencial, considere desligar.`,
+          metric: { device_id: d.id, vendor: d.vendor, power_w: Math.round(d.power_w), on: !!d.on }
+        });
+      }
+      // Standby/possível carga fantasma
+      const phantom = withPower.filter(d => d.on === true && d.power_w > 3 && d.power_w < 15).slice(0, 5);
+      if (phantom.length){
+        const names = phantom.map(d => d.name).filter(Boolean).slice(0,3).join(', ');
+        recs.push({ text: `Possível consumo em standby (${names || phantom.length + ' dispositivos'}). Avalie desconectar da tomada quando não estiverem em uso.`, metric: { count: phantom.length } });
+      }
+      // Dispositivos com energia acumulada (quando disponível)
+      const withEnergy = list.filter(d => Number.isFinite(Number(d.energy_kwh))).map(d => ({ ...d, energy_kwh: Number(d.energy_kwh) }));
+      const heavyEnergy = withEnergy.sort((a,b)=> (b.energy_kwh||0) - (a.energy_kwh||0)).slice(0, 3);
+      for (const d of heavyEnergy){
+        if ((d.energy_kwh||0) <= 0) continue;
+        const nm = d.name || 'Dispositivo';
+        const room = d.roomName ? ` (${d.roomName})` : '';
+        recs.push({ text: `"${nm}"${room} acumulou ~${d.energy_kwh.toFixed(1)} kWh recentemente. Verifique programação ou uso fora do pico.`, metric: { device_id: d.id, vendor: d.vendor, energy_kwh: +d.energy_kwh.toFixed(2) } });
+      }
     }
   } catch {}
 

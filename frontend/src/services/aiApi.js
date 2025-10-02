@@ -12,5 +12,5 @@ async function request(path, { token } = {}){
 export const aiApi = {
   forecast: (token, hours = 24) => request(`/ai/forecast?hours=${encodeURIComponent(hours)}`, { token }),
   recommendations: (token) => request(`/ai/recommendations`, { token }),
+  devicesOverview: (token) => request(`/ai/devices/overview`, { token }),
 };
-

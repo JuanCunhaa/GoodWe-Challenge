@@ -41,6 +41,7 @@ export default function Sugestoes(){
   const [err, setErr] = useState(null)
   const [forecast, setForecast] = useState(null)
   const [recs, setRecs] = useState([])
+  const [devices, setDevices] = useState([])
 
   const totals = useMemo(()=>({
     gen: Number(forecast?.total_generation_kwh||0),
@@ -53,20 +54,23 @@ export default function Sugestoes(){
     if (!token || !user?.powerstation_id) { setErr('Sem autenticação'); setLoading(false); return }
     ;(async ()=>{
       try {
-        const [f, r] = await Promise.all([
+        const [f, r, d] = await Promise.all([
           aiApi.forecast(token, 24),
-          aiApi.recommendations(token)
+          aiApi.recommendations(token),
+          aiApi.devicesOverview(token)
         ])
         // order by ascending time
         const items = (f?.items||[]).slice().sort((a,b)=> new Date(a.time)-new Date(b.time))
         setForecast({ ...f, items })
         setRecs(r?.recommendations || [])
+        setDevices(d?.items || [])
       } catch (e) { setErr(String(e?.message||e)); }
       finally { setLoading(false) }
     })()
   }, [])
 
   const noData = !loading && !err && ((totals.gen+totals.cons) < 0.01)
+  const topNow = useMemo(()=> devices.filter(d => d && d.on && Number.isFinite(+d.power_w)).sort((a,b)=> b.power_w - a.power_w).slice(0,5), [devices])
 
   return (
     <div className="grid gap-4">
@@ -105,6 +109,28 @@ export default function Sugestoes(){
               <div className="muted text-sm">Histórico insuficiente para prever por hora. Volte mais tarde após algumas horas de operação.</div>
             ) : (
               <HourBars items={forecast?.items||[]} />
+            )}
+          </div>
+
+          <div className="card">
+            <div className="h3 mb-2">Top consumidores agora</div>
+            {topNow.length === 0 ? (
+              <div className="muted text-sm">Nenhum dispositivo relevante em consumo no momento.</div>
+            ) : (
+              <div className="grid gap-2">
+                {topNow.map((d,idx)=> (
+                  <div key={idx} className="panel flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold">{d.name}{d.roomName? ` (${d.roomName})`: ''}</div>
+                      <div className="muted text-xs">{d.vendor} • {d.on? 'Ligado':'Desligado'}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-extrabold">{Math.round(d.power_w)} W</div>
+                      {Number.isFinite(+d.energy_kwh) && <div className="muted text-xs">{(+d.energy_kwh).toFixed(1)} kWh</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
