@@ -9,6 +9,7 @@ import SmartThingsCard from '../components/perfil/integrations/SmartThingsCard.j
 import HueCard from '../components/perfil/integrations/HueCard.jsx'
 import TuyaCard from '../components/perfil/integrations/TuyaCard.jsx'
 import { useSession } from '../hooks/useSession.js'
+import RoomsCard from '../components/perfil/RoomsCard.jsx'
 
 
 export default function Perfil() {
@@ -36,6 +37,7 @@ export default function Perfil() {
           <TuyaCard />
         </div>
       </div>
+      <RoomsCard />
     </section>
   )
 }

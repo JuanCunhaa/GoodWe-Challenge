@@ -296,13 +296,21 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       } catch {}
 
       try {
-        const cmd = steps.find(s => s && s.ok && (s.name === 'st_command' || s.name === 'tuya_command' || s.name === 'device_toggle'));
-        if (cmd) {
-          const action = String(cmd?.args?.action || '').toLowerCase();
-          const verb = action === 'on' ? 'ligado' : 'desligado';
-          const name = (cmd?.result && typeof cmd.result === 'object' && cmd.result.name) ? cmd.result.name : '';
-          const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
-          if (!answer || !/\b(ligado|desligado)\b/i.test(answer)) { answer = answer ? `${answer}\n${label}` : label; }
+        const isCmd = (s) => s && (s.name === 'st_command' || s.name === 'tuya_command' || s.name === 'device_toggle');
+        const lastCmd = [...steps].reverse().find(isCmd);
+        if (lastCmd) {
+          if (lastCmd.ok) {
+            const action = String(lastCmd?.args?.action || '').toLowerCase();
+            const verb = action === 'on' ? 'ligado' : 'desligado';
+            const name = (lastCmd?.result && typeof lastCmd.result === 'object' && lastCmd.result.name) ? lastCmd.result.name : '';
+            const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
+            // substitui resposta para evitar contradição
+            answer = label;
+          } else {
+            // comando falhou -> responda erro claro e não acrescente "Prontinho"
+            const err = String(lastCmd.error || 'Falha ao enviar comando');
+            answer = 'Não consegui executar o comando no dispositivo agora. ' + err.replace(/^[A-Z]+:\s*/i,'');
+          }
         }
       } catch {}
 

@@ -118,6 +118,26 @@ async function initPg() {
   DO $$ BEGIN
     CREATE UNIQUE INDEX IF NOT EXISTS device_history_unique ON device_history(vendor, device_id, ts);
   EXCEPTION WHEN others THEN END $$;
+
+  -- App Rooms (per user) and Device Metadata
+  CREATE TABLE IF NOT EXISTS rooms (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(user_id, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS device_meta (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    vendor TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    room_id BIGINT REFERENCES rooms(id) ON DELETE SET NULL,
+    essential BOOLEAN DEFAULT FALSE,
+    type TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY(user_id, vendor, device_id)
+  );
   `;
   await pgPool.query(ddl);
 }
@@ -244,6 +264,26 @@ async function initSqlite() {
   );
   CREATE INDEX IF NOT EXISTS device_history_idx ON device_history(vendor, device_id, ts);
   CREATE UNIQUE INDEX IF NOT EXISTS device_history_unique ON device_history(vendor, device_id, ts);
+
+  -- App Rooms (per user) and Device Metadata
+  CREATE TABLE IF NOT EXISTS rooms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS device_meta (
+    user_id INTEGER NOT NULL,
+    vendor TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    room_id INTEGER,
+    essential INTEGER DEFAULT 0,
+    type TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(user_id, vendor, device_id)
+  );
   `);
 }
 
@@ -491,4 +531,70 @@ export async function insertDeviceHistory({ vendor, device_id, name, room, ts, s
         .run(vendor, device_id, name ?? null, room ?? null, tDate.toISOString(), (state_on==null? null : (!!state_on?1:0)), (power_w!=null? Number(power_w): null), (energy_wh!=null? Number(energy_wh): null), source ?? null);
     } catch {}
   }
+}
+
+// --------- Rooms + Device Meta (CRUD) ---------
+export async function listRoomsByUser(user_id){
+  if (USE_PG) {
+    const r = await pgPool.query('SELECT id, name, created_at FROM rooms WHERE user_id = $1 ORDER BY name', [user_id]);
+    return r.rows;
+  } else {
+    return sqliteDb.prepare('SELECT id, name, created_at FROM rooms WHERE user_id = ? ORDER BY name').all(user_id);
+  }
+}
+
+export async function createRoom(user_id, name){
+  const nm = String(name||'').trim();
+  if (!nm) throw new Error('name is required');
+  if (USE_PG) {
+    const r = await pgPool.query('INSERT INTO rooms(user_id, name) VALUES($1,$2) ON CONFLICT(user_id, name) DO NOTHING RETURNING id, name, created_at', [user_id, nm]);
+    if (r.rowCount) return r.rows[0];
+    const q = await pgPool.query('SELECT id, name, created_at FROM rooms WHERE user_id=$1 AND name=$2', [user_id, nm]);
+    return q.rows[0];
+  } else {
+    sqliteDb.prepare('INSERT OR IGNORE INTO rooms(user_id, name) VALUES(?, ?)').run(user_id, nm);
+    return sqliteDb.prepare('SELECT id, name, created_at FROM rooms WHERE user_id = ? AND name = ?').get(user_id, nm);
+  }
+}
+
+export async function deleteRoom(user_id, room_id){
+  if (USE_PG) {
+    await pgPool.query('DELETE FROM rooms WHERE user_id = $1 AND id = $2', [user_id, room_id]);
+  } else {
+    sqliteDb.prepare('DELETE FROM rooms WHERE user_id = ? AND id = ?').run(user_id, room_id);
+  }
+}
+
+export async function getDeviceMetaMap(user_id){
+  if (USE_PG) {
+    const r = await pgPool.query('SELECT vendor, device_id, room_id, essential, type, updated_at FROM device_meta WHERE user_id = $1', [user_id]);
+    const map = {}; for (const row of r.rows){ map[`${row.vendor}|${row.device_id}`] = row; }
+    return map;
+  } else {
+    const rows = sqliteDb.prepare('SELECT vendor, device_id, room_id, essential, type, updated_at FROM device_meta WHERE user_id = ?').all(user_id);
+    const map = {}; for (const row of rows){ map[`${row.vendor}|${row.device_id}`] = { ...row, essential: !!row.essential }; }
+    return map;
+  }
+}
+
+export async function upsertDeviceMeta(user_id, { vendor, device_id, room_id=null, essential=false, type=null }){
+  const v = String(vendor||''); const id = String(device_id||''); if (!v || !id) throw new Error('vendor and device_id required');
+  const ess = !!essential;
+  const t = type ? String(type) : null;
+  if (USE_PG) {
+    await pgPool.query(
+      `INSERT INTO device_meta(user_id, vendor, device_id, room_id, essential, type, updated_at)
+       VALUES($1,$2,$3,$4,$5,$6, now())
+       ON CONFLICT(user_id, vendor, device_id) DO UPDATE SET room_id=EXCLUDED.room_id, essential=EXCLUDED.essential, type=EXCLUDED.type, updated_at=now()`,
+      [user_id, v, id, (room_id? Number(room_id): null), ess, t]
+    );
+  } else {
+    sqliteDb.prepare(
+      `INSERT INTO device_meta(user_id, vendor, device_id, room_id, essential, type, updated_at)
+       VALUES(?,?,?,?,?,?, datetime('now'))
+       ON CONFLICT(user_id, vendor, device_id) DO UPDATE SET
+         room_id=excluded.room_id, essential=excluded.essential, type=excluded.type, updated_at=datetime('now')`
+    ).run(user_id, v, id, (room_id? Number(room_id): null), (ess?1:0), t);
+  }
+  return { vendor: v, device_id: id, room_id, essential: ess, type: t };
 }

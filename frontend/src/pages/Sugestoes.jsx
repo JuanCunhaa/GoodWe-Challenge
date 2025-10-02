@@ -13,6 +13,7 @@ export default function Sugestoes(){
   const [forecast, setForecast] = useState(null)
   const [recs, setRecs] = useState([])
   const [devices, setDevices] = useState([])
+  const [uptime, setUptime] = useState({})
 
   const totals = useMemo(()=>({
     gen: Number(forecast?.total_generation_kwh||0),
@@ -41,6 +42,22 @@ export default function Sugestoes(){
   }, [])
 
   const topNow = useMemo(()=> devices.filter(d => d && d.on && Number.isFinite(+d.power_w)).sort((a,b)=> b.power_w - a.power_w).slice(0,5), [devices])
+
+  // Fetch uptime for top devices (janela 60 min)
+  useEffect(()=>{
+    const run = async () => {
+      try{
+        const token = localStorage.getItem('token'); if (!token) return;
+        await Promise.all(topNow.map(async (d)=>{
+          try{
+            const r = await aiApi.iotUptime(token, d.vendor, d.id, '60');
+            if (r && typeof r.total_on_minutes === 'number') setUptime(m => ({ ...m, [d.vendor+'|'+d.id]: r.total_on_minutes }));
+          } catch {}
+        }))
+      } catch {}
+    };
+    if (topNow.length) run();
+  }, [topNow])
 
   return (
     <div className="grid gap-4">
@@ -88,6 +105,7 @@ export default function Sugestoes(){
                     <div className="text-right">
                       <div className="text-lg font-extrabold">{Math.round(d.power_w)} W</div>
                       {Number.isFinite(+d.energy_kwh) && <div className="muted text-xs">{(+d.energy_kwh).toFixed(1)} kWh</div>}
+                      {typeof uptime[d.vendor+'|'+d.id] === 'number' && <div className="muted text-xs">Uptime (60m): {Math.round(uptime[d.vendor+'|'+d.id])} min</div>}
                     </div>
                   </div>
                 ))}

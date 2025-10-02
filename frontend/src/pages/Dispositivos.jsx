@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { loadSession } from '../services/authApi.js'
 import { adapters, adapterList } from '../features/devices/adapters/index.js'
+import { aiApi } from '../services/aiApi.js'
 
 export default function Dispositivos(){
   const [items, setItems] = useState([])
@@ -14,6 +15,7 @@ export default function Dispositivos(){
   const [canControl, setCanControl] = useState(true)
   const [rooms, setRooms] = useState({})
   const [room, setRoom] = useState('')
+  const [uptimeMap, setUptimeMap] = useState({})
 
   const currentAdapter = adapters[vendor]
 
@@ -48,6 +50,25 @@ export default function Dispositivos(){
     }
     return arr
   }, [items, q, vendor, room])
+
+  // Fetch uptime (24h) for visible devices (limit 24)
+  useEffect(()=>{
+    const run = async () => {
+      try{
+        const { token } = loadSession(); if (!token) return;
+        const subset = list.slice(0, 24);
+        await Promise.all(subset.map(async (d) => {
+          try{
+            if (!d.vendor || !d.id) return;
+            const key = `${d.vendor}|${d.id}`;
+            const r = await aiApi.iotUptime(token, d.vendor, d.id, '24h');
+            if (r && typeof r.total_on_minutes === 'number') setUptimeMap(m => ({ ...m, [key]: r.total_on_minutes }));
+          } catch {}
+        }))
+      }catch{}
+    };
+    if (list.length) run();
+  }, [list])
 
   function getSwitchComponent(d){
     const comps = Array.isArray(d.components) ? d.components : []
@@ -130,7 +151,7 @@ export default function Dispositivos(){
             else if (typeof rawVal === 'number') isOn = rawVal === 1
 
             return (
-              <div key={d.id} className="panel h-full flex flex-col gap-2">
+              <div key={d.id} className="panel h-full flex flex-col gap-2" title={(typeof uptimeMap[((d.vendor||'')+'|'+d.id)]==='number') ? (`Uptime (24h): ${Math.round(uptimeMap[((d.vendor||'')+'|'+d.id)])} min`) : undefined}>
                 <div>
                   <div className="font-semibold text-sm sm:text-base whitespace-normal break-words" title={d.name}>{d.name||'-'}</div>
                   <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||d.category||''}>

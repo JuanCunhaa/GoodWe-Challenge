@@ -13,4 +13,6 @@ export const aiApi = {
   forecast: (token, hours = 24) => request(`/ai/forecast?hours=${encodeURIComponent(hours)}`, { token }),
   recommendations: (token) => request(`/ai/recommendations`, { token }),
   devicesOverview: (token) => request(`/ai/devices/overview`, { token }),
+  iotUptime: (token, vendor, id, window = '24h') => request(`/iot/device/${encodeURIComponent(vendor)}/${encodeURIComponent(id)}/uptime?window=${encodeURIComponent(window)}`, { token }),
+  topConsumers: (token, window = '60') => request(`/iot/top-consumers?window=${encodeURIComponent(window)}`, { token }),
 };
