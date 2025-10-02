@@ -1,12 +1,10 @@
 ﻿export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
 
-
-          const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
-export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
+  const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
 
 
-          const r = String(findStep.result.roomName || 'local não especificado').trim();
-          if (n) answer =  `O dispositivo ${n} está no cômodo ${r}.`; 
+  const r = String(findStep.result.roomName || 'local não especificado').trim();
+  if (n) answer = `O dispositivo ${n} está no cômodo ${r}.`;
 
   router.post('/assistant/chat', async (req, res) => {
     try {
@@ -140,8 +138,8 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           let rooms = {};
           try {
             const r = await apiJson('/smartthings/rooms');
-            rooms = Object.fromEntries((Array.isArray(r.items)? r.items: []).map(it => [it.id, it.name || '']));
-          } catch {}
+            rooms = Object.fromEntries((Array.isArray(r.items) ? r.items : []).map(it => [it.id, it.name || '']));
+          } catch { }
           const items = (j.items || []).map(d => ({ ...d, roomName: rooms[d.roomId] || '' }));
           return { items, total: items.length };
         },
@@ -157,10 +155,10 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
               const cand = found.components.find(c => Array.isArray(c.capabilities) && c.capabilities.some(x => (x.id || x.capability) === 'switch'));
               if (cand && cand.id) useComponent = cand.id;
             }
-          } catch {}
+          } catch { }
           await apiJson('/smartthings/commands', { method: 'POST', body: { deviceId: device_id, action, component: useComponent } });
           const status = await tools.st_device_status({ device_id });
-          let name = ''; try { const devs = await tools.st_list_devices(); const found = (devs.items || []).find(d => String(d.id) === String(device_id)); name = found?.name || ''; } catch {}
+          let name = ''; try { const devs = await tools.st_list_devices(); const found = (devs.items || []).find(d => String(d.id) === String(device_id)); name = found?.name || ''; } catch { }
           return { ok: true, device_id, name, action, status };
         },
         async st_find_device_room({ query, device_id }) {
@@ -169,19 +167,19 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           let rooms = {};
           try {
             const r = await apiJson('/smartthings/rooms');
-            rooms = Object.fromEntries((Array.isArray(r.items)? r.items: []).map(it => [it.id, it.name || '']));
-          } catch {}
+            rooms = Object.fromEntries((Array.isArray(r.items) ? r.items : []).map(it => [it.id, it.name || '']));
+          } catch { }
           let chosen = null;
           if (device_id) chosen = devices.find(d => String(d.id) === String(device_id));
           const q = String(query || '').toLowerCase().trim();
-          if (!chosen && q) chosen = devices.find(d => String(d.name||'').toLowerCase().includes(q));
+          if (!chosen && q) chosen = devices.find(d => String(d.name || '').toLowerCase().includes(q));
           if (!chosen) return { ok: false, error: 'device not found' };
           const roomName = rooms[chosen.roomId] || '';
           return { ok: true, name: chosen.name || '', roomName: roomName || '' };
         },
 
         // Tuya tools (via internal API)
-        async tuya_list_devices() { const j = await apiJson('/tuya/devices'); return { items: j.items || [], total: (j.items||[]).length }; },
+        async tuya_list_devices() { const j = await apiJson('/tuya/devices'); return { items: j.items || [], total: (j.items || []).length }; },
         async tuya_device_status({ device_id }) { if (!device_id) throw new Error('device_id required'); return await apiJson(`/tuya/device/${encodeURIComponent(device_id)}/status`); },
         async tuya_command({ device_id, action }) {
           if (!device_id || !action) throw new Error('device_id and action required');
@@ -189,7 +187,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
             const value = action === 'on'; await apiJson('/tuya/commands', { method: 'POST', body: { device_id, commands: [{ code: 'switch', value }] } });
           });
           const status = await tools.tuya_device_status({ device_id });
-          let name = ''; try { const devs = await tools.tuya_list_devices(); const found = (devs.items || []).find(d => String(d.id||d.uuid) === String(device_id)); name = found?.name || ''; } catch {}
+          let name = ''; try { const devs = await tools.tuya_list_devices(); const found = (devs.items || []).find(d => String(d.id || d.uuid) === String(device_id)); name = found?.name || ''; } catch { }
           return { ok: true, device_id, name, action, status };
         },
       };
@@ -197,7 +195,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       const toolSchemas = [
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month', 'total'] } }, required: ['range'], additionalProperties: false } },
         { name: 'get_monitor', description: 'QueryPowerStationMonitor', parameters: { type: 'object', properties: { page_index: { type: 'number' }, page_size: { type: 'number' }, key: { type: 'string' }, orderby: { type: 'string' }, powerstation_type: { type: 'string' }, powerstation_status: { type: 'string' }, adcode: { type: 'string' }, org_id: { type: 'string' }, condition: { type: 'string' } }, additionalProperties: false } },
         { name: 'get_inverters', description: 'GetInverterAllPoint', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_weather', description: 'GetWeather', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -208,24 +206,24 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
         { name: 'get_power_chart', description: 'Charts/GetPlantPowerChart', parameters: { type: 'object', properties: { date: { type: 'string' }, full_script: { type: 'boolean' } }, additionalProperties: false } },
         { name: 'get_warnings', description: 'warning/PowerstationWarningsQuery', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'list_powerstations', description: 'Lista powerstations locais', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string','null'] } }, required: ['id'], additionalProperties: false } },
+        { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string', 'null'] } }, required: ['id'], additionalProperties: false } },
         { name: 'debug_auth', description: 'Info GoodWe (mascarado)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuário atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'st_device_status', description: 'Status de um dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] }, component: { type: 'string' } }, required: ['device_id','action'], additionalProperties: false } },
+        { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] }, component: { type: 'string' } }, required: ['device_id', 'action'], additionalProperties: false } },
         { name: 'st_find_device_room', description: 'Encontra o cômodo (nome) de um dispositivo SmartThings pelo nome ou id.', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
         { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya (UID vinculado).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] } }, required: ['device_id','action'], additionalProperties: false } },
+        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on', 'off'] } }, required: ['device_id', 'action'], additionalProperties: false } },
       ];
 
-      const messages = [ { role: 'system', content: `VocÃª Ã© o Assistente Virtual deste painel. Siga as regras:\nUse ferramentas registradas sempre que a pergunta demandar dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status, etc.).\nNÃ£o invente valores. Se faltar permissÃ£o/credencial, peÃ§a para o usuÃ¡rio conectar/entrar.\nAo responder mÃ©tricas, informe apenas o perÃ­odo (ex.: Hoje, Ontem, Esta Semana, Este MÃªs, Total).\nSeja breve e Ãºtil.\nIdioma: pt-BR; nÃ£o exponha segredos.\nNÃ£o utilize "*" em nenhuma resposta.` }, ...prev.filter(m => m && m.role && m.content), input ? { role: 'user', content: input } : null ].filter(Boolean);
+      const messages = [{ role: 'system', content: `VocÃª Ã© o Assistente Virtual deste painel. Siga as regras:\nUse ferramentas registradas sempre que a pergunta demandar dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status, etc.).\nNÃ£o invente valores. Se faltar permissÃ£o/credencial, peÃ§a para o usuÃ¡rio conectar/entrar.\nAo responder mÃ©tricas, informe apenas o perÃ­odo (ex.: Hoje, Ontem, Esta Semana, Este MÃªs, Total).\nSeja breve e Ãºtil.\nIdioma: pt-BR; nÃ£o exponha segredos.\nNÃ£o utilize "*" em nenhuma resposta.` }, ...prev.filter(m => m && m.role && m.content), input ? { role: 'user', content: input } : null].filter(Boolean);
 
       // Regras adicionais fortes (sem depender do texto original com acentuação)
       try {
         messages.unshift({ role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos (SmartThings/Tuya), responda apenas os nomes, um por linha. Quando o usuário perguntar em qual cômodo está um dispositivo, chame a ferramenta st_find_device_room com query igual ao nome do dispositivo e responda no formato "<NOME> está em <CÔMODO>."' });
-      } catch {}
+      } catch { }
 
       const steps = [];
       let assistantMsg = null;
@@ -242,7 +240,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           messages.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
           for (const call of msg.tool_calls) {
             const name = call.function?.name; let args = {};
-            try { args = JSON.parse(call.function?.arguments || '{}'); } catch {}
+            try { args = JSON.parse(call.function?.arguments || '{}'); } catch { }
             let result; try { if (typeof tools[name] !== 'function') throw new Error('unknown tool'); const started = Date.now(); result = await tools[name](args || {}); steps.push({ name, args, ok: true, result, ms: Date.now() - started }); } catch (e) { result = { ok: false, error: String(e) }; steps.push({ name, args, ok: false, error: String(e) }); }
             messages.push({ role: 'tool', tool_call_id: call.id, name, content: JSON.stringify(result) });
           }
@@ -263,7 +261,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
             if (names.length) answer = `No SmartThings você possui:\n` + names.join('\n');
           }
         }
-      } catch {}
+      } catch { }
       // Para perguntas de cômodo específicas, use resultado dedicado quando existir
       try {
         const findStep = steps.find(s => s && s.ok && s.name === 'st_find_device_room');
@@ -272,17 +270,17 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           const r = String(findStep.result.roomName || 'local não especificado').trim();
           if (n) answer = `${n} está em ${r}.`;
         }
-      } catch {}
+      } catch { }
       try {
         const cmd = steps.find(s => s && s.ok && (s.name === 'st_command' || s.name === 'tuya_command'));
         if (cmd) {
           const action = String(cmd?.args?.action || '').toLowerCase();
           const verb = action === 'on' ? 'ligado' : 'desligado';
           const name = (cmd?.result && typeof cmd.result === 'object' && cmd.result.name) ? cmd.result.name : '';
-          const label = name ?  `Prontinho! Dispositivo  \"' \\\ foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
+          const label = name ? `Prontinho! Dispositivo  \"' \\\ foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
           if (!answer || !/\b(ligado|desligado)\b/i.test(answer)) { answer = answer ? `${answer}\n${label}` : label; }
         }
-      } catch {}
+      } catch { }
       // Sanitização final: remover asteriscos (evita bold/markdown e problemas no TTS)
       if (typeof answer === 'string' && answer.includes('*')) {
         answer = answer.replace(/\*/g, '');
@@ -296,7 +294,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       const items = [
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month', 'total'] } }, required: ['range'], additionalProperties: false } },
       ];
       res.json({ items });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }) }
@@ -315,5 +313,4 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
   router.get('/assistant/health', (req, res) => {
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
-}
 }
