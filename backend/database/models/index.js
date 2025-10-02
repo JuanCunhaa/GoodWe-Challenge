@@ -17,6 +17,7 @@ export async function initSequelize() {
     dialect: 'postgres',
     dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
     logging: false,
+    define: { timestamps: false },
   });
 
   // Define models
@@ -27,6 +28,7 @@ export async function initSequelize() {
     kwh: { type: DataTypes.DOUBLE, allowNull: false },
   }, {
     tableName: 'generation_history',
+    timestamps: false,
     indexes: [
       { fields: ['plant_id'] },
       { fields: ['timestamp'] },
@@ -41,6 +43,7 @@ export async function initSequelize() {
     kwh: { type: DataTypes.DOUBLE, allowNull: false },
   }, {
     tableName: 'consumption_history',
+    timestamps: false,
     indexes: [
       { fields: ['plant_id'] },
       { fields: ['timestamp'] },
@@ -56,6 +59,7 @@ export async function initSequelize() {
     power_kw: { type: DataTypes.DOUBLE, allowNull: true },
   }, {
     tableName: 'battery_history',
+    timestamps: false,
     indexes: [
       { fields: ['plant_id'] },
       { fields: ['timestamp'] },
@@ -72,6 +76,7 @@ export async function initSequelize() {
     export_kw: { type: DataTypes.DOUBLE, allowNull: true },
   }, {
     tableName: 'grid_history',
+    timestamps: false,
     indexes: [
       { fields: ['plant_id'] },
       { fields: ['timestamp'] },
@@ -87,4 +92,3 @@ export async function ensureSynced() {
   if (!sequelize) await initSequelize();
   await sequelize.sync();
 }
-

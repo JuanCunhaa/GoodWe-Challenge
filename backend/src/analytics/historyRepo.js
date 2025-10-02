@@ -6,13 +6,18 @@ function toDate(d){ return (d instanceof Date) ? d : new Date(d); }
 let useSequelize = false;
 export async function initHistoryRepo() {
   if (isPostgres) {
-    try {
-      await initSequelize();
-      await ensureSynced();
-      useSequelize = true;
-    } catch (e) {
-      // Fallback to raw pg via db.js
-      console.warn('[analytics] Sequelize init failed, falling back to raw PG:', e?.message || e);
+    const wantSequelize = String(process.env.ANALYTICS_USE_SEQUELIZE || 'true') === 'true';
+    if (wantSequelize) {
+      try {
+        await initSequelize();
+        await ensureSynced();
+        useSequelize = true;
+      } catch (e) {
+        // Fallback to raw pg via db.js
+        console.warn('[analytics] Sequelize init failed, falling back to raw PG:', e?.message || e);
+        useSequelize = false;
+      }
+    } else {
       useSequelize = false;
     }
   }
