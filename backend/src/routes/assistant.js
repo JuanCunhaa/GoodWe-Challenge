@@ -1,5 +1,5 @@
-export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
-  const { getBearerToken, requireUser } = helpers;
+﻿export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
+  const { getBearerToken, requireUser, deriveBaseUrl } = helpers;
 
   router.post('/assistant/chat', async (req, res) => {
     try {
@@ -19,6 +19,22 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       const input = String(req.body?.input || '').trim();
       const prev = Array.isArray(req.body?.messages) ? req.body.messages : [];
       const psId = user.powerstation_id;
+
+      const authHeader = req.headers['authorization'] || '';
+      const apiBase = deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+
+      async function apiJson(path, opts = {}) {
+        const r = await fetch(apiBase + path, {
+          method: opts.method || 'GET',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: opts.body ? JSON.stringify(opts.body) : undefined,
+          signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)),
+        });
+        const ct = r.headers.get('content-type') || '';
+        const data = ct.includes('application/json') ? await r.json().catch(() => null) : null;
+        if (!r.ok) throw new Error(data?.error || `${r.status} ${r.statusText}`);
+        return data || {};
+      }
 
       const tools = {
         async get_income_today() {
@@ -110,13 +126,36 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           const auth = gw.auth || null; const cookies = Object.keys(gw.cookies || {}); const tokenHeader = gw.tokenHeaderValue || null; const mask = (s) => (typeof s === 'string' && s.length > 12) ? `${s.slice(0, 8)}...${s.slice(-4)}` : s; return { hasAuth: !!auth, api_base: auth?.api_base || null, uid: auth?.uid || null, token_present: !!auth?.token, timestamp: auth?.timestamp || null, cookies, token_header_length: tokenHeader ? tokenHeader.length : 0, token_header_preview: tokenHeader ? tokenHeader.slice(0, 64) + '...' : null, token_mask: auth?.token ? mask(auth.token) : null };
         },
         async cross_login() { const a = await gw.crossLogin(); return { api_base: a.api_base, uid: a.uid, timestamp: a.timestamp }; },
-        async st_list_devices() { throw new Error('not implemented here'); },
+
+        // SmartThings tools (via internal API)
+        async st_list_devices() { const j = await apiJson('/smartthings/devices'); return { items: j.items || [], total: j.total || 0 }; },
+        async st_device_status({ device_id }) { if (!device_id) throw new Error('device_id required'); return await apiJson(`/smartthings/device/${encodeURIComponent(device_id)}/status`); },
+        async st_command({ device_id, action, component }) {
+          if (!device_id || !action) throw new Error('device_id and action required');
+          await apiJson('/smartthings/commands', { method: 'POST', body: { deviceId: device_id, action, component: component || 'main' } });
+          const status = await tools.st_device_status({ device_id });
+          let name = ''; try { const devs = await tools.st_list_devices(); const found = (devs.items || []).find(d => String(d.id) === String(device_id)); name = found?.name || ''; } catch {}
+          return { ok: true, device_id, name, action, status };
+        },
+
+        // Tuya tools (via internal API)
+        async tuya_list_devices() { const j = await apiJson('/tuya/devices'); return { items: j.items || [], total: (j.items||[]).length }; },
+        async tuya_device_status({ device_id }) { if (!device_id) throw new Error('device_id required'); return await apiJson(`/tuya/device/${encodeURIComponent(device_id)}/status`); },
+        async tuya_command({ device_id, action }) {
+          if (!device_id || !action) throw new Error('device_id and action required');
+          await apiJson(`/tuya/device/${encodeURIComponent(device_id)}/${encodeURIComponent(action)}`, { method: 'POST', body: {} }).catch(async () => {
+            const value = action === 'on'; await apiJson('/tuya/commands', { method: 'POST', body: { device_id, commands: [{ code: 'switch', value }] } });
+          });
+          const status = await tools.tuya_device_status({ device_id });
+          let name = ''; try { const devs = await tools.tuya_list_devices(); const found = (devs.items || []).find(d => String(d.id||d.uuid) === String(device_id)); name = found?.name || ''; } catch {}
+          return { ok: true, device_id, name, action, status };
+        },
       };
 
       const toolSchemas = [
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geração para um intervalo padrão.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
         { name: 'get_monitor', description: 'QueryPowerStationMonitor', parameters: { type: 'object', properties: { page_index: { type: 'number' }, page_size: { type: 'number' }, key: { type: 'string' }, orderby: { type: 'string' }, powerstation_type: { type: 'string' }, powerstation_status: { type: 'string' }, adcode: { type: 'string' }, org_id: { type: 'string' }, condition: { type: 'string' } }, additionalProperties: false } },
         { name: 'get_inverters', description: 'GetInverterAllPoint', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_weather', description: 'GetWeather', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -130,9 +169,15 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
         { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string','null'] } }, required: ['id'], additionalProperties: false } },
         { name: 'debug_auth', description: 'Info GoodWe (mascarado)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_list_devices', description: 'Lista dispositivos do SmartThings vinculados ao usuÃ¡rio atual.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'st_device_status', description: 'Status de um dispositivo SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'st_command', description: 'Liga/Desliga um device SmartThings.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] }, component: { type: 'string' } }, required: ['device_id','action'], additionalProperties: false } },
+        { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya (UID vinculado).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] } }, required: ['device_id','action'], additionalProperties: false } },
       ];
 
-      const messages = [ { role: 'system', content: `Você é o Assistente Virtual deste painel. Siga as regras:\nUse ferramentas registradas sempre que a pergunta demandar dados reais (renda, geração, métricas, status, etc.).\nNão invente valores. Se faltar permissão/credencial, peça para o usuário conectar/entrar.\nAo responder métricas, informe apenas o período (ex.: Hoje, Ontem, Esta Semana, Este Mês, Total).\nSeja breve e útil.\nIdioma: pt-BR; não exponha segredos.\nNão utilize "*" em nenhuma resposta.` }, ...prev.filter(m => m && m.role && m.content), input ? { role: 'user', content: input } : null ].filter(Boolean);
+      const messages = [ { role: 'system', content: `VocÃª Ã© o Assistente Virtual deste painel. Siga as regras:\nUse ferramentas registradas sempre que a pergunta demandar dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status, etc.).\nNÃ£o invente valores. Se faltar permissÃ£o/credencial, peÃ§a para o usuÃ¡rio conectar/entrar.\nAo responder mÃ©tricas, informe apenas o perÃ­odo (ex.: Hoje, Ontem, Esta Semana, Este MÃªs, Total).\nSeja breve e Ãºtil.\nIdioma: pt-BR; nÃ£o exponha segredos.\nNÃ£o utilize "*" em nenhuma resposta.` }, ...prev.filter(m => m && m.role && m.content), input ? { role: 'user', content: input } : null ].filter(Boolean);
 
       const steps = [];
       let assistantMsg = null;
@@ -150,14 +195,24 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           for (const call of msg.tool_calls) {
             const name = call.function?.name; let args = {};
             try { args = JSON.parse(call.function?.arguments || '{}'); } catch {}
-            let result; try { if (typeof tools[name] !== 'function') throw new Error('unknown tool'); const started = Date.now(); result = await tools[name](args || {}); steps.push({ name, args, ok: true, ms: Date.now() - started }); } catch (e) { result = { ok: false, error: String(e) }; steps.push({ name, args, ok: false, error: String(e) }); }
+            let result; try { if (typeof tools[name] !== 'function') throw new Error('unknown tool'); const started = Date.now(); result = await tools[name](args || {}); steps.push({ name, args, ok: true, result, ms: Date.now() - started }); } catch (e) { result = { ok: false, error: String(e) }; steps.push({ name, args, ok: false, error: String(e) }); }
             messages.push({ role: 'tool', tool_call_id: call.id, name, content: JSON.stringify(result) });
           }
           continue;
         }
         assistantMsg = msg; break;
       }
-      const answer = assistantMsg?.content || '';
+      let answer = assistantMsg?.content || '';
+      try {
+        const cmd = steps.find(s => s && s.ok && (s.name === 'st_command' || s.name === 'tuya_command'));
+        if (cmd) {
+          const action = String(cmd?.args?.action || '').toLowerCase();
+          const verb = action === 'on' ? 'ligado' : 'desligado';
+          const name = (cmd?.result && typeof cmd.result === 'object' && cmd.result.name) ? cmd.result.name : '';
+          const label = name ? `Dispositivo "${name}" ${verb} com sucesso.` : `Dispositivo ${verb} com sucesso.`;
+          if (!answer || !/\b(ligado|desligado)\b/i.test(answer)) { answer = answer ? `${answer}\n${label}` : label; }
+        }
+      } catch {}
       res.json({ ok: true, answer, steps });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
@@ -167,14 +222,14 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       const items = [
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geração para um intervalo padrão.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
       ];
       res.json({ items });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }) }
   });
 
   router.get('/assistant/help', (req, res) => {
-    const SYSTEM_PROMPT = `Você é o Assistente Virtual deste painel. Regras:\n1) Use ferramentas para dados reais (renda, geração, métricas, status).\n2) Não invente valores; se faltar permissão, peça login/conexão.\n3) Métricas: cite só o período (Hoje/Ontem/Esta Semana/Este Mês/Total).\n4) Seja curto e prático; use listas quando ajudar.\n5) Idioma: pt-BR; não exponha segredos.\n6) Não utilize "*" em nenhuma de suas respostas.`;
+    const SYSTEM_PROMPT = `VocÃª Ã© o Assistente Virtual deste painel. Regras:\n1) Use ferramentas para dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status).\n2) NÃ£o invente valores; se faltar permissÃ£o, peÃ§a login/conexÃ£o.\n3) MÃ©tricas: cite sÃ³ o perÃ­odo (Hoje/Ontem/Esta Semana/Este MÃªs/Total).\n4) Seja curto e prÃ¡tico; use listas quando ajudar.\n5) Idioma: pt-BR; nÃ£o exponha segredos.\n6) NÃ£o utilize "*" em nenhuma de suas respostas.`;
     res.json({ system_prompt: SYSTEM_PROMPT });
   });
 

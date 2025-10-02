@@ -52,6 +52,13 @@ export function createHelpers({ gw, dbApi }) {
     );
   };
 
-  return { resolveEnvPath, getBearerToken, tryGetUser, requireUser, getPsId };
-}
+  function deriveBaseUrl(req) {
+    const explicit = (process.env.BASE_URL || '').trim();
+    if (explicit) return explicit.replace(/\/$/, '');
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https');
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    return `${proto}://${host}`;
+  }
 
+  return { resolveEnvPath, getBearerToken, tryGetUser, requireUser, getPsId, deriveBaseUrl };
+}
