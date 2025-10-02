@@ -111,7 +111,7 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       const user = await requireUser(req, res); if (!user) return
       const { uid } = await ensureTuyaLinkedUser(user)
       const token = await tuyaEnsureAppToken()
-
+      
       // 1) Antigo caminho que funcionava: /v1.0/users/{uid}/devices
       let items = []
       try {
@@ -143,7 +143,82 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
         } catch {}
       }
 
-      res.json({ ok: true, items, total: items.length })
+      // 3) Enriquecer com roomId/roomName
+      // 3.1) Buscar homes do usuário
+      const roomNameById = new Map()
+      try {
+        let homes = []
+        // iot-03 first
+        try {
+          const rh = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(uid)}/homes`, { method:'GET', accessToken: token })
+          if (rh.status === 200 && rh.json?.success === true) {
+            const hr = rh.json?.result
+            homes = Array.isArray(hr) ? hr : (Array.isArray(hr?.homes) ? hr.homes : [])
+          }
+        } catch {}
+        if (!homes.length) {
+          try {
+            const rh2 = await tuyaSignAndFetch(`/v1.0/users/${encodeURIComponent(uid)}/homes`, { method:'GET', accessToken: token })
+            if (rh2.status === 200 && rh2.json?.success === true) {
+              const hr2 = rh2.json?.result
+              homes = Array.isArray(hr2) ? hr2 : (Array.isArray(hr2?.homes) ? hr2.homes : [])
+            }
+          } catch {}
+        }
+        // 3.2) Para cada home, buscar rooms
+        for (const h of homes) {
+          const homeId = h?.home_id || h?.id
+          if (!homeId) continue
+          // iot-03
+          let rooms = []
+          try {
+            const rr = await tuyaSignAndFetch(`/v1.0/iot-03/homes/${encodeURIComponent(homeId)}/rooms`, { method:'GET', accessToken: token })
+            if (rr.status === 200 && rr.json?.success === true) {
+              const rres = rr.json?.result
+              rooms = Array.isArray(rres) ? rres : (Array.isArray(rres?.rooms) ? rres.rooms : [])
+            }
+          } catch {}
+          if (!rooms.length) {
+            try {
+              const rr2 = await tuyaSignAndFetch(`/v1.0/homes/${encodeURIComponent(homeId)}/rooms`, { method:'GET', accessToken: token })
+              if (rr2.status === 200 && rr2.json?.success === true) {
+                const rres2 = rr2.json?.result
+                rooms = Array.isArray(rres2) ? rres2 : (Array.isArray(rres2?.rooms) ? rres2.rooms : [])
+              }
+            } catch {}
+          }
+          for (const r of rooms) {
+            const rid = r?.room_id || r?.id
+            const rname = r?.name || r?.room_name || ''
+            if (rid && rname) roomNameById.set(String(rid), String(rname))
+          }
+        }
+      } catch {}
+
+      // 3.3) Para cada device, obter detalhes e anexar room info
+      const enriched = []
+      for (const d of items) {
+        const id = String(d?.id || d?.uuid || '')
+        if (!id) { enriched.push(d); continue }
+        let roomId = ''
+        try {
+          let det = null
+          // iot-03 detail
+          try {
+            const rd = await tuyaSignAndFetch(`/v1.0/iot-03/devices/${encodeURIComponent(id)}`, { method:'GET', accessToken: token })
+            if (rd.status === 200 && rd.json?.success === true) det = rd.json?.result
+          } catch {}
+          if (!det) {
+            const rd2 = await tuyaSignAndFetch(`/v1.0/devices/${encodeURIComponent(id)}`, { method:'GET', accessToken: token })
+            if (rd2.status === 200 && rd2.json?.success === true) det = rd2.json?.result
+          }
+          if (det && (det.room_id || det.roomId)) roomId = String(det.room_id || det.roomId)
+        } catch {}
+        const roomName = roomId ? (roomNameById.get(roomId) || '') : ''
+        enriched.push({ ...d, roomId, roomName })
+      }
+
+      res.json({ ok: true, items: enriched, total: enriched.length })
     } catch (e) {
       const code = String(e?.code || '')
       if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() })
