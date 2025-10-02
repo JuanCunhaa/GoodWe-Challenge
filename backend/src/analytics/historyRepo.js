@@ -16,6 +16,11 @@ export function createRepo() {
   const engine = getDbEngine();
   const type = engine.type;
 
+  function camelToSnake(name){
+    // "GenerationHistory" -> "generation_history"
+    return String(name).replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+  }
+
   async function bulkInsert(table, rows) {
     if (!rows || !rows.length) return { inserted: 0 };
     if (isPostgres && models[table]) {
@@ -27,7 +32,8 @@ export function createRepo() {
     if (!db) return { inserted: 0 };
     const cols = Object.keys(rows[0]);
     const placeholders = '(' + cols.map(()=> '?').join(',') + ')';
-    const stmt = db.prepare(`INSERT INTO ${table.replace(/([A-Z])/g,'_$1').toLowerCase()} (${cols.join(',')}) VALUES ${placeholders}`);
+    const tableName = camelToSnake(table);
+    const stmt = db.prepare(`INSERT INTO ${tableName} (${cols.join(',')}) VALUES ${placeholders}`);
     const tx = db.transaction((items)=> { for (const it of items){ const vals = cols.map((c)=> c==='timestamp' ? new Date(it[c]).toISOString() : it[c]); stmt.run(...vals); } });
     tx(rows);
     return { inserted: rows.length };
@@ -94,4 +100,3 @@ export function createRepo() {
     },
   };
 }
-
