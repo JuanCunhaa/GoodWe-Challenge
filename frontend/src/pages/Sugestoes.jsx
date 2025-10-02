@@ -5,36 +5,7 @@ function StatusDot({ ok }){
   return <span className={ok? 'inline-block w-2.5 h-2.5 rounded-full bg-emerald-500' : 'inline-block w-2.5 h-2.5 rounded-full bg-rose-500'} />
 }
 
-function HourBars({ items=[] }){
-  // Simple side-by-side bars per hour (gen vs cons)
-  const max = useMemo(()=>{
-    return items.reduce((m,it)=> Math.max(m, (it.generation_kwh||0), (it.consumption_kwh||0)), 0) || 1
-  },[items])
-  return (
-    <div className="mt-2 overflow-x-auto">
-      <div className="min-w-[720px] grid grid-cols-24 gap-1 items-end h-40">
-        {items.map((it,i)=>{
-          const g = (it.generation_kwh||0)/max
-          const c = (it.consumption_kwh||0)/max
-          const d = new Date(it.time); const hh = String(d.getHours()).padStart(2,'0')
-          return (
-            <div key={i} className="flex flex-col items-center gap-1">
-              <div className="w-3 sm:w-4 flex gap-0.5 items-end">
-                <div className="w-1.5 bg-emerald-500/70 rounded" style={{ height: `${Math.max(3,g*100)}%` }} title={`Geração ${hh}:00`} />
-                <div className="w-1.5 bg-rose-500/70 rounded" style={{ height: `${Math.max(3,c*100)}%` }} title={`Consumo ${hh}:00`} />
-              </div>
-              <div className="text-[10px] muted">{hh}</div>
-            </div>
-          )
-        })}
-      </div>
-      <div className="text-xs mt-2 flex items-center gap-3">
-        <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-emerald-500/70 rounded"></span> Geração</div>
-        <div className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-rose-500/70 rounded"></span> Consumo</div>
-      </div>
-    </div>
-  )
-}
+// (Gráfico removido a pedido; manter UI clean)
 
 export default function Sugestoes(){
   const [loading, setLoading] = useState(true)
@@ -69,7 +40,6 @@ export default function Sugestoes(){
     })()
   }, [])
 
-  const noData = !loading && !err && ((totals.gen+totals.cons) < 0.01)
   const topNow = useMemo(()=> devices.filter(d => d && d.on && Number.isFinite(+d.power_w)).sort((a,b)=> b.power_w - a.power_w).slice(0,5), [devices])
 
   return (
@@ -104,15 +74,6 @@ export default function Sugestoes(){
           </div>
 
           <div className="card">
-            <div className="h3">Geração x Consumo por hora</div>
-            {noData ? (
-              <div className="muted text-sm">Histórico insuficiente para prever por hora. Volte mais tarde após algumas horas de operação.</div>
-            ) : (
-              <HourBars items={forecast?.items||[]} />
-            )}
-          </div>
-
-          <div className="card">
             <div className="h3 mb-2">Top consumidores agora</div>
             {topNow.length === 0 ? (
               <div className="muted text-sm">Nenhum dispositivo relevante em consumo no momento.</div>
@@ -141,12 +102,7 @@ export default function Sugestoes(){
               {recs.map((r,idx)=> (
                 <div key={idx} className="panel flex items-start gap-3">
                   <StatusDot ok={!/acima|alto|pico|nublado|chuva/i.test(r?.text||'')} />
-                  <div>
-                    <div>{r.text}</div>
-                    {r.metric && Object.keys(r.metric).length>0 && (
-                      <div className="muted text-xs mt-1">{JSON.stringify(r.metric)}</div>
-                    )}
-                  </div>
+                  <div><div>{r.text}</div></div>
                 </div>
               ))}
             </div>
