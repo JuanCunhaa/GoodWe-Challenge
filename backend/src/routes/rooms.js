@@ -34,9 +34,9 @@ export function registerRoomsRoutes(router, { dbApi, helpers }){
   router.put('/device-meta', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
     try {
-      const { vendor, device_id, room_id=null, essential=false, type=null } = req.body || {};
+      const { vendor, device_id, room_id=null, essential=false, type=null, priority=null } = req.body || {};
       if (!vendor || !device_id) return res.status(422).json({ ok:false, error:'vendor and device_id required' });
-      const it = await dbApi.upsertDeviceMeta(user.id, { vendor, device_id, room_id, essential, type });
+      const it = await dbApi.upsertDeviceMeta(user.id, { vendor, device_id, room_id, essential, type, priority });
       res.json({ ok:true, item: it });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });

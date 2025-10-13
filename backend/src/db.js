@@ -135,11 +135,14 @@ async function initPg() {
     room_id BIGINT REFERENCES rooms(id) ON DELETE SET NULL,
     essential BOOLEAN DEFAULT FALSE,
     type TEXT,
+    priority INTEGER,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY(user_id, vendor, device_id)
   );
   `;
   await pgPool.query(ddl);
+  // Best-effort online migration for older deployments (ignore errors)
+  try { await pgPool.query('ALTER TABLE device_meta ADD COLUMN IF NOT EXISTS priority INTEGER'); } catch {}
 }
 
 // --------- SQLite (sync under the hood, wrapped as async) ---------
@@ -281,10 +284,13 @@ async function initSqlite() {
     room_id INTEGER,
     essential INTEGER DEFAULT 0,
     type TEXT,
+    priority INTEGER,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY(user_id, vendor, device_id)
   );
   `);
+  // Online migration for existing DBs (ignore if column already exists)
+  try { sqliteDb.prepare('ALTER TABLE device_meta ADD COLUMN priority INTEGER').run(); } catch {}
 }
 
 // Initialize selected engine
@@ -567,34 +573,41 @@ export async function deleteRoom(user_id, room_id){
 
 export async function getDeviceMetaMap(user_id){
   if (USE_PG) {
-    const r = await pgPool.query('SELECT vendor, device_id, room_id, essential, type, updated_at FROM device_meta WHERE user_id = $1', [user_id]);
+    const r = await pgPool.query('SELECT vendor, device_id, room_id, essential, type, priority, updated_at FROM device_meta WHERE user_id = $1', [user_id]);
     const map = {}; for (const row of r.rows){ map[`${row.vendor}|${row.device_id}`] = row; }
     return map;
   } else {
-    const rows = sqliteDb.prepare('SELECT vendor, device_id, room_id, essential, type, updated_at FROM device_meta WHERE user_id = ?').all(user_id);
+    const rows = sqliteDb.prepare('SELECT vendor, device_id, room_id, essential, type, priority, updated_at FROM device_meta WHERE user_id = ?').all(user_id);
     const map = {}; for (const row of rows){ map[`${row.vendor}|${row.device_id}`] = { ...row, essential: !!row.essential }; }
     return map;
   }
 }
 
-export async function upsertDeviceMeta(user_id, { vendor, device_id, room_id=null, essential=false, type=null }){
+export async function upsertDeviceMeta(user_id, { vendor, device_id, room_id=null, essential=false, type=null, priority=null }){
   const v = String(vendor||''); const id = String(device_id||''); if (!v || !id) throw new Error('vendor and device_id required');
   const ess = !!essential;
   const t = type ? String(type) : null;
+  let prio = null;
+  if (priority != null) {
+    const n = Number(priority);
+    if (Number.isFinite(n)) {
+      prio = Math.max(1, Math.min(3, Math.round(n)));
+    }
+  }
   if (USE_PG) {
     await pgPool.query(
-      `INSERT INTO device_meta(user_id, vendor, device_id, room_id, essential, type, updated_at)
-       VALUES($1,$2,$3,$4,$5,$6, now())
-       ON CONFLICT(user_id, vendor, device_id) DO UPDATE SET room_id=EXCLUDED.room_id, essential=EXCLUDED.essential, type=EXCLUDED.type, updated_at=now()`,
-      [user_id, v, id, (room_id? Number(room_id): null), ess, t]
+      `INSERT INTO device_meta(user_id, vendor, device_id, room_id, essential, type, priority, updated_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7, now())
+       ON CONFLICT(user_id, vendor, device_id) DO UPDATE SET room_id=EXCLUDED.room_id, essential=EXCLUDED.essential, type=EXCLUDED.type, priority=EXCLUDED.priority, updated_at=now()`,
+      [user_id, v, id, (room_id? Number(room_id): null), ess, t, prio]
     );
   } else {
     sqliteDb.prepare(
-      `INSERT INTO device_meta(user_id, vendor, device_id, room_id, essential, type, updated_at)
-       VALUES(?,?,?,?,?,?, datetime('now'))
+      `INSERT INTO device_meta(user_id, vendor, device_id, room_id, essential, type, priority, updated_at)
+       VALUES(?,?,?,?,?,?,?, datetime('now'))
        ON CONFLICT(user_id, vendor, device_id) DO UPDATE SET
-         room_id=excluded.room_id, essential=excluded.essential, type=excluded.type, updated_at=datetime('now')`
-    ).run(user_id, v, id, (room_id? Number(room_id): null), (ess?1:0), t);
+         room_id=excluded.room_id, essential=excluded.essential, type=excluded.type, priority=excluded.priority, updated_at=datetime('now')`
+    ).run(user_id, v, id, (room_id? Number(room_id): null), (ess?1:0), t, prio);
   }
-  return { vendor: v, device_id: id, room_id, essential: ess, type: t };
+  return { vendor: v, device_id: id, room_id, essential: ess, type: t, priority: prio };
 }

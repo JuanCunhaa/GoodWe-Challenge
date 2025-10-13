@@ -1,7 +1,6 @@
-// src/pages/Dispositivos.jsx
+﻿// src/pages/Dispositivos.jsx
 import { useEffect, useMemo, useState } from 'react'
 import { loadSession } from '../services/authApi.js'
-import { metaApi } from '../services/metaApi.js'
 import { adapters, adapterList } from '../features/devices/adapters/index.js'
 import { aiApi } from '../services/aiApi.js'
 
@@ -14,10 +13,7 @@ export default function Dispositivos(){
   const [statusMap, setStatusMap] = useState({})
   const [busy, setBusy] = useState({})
   const [canControl, setCanControl] = useState(true)
-  const [rooms, setRooms] = useState({}) // vendor rooms (SmartThings)
-  const [appRooms, setAppRooms] = useState([]) // App Rooms (Perfil)
-  const [metaMap, setMetaMap] = useState({}) // key: vendor|device_id -> { room_id, priority, ... }
-  const [editMap, setEditMap] = useState({}) // key -> { room_id, priority }
+  const [rooms, setRooms] = useState({})
   const [room, setRoom] = useState('')
   const [uptimeMap, setUptimeMap] = useState({})
 
@@ -26,7 +22,7 @@ export default function Dispositivos(){
   async function fetchDevices(){
     setErr(''); setLoading(true)
     try{
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const { token } = loadSession(); if (!token) throw new Error('SessÃ£o expirada')
       const list = await currentAdapter.listDevices(token, { setRooms, setStatusMap, setErr })
       setItems(Array.isArray(list) ? list : [])
 
@@ -42,23 +38,6 @@ export default function Dispositivos(){
   }
 
   useEffect(()=>{ fetchDevices() }, [vendor])
-
-  // Load App Rooms (Perfil) and current device meta map
-  useEffect(()=>{
-    (async()=>{
-      try{
-        const { token } = loadSession(); if (!token) return
-        const r = await metaApi.listRooms(token)
-        setAppRooms(Array.isArray(r?.items)? r.items : [])
-      } catch {}
-      try{
-        const { token } = loadSession(); if (!token) return
-        const m = await metaApi.getDeviceMeta(token)
-        const items = m?.items || m // backend returns { ok:true, items: map } ou só map
-        setMetaMap(items || {})
-      } catch {}
-    })()
-  }, [])
 
   const list = useMemo(()=>{
     const qq = q.trim().toLowerCase()
@@ -104,7 +83,7 @@ export default function Dispositivos(){
   async function sendSwitch(id, on, component){
     try{
       setBusy(b => ({ ...b, [id]: true }))
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const { token } = loadSession(); if (!token) throw new Error('SessÃ£o expirada')
 
       const dev = items.find(x => x.id === id)
       if (dev?.vendor === 'tuya' && dev.online === false) throw new Error('Dispositivo offline')
@@ -122,29 +101,6 @@ export default function Dispositivos(){
 
   const linkErr = /not\s*linked|missing\s*uid|missing\s*token|unauthorized|401|403/i.test(err)
 
-  function keyOf(d){ return `${d.vendor||''}|${d.id||''}` }
-  function appRoomName(room_id){ const r = appRooms.find(x => String(x.id) === String(room_id)); return r ? (r.name || r.id) : '' }
-  function startEdit(d){
-    const k = keyOf(d)
-    const meta = metaMap[k] || {}
-    setEditMap(m => ({ ...m, [k]: { room_id: meta.room_id || '', priority: meta.priority ?? '' } }))
-  }
-  function cancelEdit(d){ const k = keyOf(d); setEditMap(m => { const { [k]:_, ...rest } = m; return rest }) }
-  async function saveEdit(d){
-    try{
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
-      const k = keyOf(d)
-      const cur = editMap[k] || {}
-      const payload = { vendor: d.vendor, device_id: d.id }
-      if (cur.room_id === '' || cur.room_id == null) payload.room_id = null; else payload.room_id = cur.room_id
-      if (cur.priority === '' || cur.priority == null) payload.priority = null; else payload.priority = Number(cur.priority)
-      const res = await metaApi.upsertDeviceMeta(token, payload)
-      const item = res?.item || payload
-      setMetaMap(m => ({ ...m, [k]: { ...(m[k]||{}), room_id: item.room_id ?? payload.room_id ?? null, priority: item.priority ?? payload.priority ?? null } }))
-      cancelEdit(d)
-    } catch(e) { alert(String(e?.message||e)) }
-  }
-
   return (
     <section className="grid gap-4">
       <div className="card">
@@ -157,8 +113,8 @@ export default function Dispositivos(){
               ))}
             </select>
             <select className="panel w-full sm:w-auto" value={room} onChange={e=>setRoom(e.target.value)}>
-              <option value="">Todos os cômodos</option>
-              <option value="none">Sem cômodo</option>
+              <option value="">Todos os cÃ´modos</option>
+              <option value="none">Sem cÃ´modo</option>
               {Object.entries(rooms).map(([id,name]) => (
                 <option key={id} value={id}>{name||id}</option>
               ))}
@@ -170,13 +126,13 @@ export default function Dispositivos(){
 
         {!loading && !canControl && !linkErr && (
           <div className="panel border border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm mb-3">
-            Comando indisponível para o fornecedor selecionado. Verifique permissões/conexão na página <a className="underline" href="/perfil">Perfil</a>.
+            Comando indisponÃ­vel para o fornecedor selecionado. Verifique permissÃµes/conexÃ£o na pÃ¡gina <a className="underline" href="/perfil">Perfil</a>.
           </div>
         )}
 
         {!loading && vendor === 'smartthings' && linkErr && (
           <div className="panel border border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300 text-sm mb-3">
-            Para usar o SmartThings aqui, conecte sua conta na página <a className="underline" href="/perfil">Perfil</a>.
+            Para usar o SmartThings aqui, conecte sua conta na pÃ¡gina <a className="underline" href="/perfil">Perfil</a>.
           </div>
         )}
 
@@ -193,9 +149,6 @@ export default function Dispositivos(){
             if (typeof rawVal === 'string') isOn = rawVal.toLowerCase() === 'on'
             else if (typeof rawVal === 'boolean') isOn = !!rawVal
             else if (typeof rawVal === 'number') isOn = rawVal === 1
-            const k = keyOf(d)
-            const meta = metaMap[k] || {}
-            const editing = editMap[k]
 
             return (
               <div key={d.id} className="panel h-full flex flex-col gap-2" title={(typeof uptimeMap[((d.vendor||'')+'|'+d.id)]==='number') ? (`Uptime (24h): ${Math.round(uptimeMap[((d.vendor||'')+'|'+d.id)])} min`) : undefined}>
@@ -204,33 +157,8 @@ export default function Dispositivos(){
                   <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||d.category||''}>
                     {(d.deviceTypeName || d.manufacturer || d.category || 'Dispositivo')}
                   </div>
-                  <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || d.roomName || 'Não especificado'}</div>
+                  <div className="muted text-[11px]">CÃ´modo: {rooms[d.roomId] || d.roomName || 'NÃ£o especificado'}</div>
                   {d.vendor==='tuya' && d.online===false && <div className="text-[11px] text-red-500 mt-1">Offline</div>}
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">Cômodo (App): {meta.room_id ? (appRoomName(meta.room_id) || meta.room_id) : '-'}</span>
-                    <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">Prioridade: {meta.priority ?? '-'}</span>
-                    {!editing && <button className="btn btn-ghost text-xs" onClick={()=>startEdit(d)}>Editar</button>}
-                  </div>
-                  {editing && (
-                    <div className="mt-2 grid gap-2">
-                      <div className="flex items-center gap-2">
-                        <select className="panel" value={String(editing.room_id ?? '')} onChange={e=> setEditMap(m=> ({ ...m, [k]: { ...m[k], room_id: e.target.value===''? '': e.target.value } }))}>
-                          <option value="">Sem cômodo (App)</option>
-                          {appRooms.map(r => (<option key={r.id} value={String(r.id)}>{r.name||r.id}</option>))}
-                        </select>
-                        <select className="panel" value={String(editing.priority ?? '')} onChange={e=> setEditMap(m=> ({ ...m, [k]: { ...m[k], priority: e.target.value===''? '': Number(e.target.value) } }))}>
-                          <option value="">Sem prioridade</option>
-                          <option value="1">Prioridade 1</option>
-                          <option value="2">Prioridade 2</option>
-                          <option value="3">Prioridade 3</option>
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button className="btn btn-primary" onClick={()=>saveEdit(d)}>Salvar</button>
-                        <button className="btn btn-ghost" onClick={()=>cancelEdit(d)}>Cancelar</button>
-                      </div>
-                    </div>
-                  )}
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   {hasSwitch ? (
@@ -245,11 +173,11 @@ export default function Dispositivos(){
                           <button className="btn btn-primary" disabled={!!busy[d.id] || (d.vendor==='tuya' && d.online===false)} onClick={()=>sendSwitch(d.id,true, comp)}>{busy[d.id]? '...' : 'Ligar'}</button>
                         )
                       ) : (
-                        <button className="btn btn-ghost" disabled title="Conecte com escopo de comandos na página Perfil">Comando indisponível</button>
+                        <button className="btn btn-ghost" disabled title="Conecte com escopo de comandos na pÃ¡gina Perfil">Comando indisponÃ­vel</button>
                       )}
                     </>
                   ) : (
-                    <span className="muted text-xs">Sem controle direto (switch não disponível)</span>
+                    <span className="muted text-xs">Sem controle direto (switch nÃ£o disponÃ­vel)</span>
                   )}
                 </div>
               </div>
@@ -264,3 +192,4 @@ export default function Dispositivos(){
     </section>
   )
 }
+
