@@ -9,4 +9,5 @@ export const adapters = {
   [tuya.key]: tuya,
 }
 
-export const adapterList = [smartthings, hue, tuya]
+// Remover Philips Hue da seleção de IoT (permanece disponível no mapa interno se necessário)
+export const adapterList = [smartthings, tuya]
