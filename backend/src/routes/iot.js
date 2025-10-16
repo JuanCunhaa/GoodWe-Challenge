@@ -1,4 +1,5 @@
 import { getDbEngine } from '../db.js';
+import { getDeviceUsageByHour } from '../analytics/service.js';
 
 function parseWindow(q){
   const m = String(q||'').trim();
@@ -100,6 +101,18 @@ export function registerIoTRoutes(router, { helpers }){
         .sort((a,b)=> (b.power_w||0)-(a.power_w||0))
         .slice(0, 10);
       res.json({ ok:true, window_minutes: minutes, items });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
+  // Usage by hour (last N minutes, default 24h) for a device
+  router.get('/iot/device/:vendor/:id/usage-by-hour', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const vendor = String(req.params.vendor || '').toLowerCase();
+      const device_id = String(req.params.id || '');
+      const minutes = (()=>{ const w = String(req.query.window||'24h').toLowerCase(); if (w.endsWith('h')) return Math.max(1, Math.round(parseFloat(w)*60)||1440); const n = parseInt(w,10); return Number.isFinite(n)? Math.max(1,n) : 1440; })();
+      const data = await getDeviceUsageByHour({ vendor, device_id, minutes });
+      res.json({ ok:true, ...data });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 }

@@ -100,6 +100,24 @@ export function registerTtsRoutes(router, { helpers }) {
     let text = (raw && typeof raw.normalize === 'function') ? raw.normalize('NFC').trim() : String(raw).trim();
     // Sanitizar caracteres problemáticos para TTS (ex.: '*')
     if (text.includes('*')) text = text.replace(/\*/g, '');
+    // Expandir unidades técnicas para melhor pronúncia (pt-BR)
+    function expandUnitsPtBR(s){
+      let out = ' ' + s + ' ';
+      out = out.replace(/\bMWh\b/gi, ' megawatt hora ');
+      out = out.replace(/\bMW\b/gi, ' megawatt ');
+      out = out.replace(/\bkWh\b/gi, ' quilowatt hora ');
+      out = out.replace(/\bkW\b/gi, ' quilowatt ');
+      out = out.replace(/\bWh\b/gi, ' watt hora ');
+      out = out.replace(/\bW\b/gi, ' watt ');
+      out = out.replace(/\bkVAh\b/gi, ' quilovolt ampere hora ');
+      out = out.replace(/\bkVA\b/gi, ' quilovolt ampere ');
+      out = out.replace(/\bAh\b/gi, ' ampere hora ');
+      out = out.replace(/\bA\b/gi, ' ampere ');
+      out = out.replace(/\bV\b/gi, ' volt ');
+      out = out.replace(/\bHz\b/gi, ' hertz ');
+      return out.trim().replace(/\s{2,}/g,' ');
+    }
+    text = expandUnitsPtBR(text);
     if (!text) return res.status(400).json({ ok: false, error: 'text is required' });
 
     const key = cacheKey(text);

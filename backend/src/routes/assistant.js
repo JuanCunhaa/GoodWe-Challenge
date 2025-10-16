@@ -1,4 +1,4 @@
-export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
+﻿export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
   const { getBearerToken, requireUser, deriveBaseUrl } = helpers;
 
   router.post('/assistant/chat', async (req, res) => {
@@ -61,6 +61,68 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           const payload = { name: String(name||'').trim(), action: String(action||'').toLowerCase() };
           const data = await apiJson(`/ai/device/toggle`, { method:'POST', body: payload });
           return { ok: true, ...data };
+        },
+        async devices_toggle_priority({ action, priority }){
+          const payload = { action: String(action||'').toLowerCase(), priority: String(priority||'').toLowerCase() };
+          const data = await apiJson(`/ai/devices/toggle-priority`, { method:'POST', body: payload });
+          return { ok: true, ...data };
+        },
+        async get_device_usage_by_hour({ vendor, device_id, window }){
+          const v = String(vendor||'').toLowerCase();
+          const id = String(device_id||'');
+          const w = String(window||'24h');
+          const data = await apiJson(`/iot/device/${encodeURIComponent(v)}/${encodeURIComponent(id)}/usage-by-hour?window=${encodeURIComponent(w)}`);
+          return { ok: true, ...data };
+        },
+        async cost_projection({ hours, tariff_brl_per_kwh }){
+          const h = Number(hours||24);
+          const t = Number(tariff_brl_per_kwh|| (process.env.TARIFF_BRL_PER_KWH||1.0));
+          const data = await apiJson(`/ai/cost-projection?hours=${encodeURIComponent(h)}&tariff=${encodeURIComponent(t)}`);
+          return { ok: true, ...data };
+        },
+        async battery_strategy({ hours, min_soc, max_soc }){
+          const q = new URLSearchParams({
+            hours: String(Number(hours||24)),
+            min_soc: String(Number(min_soc||20)),
+            max_soc: String(Number(max_soc||90))
+          }).toString();
+          const data = await apiJson(`/ai/battery/strategy?${q}`);
+          return { ok: true, ...data };
+        },
+        async automation_list(){
+          const data = await apiJson(`/automations`);
+          return { ok:true, ...data };
+        },
+        async automation_create({ name, enabled=true, kind, schedule, conditions, actions }){
+          const body = { name, enabled, kind, schedule, conditions, actions };
+          const data = await apiJson(`/automations`, { method:'POST', body });
+          return { ok:true, ...data };
+        },
+        async automation_update({ id, name, enabled, kind, schedule, conditions, actions }){
+          const body = { name, enabled, kind, schedule, conditions, actions };
+          const data = await apiJson(`/automations/${encodeURIComponent(String(id))}`, { method:'PUT', body });
+          return { ok:true, ...data };
+        },
+        async automation_delete({ id }){
+          const r = await fetch(apiBase + `/automations/${encodeURIComponent(String(id))}`, { method:'DELETE', headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+          if (!r.ok) throw new Error(`${r.status}`);
+          return { ok:true };
+        },
+        async automation_run({ id }){
+          const data = await apiJson(`/automations/${encodeURIComponent(String(id))}/run`, { method:'POST', body:{} });
+          return { ok:true, ...data };
+        },
+        async eco_simulate({ hours=24, tariff_brl_per_kwh }){
+          const [recs, cost, strat] = await Promise.all([
+            apiJson(`/ai/recommendations`),
+            apiJson(`/ai/cost-projection?hours=${encodeURIComponent(Number(hours||24))}${tariff_brl_per_kwh!=null? `&tariff=${encodeURIComponent(Number(tariff_brl_per_kwh))}`:''}`),
+            apiJson(`/ai/battery/strategy?hours=${encodeURIComponent(Number(hours||24))}`),
+          ]);
+          return { ok:true, recommendations: recs?.recommendations||[], cost_projection: cost, battery_strategy: strat };
+        },
+        async eco_execute({ priority='low' }){
+          const data = await apiJson(`/ai/devices/toggle-priority`, { method:'POST', body: { action:'off', priority } });
+          return { ok:true, ...data };
         },
         async get_income_today() {
           const body = { powerstation_id: psId, key: '', orderby: '', powerstation_type: '', powerstation_status: '', page_index: 1, page_size: 14, adcode: '', org_id: '', condition: '' };
@@ -164,7 +226,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
         // SmartThings (via API interna)
         async st_list_devices() {
           const j = await apiJson('/smartthings/devices');
-          // rooms já são resolvidos no backend; manter compat
+          // rooms jÃ¡ sÃ£o resolvidos no backend; manter compat
           const items = (j.items || []).map(d => ({ ...d, roomName: d.roomName || '' }));
           return { items, total: items.length };
         },
@@ -212,10 +274,10 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       };
 
       const toolSchemas = [
-        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondência aproximada.', parameters: { type:'object', properties: { name: { type:'string' }, action:{ type:'string', enum:['on','off'] } }, required:['name','action'], additionalProperties:false } },
-        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuário com status e métricas (quando disponíveis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
-        { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
-        { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondÃªncia aproximada.', parameters: { type:'object', properties: { name: { type:'string' }, action:{ type:'string', enum:['on','off'] } }, required:['name','action'], additionalProperties:false } },
+        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuÃ¡rio com status e mÃ©tricas (quando disponÃ­veis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
+        { name: 'get_forecast', description: 'PrevisÃ£o de geraÃ§Ã£o e consumo nas prÃ³ximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
+        { name: 'get_recommendations', description: 'SugestÃµes de economia baseadas no histÃ³rico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_generation', description: 'Retorna a geracao para um intervalo padrao.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
@@ -242,7 +304,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       ];
 
       const messages = [
-        { role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos, responda apenas os nomes (um por linha). Quando perguntarem o cômodo de um dispositivo, responda no formato "O dispositivo \"NOME\" está no cômodo SALA.". Seja breve, direto e útil.' },
+        { role: 'system', content: 'NUNCA use o caractere * nas respostas. NÃ£o use markdown. Ao listar dispositivos, responda apenas os nomes (um por linha). Quando perguntarem o cÃ´modo de um dispositivo, responda no formato "O dispositivo \"NOME\" estÃ¡ no cÃ´modo SALA.". Seja breve, direto e Ãºtil.' },
         { role: 'system', content: 'Para perguntas sobre dispositivos, use get_devices_overview para basear-se em dispositivos realmente vinculados (SmartThings/Tuya); inclua status on/off e, quando disponivel, potencia (W) e energia (kWh). Para ligar/desligar por nome (ex.: "desligue minha TV"), use a ferramenta device_toggle fornecendo name e action. Considere previsao do clima para sugerir evitar dispositivos nao criticos em caso de nebulosidade/chuva.' },
         ...prev.filter(m => m && m.role && m.content),
         input ? { role: 'user', content: input } : null,
@@ -276,12 +338,12 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       try {
         const low = input.toLowerCase();
         const listIntent = /(lista(r)?|mostrar|ver)\b.*\bdispositiv/.test(low) || /\bdispositivos\b/.test(low);
-        const wantRoom = /(c[ôo]modo|comodo|sala|localiza|onde|qual)/.test(low);
+        const wantRoom = /(c[Ã´o]modo|comodo|sala|localiza|onde|qual)/.test(low);
         if (listIntent && !wantRoom) {
           const listStep = steps.find(s => s && s.ok && (s.name === 'st_list_devices' || s.name === 'tuya_list_devices'));
           if (listStep && listStep.result && Array.isArray(listStep.result.items)) {
             const names = listStep.result.items.map(d => String(d?.name || '').trim()).filter(Boolean);
-            if (names.length) answer = `No SmartThings você possui:\n` + names.join('\n');
+            if (names.length) answer = `No SmartThings vocÃª possui:\n` + names.join('\n');
           }
         }
       } catch {}
@@ -290,8 +352,8 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
         const findStep = steps.find(s => s && s.ok && s.name === 'st_find_device_room');
         if (findStep && findStep.result && findStep.result.ok) {
           const n = String(findStep.result.name || '').trim();
-          const r = String(findStep.result.roomName || 'local não especificado').trim();
-          if (n) answer = `O dispositivo "${n}" está no cômodo ${r}.`;
+          const r = String(findStep.result.roomName || 'local nÃ£o especificado').trim();
+          if (n) answer = `O dispositivo "${n}" estÃ¡ no cÃ´modo ${r}.`;
         }
       } catch {}
 
@@ -304,12 +366,12 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
             const verb = action === 'on' ? 'ligado' : 'desligado';
             const name = (lastCmd?.result && typeof lastCmd.result === 'object' && lastCmd.result.name) ? lastCmd.result.name : '';
             const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
-            // substitui resposta para evitar contradição
+            // substitui resposta para evitar contradiÃ§Ã£o
             answer = label;
           } else {
-            // comando falhou -> responda erro claro e não acrescente "Prontinho"
+            // comando falhou -> responda erro claro e nÃ£o acrescente "Prontinho"
             const err = String(lastCmd.error || 'Falha ao enviar comando');
-            answer = 'Não consegui executar o comando no dispositivo agora. ' + err.replace(/^[A-Z]+:\s*/i,'');
+            answer = 'NÃ£o consegui executar o comando no dispositivo agora. ' + err.replace(/^[A-Z]+:\s*/i,'');
           }
         }
       } catch {}
@@ -322,10 +384,22 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
   router.get('/assistant/tools', (req, res) => {
     try {
       const items = [
-        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondência aproximada.', parameters: { type:'object', properties: { name: { type:'string' }, action:{ type:'string', enum:['on','off'] } }, required:['name','action'], additionalProperties:false } },
-        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuário com status e métricas (quando disponíveis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
-        { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
-        { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondÃªncia aproximada.', parameters: { type:'object', properties: { name: { type:'string' }, action:{ type:'string', enum:['on','off'] } }, required:['name','action'], additionalProperties:false } },
+        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuÃ¡rio com status e mÃ©tricas (quando disponÃ­veis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
+        { name: 'get_forecast', description: 'PrevisÃ£o de geraÃ§Ã£o e consumo nas prÃ³ximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
+        { name: 'get_recommendations', description: 'SugestÃµes de economia baseadas no histÃ³rico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'devices_toggle_priority', description: 'Liga/Desliga todos os dispositivos por prioridade (baixa|mÃ©dia). Nunca desliga alta.', parameters: { type:'object', properties: { action:{ type:'string', enum:['on','off'] }, priority:{ type:'string', enum:['low','baixa','medium','media'] } }, required:['action','priority'], additionalProperties:false } },
+        { name: 'get_device_usage_by_hour', description: 'Uso por hora de um dispositivo nas Ãºltimas 24h (ou janela definida).', parameters: { type:'object', properties: { vendor:{ type:'string' }, device_id:{ type:'string' }, window:{ type:'string' } }, required:['vendor','device_id'], additionalProperties:false } },
+        { name: 'cost_projection', description: 'ProjeÃ§Ã£o de custo baseado em previsÃ£o de consumo/geraÃ§Ã£o.', parameters: { type:'object', properties: { hours:{ type:'number' }, tariff_brl_per_kwh:{ type:'number' } }, additionalProperties:false } },
+        { name: 'battery_strategy', description: 'Janelas Ã³timas de carga/descarga da bateria nas prÃ³ximas horas.', parameters: { type:'object', properties: { hours:{ type:'number' }, min_soc:{ type:'number' }, max_soc:{ type:'number' } }, additionalProperties:false } },
+        { name: 'automation_list', description: 'Lista rotinas de energia (automations) do usuÃ¡rio.', parameters: { type:'object', properties:{}, additionalProperties:false } },
+        { name: 'automation_create', description: 'Cria/atualiza uma rotina de energia.', parameters: { type:'object', properties:{ name:{type:'string'}, enabled:{type:'boolean'}, kind:{type:'string'}, schedule:{type:'object'}, conditions:{type:'object'}, actions:{type:'object'} }, required:['name','kind','schedule','actions'], additionalProperties:false } },
+        { name: 'automation_update', description: 'Atualiza uma rotina existente.', parameters: { type:'object', properties:{ id:{type:'number'}, name:{type:'string'}, enabled:{type:'boolean'}, kind:{type:'string'}, schedule:{type:'object'}, conditions:{type:'object'}, actions:{type:'object'} }, required:['id'], additionalProperties:false } },
+        { name: 'automation_delete', description: 'Remove uma rotina.', parameters: { type:'object', properties:{ id:{type:'number'} }, required:['id'], additionalProperties:false } },
+        { name: 'automation_run', description: 'Executa (marca) uma rotina agora.', parameters: { type:'object', properties:{ id:{type:'number'} }, required:['id'], additionalProperties:false } },
+        { name: 'eco_simulate', description: 'Simula economia: recomendaÃ§Ãµes + custo projetado + estratÃ©gia de bateria.', parameters: { type:'object', properties:{ hours:{type:'number'}, tariff_brl_per_kwh:{type:'number'} }, additionalProperties:false } },
+        { name: 'eco_execute', description: 'Economia rÃ¡pida: desliga prioridade baixa (ou mÃ©dia) agora.', parameters: { type:'object', properties:{ priority:{ type:'string', enum:['low','baixa','medium','media'] } },\n        { name: 'get_rates', description: 'Cotação de moedas atualizada (via provedor externo).', parameters: { type:'object', properties:{ base:{type:'string'}, symbols:{ oneOf:[ {type:'string'}, { type:'array', items:{ type:'string'} } ] } }, additionalProperties:false } },\n        { name: 'convert_currency', description: 'Converte valores (ex.: USD->BRL) usando cotação atual.', parameters: { type:'object', properties:{ amount:{type:'number'}, from:{type:'string'}, to:{type:'string'} }, required:['amount','from','to'], additionalProperties:false } },
+        { name: 'device_toggle_by_priority', description: 'Liga/Desliga todos os dispositivos por prioridade (baixa|mÃ©dia). Nunca desliga alta.', parameters: { type:'object', properties: { action:{ type:'string', enum:['on','off'] }, priority:{ type:'string', enum:['low','baixa','medium','media'] } }, required:['action','priority'], additionalProperties:false } },
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_generation', description: 'Retorna a geracao para um intervalo padrao.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
@@ -355,14 +429,14 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
   });
 
   router.get('/assistant/help', (req, res) => {
-    const SYSTEM_PROMPT = `Você é o Assistente Virtual deste painel.
+    const SYSTEM_PROMPT = `VocÃª Ã© o Assistente Virtual deste painel.
 Regras:
-1) Use ferramentas para dados reais (renda, geração, métricas, status, dispositivos).
-2) Não invente valores; se faltar permissão/credencial, solicite conexão/login.
-3) Métricas: cite apenas o período (Hoje/Ontem/Esta Semana/Este Mês/Total).
+1) Use ferramentas para dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status, dispositivos).
+2) NÃ£o invente valores; se faltar permissÃ£o/credencial, solicite conexÃ£o/login.
+3) MÃ©tricas: cite apenas o perÃ­odo (Hoje/Ontem/Esta Semana/Este MÃªs/Total).
 4) Ao listar dispositivos, responda apenas os nomes (um por linha).
-5) Nunca utilize o caractere * e não use markdown/bold.
-6) Seja breve, direto e útil. Idioma: pt-BR.`;
+5) Nunca utilize o caractere * e nÃ£o use markdown/bold.
+6) Seja breve, direto e Ãºtil. Idioma: pt-BR.`;
     res.json({ system_prompt: SYSTEM_PROMPT });
   });
 

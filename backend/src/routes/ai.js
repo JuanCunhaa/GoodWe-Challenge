@@ -66,8 +66,99 @@ export function registerAiRoutes(router, { gw, helpers }){
     try {
       const data = await getRecommendations({ plant_id, fetchWeather: async () => {
         try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null }
-      }, fetchDevices: async () => devicesOverviewInternal(req, helpers) });
+      }, fetchDevices: async () => devicesOverviewInternal(req, helpers), fetchDeviceMeta: async () => {
+        try {
+          const authHeader = req.headers['authorization'] || '';
+          const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+          const r = await fetch(base + '/device-meta', { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+          const j = await r.json().catch(()=>null);
+          return (j && j.items) ? j.items : (j || {});
+        } catch { return {}; }
+      }, fetchRooms: async () => {
+        try {
+          const authHeader = req.headers['authorization'] || '';
+          const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+          const r = await fetch(base + '/rooms', { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+          const j = await r.json().catch(()=>null);
+          const map = {}; (Array.isArray(j?.items)? j.items: []).forEach(it => { map[String(it.id)] = it.name || '' });
+          return map;
+        } catch { return {}; }
+      } });
       res.json({ ok: true, ...data });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
+  // Cost projection (net import * tariff)
+  router.get('/ai/cost-projection', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    const plant_id = user.powerstation_id;
+    const hours = Number(req.query.hours || 24);
+    const tariff = Number(req.query.tariff || process.env.TARIFF_BRL_PER_KWH || 1.0);
+    try {
+      const { getCostProjection } = await import('../analytics/service.js');
+      const data = await getCostProjection({ plant_id, hours, tariff_brl_per_kwh: tariff, fetchWeather: async () => {
+        try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null }
+      }});
+      res.json(data);
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
+  // Battery strategy (charge/discharge windows)
+  router.get('/ai/battery/strategy', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    const plant_id = user.powerstation_id;
+    const hours = Number(req.query.hours || 24);
+    const min_soc = Number(req.query.min_soc || 20);
+    const max_soc = Number(req.query.max_soc || 90);
+    try {
+      const { getBatteryStrategy } = await import('../analytics/service.js');
+      const data = await getBatteryStrategy({ plant_id, hours, min_soc, max_soc, fetchWeather: async () => {
+        try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null }
+      }});
+      res.json(data);
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
+  // Toggle all devices by priority (low/medium). High priority is never toggled here.
+  router.post('/ai/devices/toggle-priority', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const action = String(req.body?.action || req.query?.action || '').toLowerCase();
+      const priority = String(req.body?.priority || req.query?.priority || '').toLowerCase();
+      if (!['on','off'].includes(action)) return res.status(422).json({ ok:false, error:'action must be on/off' });
+      const prMap = { low: 1, baixa:1, medium:2, media:2 };
+      const pr = prMap[priority];
+      if (!pr) return res.status(422).json({ ok:false, error:'priority must be low|baixa or medium|media' });
+
+      const authHeader = req.headers['authorization'] || '';
+      const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+      const api = async (path, opts={}) => {
+        const r = await fetch(base + path, { headers: { 'Authorization': authHeader, 'Content-Type':'application/json' }, ...opts, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+        const j = await r.json().catch(()=>null); if (!r.ok) throw new Error(j?.error || `${r.status}`); return j;
+      };
+      const devs = await devicesOverviewInternal(req, helpers);
+      const items = Array.isArray(devs?.items) ? devs.items : [];
+      const meta = await api('/device-meta'); const metaMap = meta?.items || meta || {};
+      const essentialNames = ['geladeira','fridge','refrigerador','freezer'];
+      function isEssential(d){
+        const key = `${d.vendor||''}|${d.id||''}`; const mm = metaMap[key] || {};
+        if (mm.essential === true) return true;
+        const s = String(d.name||'').toLowerCase(); return essentialNames.some(x => s.includes(x));
+      }
+      const targets = items.filter(d => !isEssential(d) && (metaMap[`${d.vendor||''}|${d.id||''}`]?.priority === pr));
+      const results = [];
+      for (const d of targets){
+        try {
+          if (d.vendor === 'smartthings'){
+            const r = await fetch(`${base}/smartthings/device/${encodeURIComponent(d.id)}/${action}`, { method:'POST', headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+            const j = await r.json().catch(()=>null); results.push({ vendor:d.vendor, id:d.id, ok:r.ok, resp:j });
+          } else if (d.vendor === 'tuya'){
+            const r = await fetch(`${base}/tuya/device/${encodeURIComponent(d.id)}/${action}`, { method:'POST', headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+            const j = await r.json().catch(()=>null); results.push({ vendor:d.vendor, id:d.id, ok:r.ok, resp:j });
+          }
+        } catch (e) { results.push({ vendor:d.vendor, id:d.id, ok:false, error:String(e) }); }
+      }
+      res.json({ ok:true, count: results.length, results });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 

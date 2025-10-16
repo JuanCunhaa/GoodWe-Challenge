@@ -4,6 +4,7 @@ import { loadSession } from '../services/authApi.js'
 import { metaApi } from '../services/metaApi.js'
 import { adapters, adapterList } from '../features/devices/adapters/index.js'
 import { integrationsApi } from '../services/integrationsApi.js'
+import { Pencil } from 'lucide-react'
 
 export default function Dispositivos(){
   const [items, setItems] = useState([])
@@ -213,18 +214,25 @@ export default function Dispositivos(){
             const meta = metaMap[k] || {}
 
             return (
-              <div key={d.id} className="panel h-full flex flex-col gap-2">
+              <div key={d.id} className="panel relative h-full flex flex-col gap-2">
+                <button
+                  type="button"
+                  className="btn btn-ghost p-1 absolute top-2 right-2"
+                  aria-label="Editar"
+                  title="Editar"
+                  onClick={()=>startEdit(d)}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
                 <div>
                   <div className="font-semibold text-sm sm:text-base whitespace-normal break-words" title={d.name}>{d.name||'-'}</div>
                   <div className="muted text-xs truncate" title={d.deviceTypeName||d.manufacturer||d.category||''}>
                     {(d.deviceTypeName || d.manufacturer || d.category || 'Dispositivo')}
                   </div>
-                  <div className="muted text-[11px]">Cômodo: {rooms[d.roomId] || d.roomName || 'Não especificado'}</div>
                   {d.vendor==='tuya' && d.online===false && <div className="text-[11px] text-red-500 mt-1">Offline</div>}
                   <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">Cômodo (App): {meta.room_id ? (appRoomName(meta.room_id) || meta.room_id) : '-'}</span>
+                    <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">Cômodo: {meta.room_id ? (appRoomName(meta.room_id) || meta.room_id) : '-'}</span>
                     <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">Prioridade: {meta.priority===3?'Alta': meta.priority===2?'Média': meta.priority===1?'Baixa':'-'}</span>
-                    <button className="btn btn-ghost text-xs" onClick={()=>startEdit(d)}>Editar</button>
                   </div>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
@@ -299,4 +307,3 @@ export default function Dispositivos(){
     </section>
   )
 }
-

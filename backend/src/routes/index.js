@@ -10,6 +10,8 @@ import { registerTuyaRoutes } from './integrations/tuya.js';
 import { createHelpers } from './helpers.js';
 import { registerIoTRoutes } from './iot.js';
 import { registerRoomsRoutes } from './rooms.js';
+import { registerMetaRoutes } from './meta.js';
+import { registerAutomationsRoutes } from './automations.js';
 
 export function registerAllRoutes(router, { gw, dbApi }) {
   const helpers = createHelpers({ gw, dbApi });
@@ -31,6 +33,8 @@ export function registerAllRoutes(router, { gw, dbApi }) {
   registerTuyaRoutes(router, { dbApi, helpers });
   registerIoTRoutes(router, { helpers });
   registerRoomsRoutes(router, { dbApi, helpers });
+  registerMetaRoutes(router, { helpers });
+  registerAutomationsRoutes(router, { helpers });
 
   return router;
 }

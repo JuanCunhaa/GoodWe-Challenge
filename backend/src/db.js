@@ -139,10 +139,30 @@ async function initPg() {
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY(user_id, vendor, device_id)
   );
+  
+  -- Automations and state
+  CREATE TABLE IF NOT EXISTS automations (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    kind TEXT NOT NULL,
+    schedule_json TEXT NOT NULL,
+    conditions_json TEXT,
+    actions_json TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE TABLE IF NOT EXISTS automation_state (
+    automation_id BIGINT PRIMARY KEY REFERENCES automations(id) ON DELETE CASCADE,
+    last_state TEXT,
+    last_at TIMESTAMPTZ
+  );
   `;
   await pgPool.query(ddl);
   // Best-effort online migration for older deployments (ignore errors)
   try { await pgPool.query('ALTER TABLE device_meta ADD COLUMN IF NOT EXISTS priority INTEGER'); } catch {}
+  try { await pgPool.query('ALTER TABLE automations ADD COLUMN IF NOT EXISTS conditions_json TEXT'); } catch {}
 }
 
 // --------- SQLite (sync under the hood, wrapped as async) ---------
@@ -288,9 +308,29 @@ async function initSqlite() {
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY(user_id, vendor, device_id)
   );
+  
+  -- Automations and state
+  CREATE TABLE IF NOT EXISTS automations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    kind TEXT NOT NULL,
+    schedule_json TEXT NOT NULL,
+    conditions_json TEXT,
+    actions_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS automation_state (
+    automation_id INTEGER PRIMARY KEY,
+    last_state TEXT,
+    last_at TEXT
+  );
   `);
   // Online migration for existing DBs (ignore if column already exists)
   try { sqliteDb.prepare('ALTER TABLE device_meta ADD COLUMN priority INTEGER').run(); } catch {}
+  try { sqliteDb.prepare('ALTER TABLE automations ADD COLUMN conditions_json TEXT').run(); } catch {}
 }
 
 // Initialize selected engine
@@ -580,6 +620,90 @@ export async function getDeviceMetaMap(user_id){
     const rows = sqliteDb.prepare('SELECT vendor, device_id, room_id, essential, type, priority, updated_at FROM device_meta WHERE user_id = ?').all(user_id);
     const map = {}; for (const row of rows){ map[`${row.vendor}|${row.device_id}`] = { ...row, essential: !!row.essential }; }
     return map;
+  }
+}
+
+// Get any user (first by id) to be used by internal service tasks (e.g., IoT ingestor)
+export async function getAnyUser() {
+  if (USE_PG) {
+    const r = await pgPool.query('SELECT id, email, password_hash, powerstation_id, created_at FROM users ORDER BY id ASC LIMIT 1');
+    return r.rows[0] || null;
+  } else {
+    return sqliteDb.prepare('SELECT id, email, password_hash, powerstation_id, created_at FROM users ORDER BY id ASC LIMIT 1').get();
+  }
+}
+
+// -------- Automations CRUD --------
+export async function listAutomationsUsers(){
+  if (USE_PG) {
+    const r = await pgPool.query('SELECT DISTINCT user_id FROM automations');
+    return r.rows.map(x => x.user_id);
+  } else {
+    const rows = sqliteDb.prepare('SELECT DISTINCT user_id FROM automations').all();
+    return rows.map(x => x.user_id);
+  }
+}
+
+export async function listAutomationsByUser(user_id){
+  if (USE_PG) {
+    const r = await pgPool.query('SELECT id, user_id, name, enabled, kind, schedule_json, conditions_json, actions_json, created_at, updated_at FROM automations WHERE user_id=$1 ORDER BY id', [user_id]);
+    return r.rows.map(row => ({ ...row, enabled: !!row.enabled }));
+  } else {
+    const rows = sqliteDb.prepare('SELECT id, user_id, name, enabled, kind, schedule_json, conditions_json, actions_json, created_at, updated_at FROM automations WHERE user_id = ? ORDER BY id').all(user_id);
+    return rows.map(row => ({ ...row, enabled: !!row.enabled }));
+  }
+}
+
+export async function upsertAutomation(user_id, { id=null, name, enabled=true, kind, schedule={}, conditions=null, actions={} }){
+  const sch = JSON.stringify(schedule||{});
+  const cond = conditions ? JSON.stringify(conditions) : null;
+  const act = JSON.stringify(actions||{});
+  if (id) {
+    if (USE_PG) {
+      await pgPool.query('UPDATE automations SET name=$1, enabled=$2, kind=$3, schedule_json=$4, conditions_json=$5, actions_json=$6, updated_at=now() WHERE id=$7 AND user_id=$8', [name, !!enabled, kind, sch, cond, act, id, user_id]);
+      const r = await pgPool.query('SELECT id, user_id, name, enabled, kind, schedule_json, conditions_json, actions_json, created_at, updated_at FROM automations WHERE id=$1 AND user_id=$2', [id, user_id]);
+      return r.rows[0] || null;
+    } else {
+      const en = enabled ? 1 : 0;
+      sqliteDb.prepare('UPDATE automations SET name=?, enabled=?, kind=?, schedule_json=?, conditions_json=?, actions_json=?, updated_at=datetime(\'now\') WHERE id=? AND user_id=?').run(name, en, kind, sch, cond, act, id, user_id);
+      return sqliteDb.prepare('SELECT id, user_id, name, enabled, kind, schedule_json, conditions_json, actions_json, created_at, updated_at FROM automations WHERE id=? AND user_id=?').get(id, user_id);
+    }
+  } else {
+    if (USE_PG) {
+      const r = await pgPool.query('INSERT INTO automations(user_id, name, enabled, kind, schedule_json, conditions_json, actions_json) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id', [user_id, name, !!enabled, kind, sch, cond, act]);
+      const nid = r.rows[0]?.id; return upsertAutomation(user_id, { id: nid, name, enabled, kind, schedule, conditions, actions });
+    } else {
+      const en = enabled ? 1 : 0;
+      const r = sqliteDb.prepare('INSERT INTO automations(user_id, name, enabled, kind, schedule_json, conditions_json, actions_json) VALUES(?,?,?,?,?,?,?)').run(user_id, name, en, kind, sch, cond, act);
+      const nid = r.lastInsertRowid; return upsertAutomation(user_id, { id: nid, name, enabled, kind, schedule, conditions, actions });
+    }
+  }
+}
+
+export async function deleteAutomation(user_id, id){
+  if (USE_PG) {
+    await pgPool.query('DELETE FROM automations WHERE id=$1 AND user_id=$2', [id, user_id]);
+  } else {
+    sqliteDb.prepare('DELETE FROM automations WHERE id=? AND user_id=?').run(id, user_id);
+  }
+}
+
+export async function getAutomationState(automation_id){
+  if (USE_PG) {
+    const r = await pgPool.query('SELECT automation_id, last_state, last_at FROM automation_state WHERE automation_id=$1', [automation_id]);
+    return r.rows[0] || null;
+  } else {
+    return sqliteDb.prepare('SELECT automation_id, last_state, last_at FROM automation_state WHERE automation_id=?').get(automation_id);
+  }
+}
+
+export async function setAutomationState(automation_id, { last_state=null, last_at=new Date() }){
+  if (USE_PG) {
+    await pgPool.query(`INSERT INTO automation_state(automation_id, last_state, last_at) VALUES($1,$2,$3)
+      ON CONFLICT (automation_id) DO UPDATE SET last_state=EXCLUDED.last_state, last_at=EXCLUDED.last_at`, [automation_id, last_state, new Date(last_at)]);
+  } else {
+    sqliteDb.prepare(`INSERT INTO automation_state(automation_id, last_state, last_at) VALUES(?,?,?)
+      ON CONFLICT(automation_id) DO UPDATE SET last_state=excluded.last_state, last_at=excluded.last_at`).run(automation_id, last_state, new Date(last_at).toISOString());
   }
 }
 

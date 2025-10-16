@@ -34,6 +34,19 @@ export function createHelpers({ gw, dbApi }) {
   const requireUser = async (req, res) => {
     const token = getBearerToken(req);
     if (!token) { res.status(401).json({ ok: false, error: 'missing token' }); return null; }
+    // Service mode: allow ASSIST_TOKEN to impersonate any user (first), for internal ingestors
+    if (process.env.ASSIST_TOKEN && token === process.env.ASSIST_TOKEN) {
+      try {
+        const preferredId = Number(process.env.INGEST_USER_ID || NaN);
+        let user = null;
+        if (Number.isFinite(preferredId)) user = await dbApi.getUserById(preferredId);
+        if (!user) user = await (dbApi.getAnyUser?.() || null);
+        if (!user) { res.status(401).json({ ok: false, error: 'no users available for service token' }); return null; }
+        return user;
+      } catch {
+        res.status(401).json({ ok: false, error: 'service token not authorized' }); return null;
+      }
+    }
     const sess = await dbApi.getSession(token);
     if (!sess) { res.status(401).json({ ok: false, error: 'invalid token' }); return null; }
     const user = await dbApi.getUserById(sess.user_id);

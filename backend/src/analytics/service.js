@@ -1,4 +1,5 @@
 import { initHistoryRepo } from './historyRepo.js';
+import { getDbEngine } from '../db.js';
 
 let repoPromise = null;
 async function getRepo(){ if (!repoPromise) repoPromise = initHistoryRepo(); return repoPromise; }
@@ -38,14 +39,19 @@ export async function getForecast({ plant_id, hours = 24, fetchWeather }){
   if (typeof fetchWeather === 'function'){
     try { weather = await fetchWeather(); } catch {}
   }
-  // Apply clear-sky daylight shaping if base is too flat or zero
+  // Apply daylight shaping using a simple sinus between sunrise/sunset (fallback 6-18)
   const dayShape = (() => {
-    const sunrise = 6, sunset = 18; // fallback; without geo we keep simple
+    let sunrise = 6, sunset = 18;
+    try {
+      // If weather carries sunrise/sunset (some GoodWe variants), prefer them
+      const w = await (async ()=> (typeof fetchWeather==='function' ? (await fetchWeather()) : null))();
+      const sr = w?.data?.weather?.sunrise; const ss = w?.data?.weather?.sunset;
+      if (typeof sr === 'number' && typeof ss === 'number' && ss>sr) { sunrise = sr; sunset = ss; }
+    } catch {}
     const arr = slots.map(t => {
       const h = t.getHours();
       if (h <= sunrise || h >= sunset) return 0;
       const x = (h - sunrise) / (sunset - sunrise);
-      // smooth bell (sinus)
       return Math.sin(Math.PI * x);
     });
     return arr;
@@ -73,7 +79,32 @@ export async function getForecast({ plant_id, hours = 24, fetchWeather }){
   return { plant_id, hours: Number(hours||24), items, total_generation_kwh, total_consumption_kwh, weather_used: !!weather };
 }
 
-export async function getRecommendations({ plant_id, fetchWeather, fetchDevices }){
+// Heuristic wattage guesser when power is not available
+function guessWatts(name){
+  const s = String(name||'').toLowerCase();
+  const checks = [
+    { k: ['ar condicionado','ar-condicionado','air conditioner','ac','split'], w: 900 },
+    { k: ['tv','televis','smart tv'], w: 100 },
+    { k: ['geladeira','fridge','refrigerador','freezer'], w: 150 },
+    { k: ['micro-ondas','microondas','microwave'], w: 1200 },
+    { k: ['chuveiro','shower'], w: 4500 },
+    { k: ['maquina de lavar','máquina de lavar','lavadora'], w: 500 },
+    { k: ['lamp','lâmp','lampada','lâmpada','bulb','ilumin'], w: 10 },
+    { k: ['computador','pc','desktop'], w: 200 },
+    { k: ['roteador','modem','router'], w: 12 },
+    { k: ['ventilador','fan'], w: 60 },
+  ];
+  for (const c of checks){ if (c.k.some(x => s.includes(x))) return c.w; }
+  return 60; // default small load
+}
+
+function isEssentialByName(name){
+  const s = String(name||'').toLowerCase();
+  const essential = ['geladeira','fridge','refrigerador','freezer'];
+  return essential.some(x => s.includes(x));
+}
+
+export async function getRecommendations({ plant_id, fetchWeather, fetchDevices, fetchDeviceMeta, fetchRooms }){
   const repo = await getRepo();
   const consDaily = await repo.getDailyTotals({ table: 'consumption_history', plant_id, lookbackDays: 30 });
   const byHour = await repo.getHourlyProfile({ table: 'consumption_history', plant_id, lookbackDays: 14 });
@@ -110,51 +141,212 @@ export async function getRecommendations({ plant_id, fetchWeather, fetchDevices 
     if (typeof fetchWeather === 'function') {
       weather = await fetchWeather();
     }
-    // If not provided, try lightweight fetch via Charts weather endpoint is not always accessible; we skip heavy fetch here.
     const sky = String(weather?.data?.weather?.forecast?.[0]?.skycon || weather?.data?.weather?.skycon || '').toLowerCase();
     const clouds = Number(weather?.data?.weather?.cloudrate ?? NaN);
-    let lowGen = false; let reason = '';
-    if (!Number.isNaN(clouds) && clouds >= 0.7) { lowGen = true; reason = `cobertura de nuvens alta (${Math.round(clouds*100)}%)`; }
-    else if (sky.includes('rain') || sky.includes('storm')) { lowGen = true; reason = 'chuva prevista'; }
-    else if (sky.includes('cloud')) { lowGen = true; reason = 'tempo nublado'; }
-    if (lowGen) {
-      recs.unshift({ text: `Previsão climática indica ${reason}. Evite usar dispositivos não críticos no período de pico solar (11h–15h) para não depender de geração instável.`, metric: { sky, clouds: isFinite(clouds) ? +clouds.toFixed(2) : null } });
+    let alert = null;
+    if (!Number.isNaN(clouds) && clouds >= 0.8) alert = `Cobertura de nuvens muito alta (${Math.round(clouds*100)}%).`;
+    else if (!Number.isNaN(clouds) && clouds >= 0.6) alert = `Céu nublado (${Math.round(clouds*100)}% de nuvens).`;
+    if (sky.includes('storm')) alert = 'Tempestade prevista'; else if (sky.includes('rain')) alert = 'Chuva prevista';
+    if (alert) {
+      recs.unshift({ text: `${alert} Priorize recarga da bateria e adie cargas não essenciais no pico solar (11h–15h).`, metric: { sky, clouds: isFinite(clouds) ? +clouds.toFixed(2) : null } });
     }
   } catch {}
 
-  // Device-aware suggestions (SmartThings/Tuya)
+  // Device-aware suggestions (SmartThings/Tuya + estimativa quando não houver power)
   try {
     if (typeof fetchDevices === 'function'){
       const devices = await fetchDevices();
       const list = Array.isArray(devices?.items) ? devices.items : [];
-      const withPower = list.filter(d => Number.isFinite(Number(d.power_w))).map(d => ({ ...d, power_w: Number(d.power_w) }));
-      // Top consumidores agora
-      const top = withPower.filter(d => d.on === true && d.power_w >= 30).sort((a,b)=> b.power_w - a.power_w).slice(0, 5);
-      for (const d of top){
-        const nm = d.name || 'Dispositivo';
-        const room = d.roomName ? ` (${d.roomName})` : '';
-        recs.unshift({
-          text: `"${nm}"${room} está consumindo ~${Math.round(d.power_w)} W agora. Se não for essencial, considere desligar.`,
-          metric: { device_id: d.id, vendor: d.vendor, power_w: Math.round(d.power_w), on: !!d.on }
-        });
+      const metaMap = (typeof fetchDeviceMeta === 'function') ? (await fetchDeviceMeta()) : {};
+      const roomsMap = (typeof fetchRooms === 'function') ? (await fetchRooms()) : {};
+
+      // Prepare recent window data from device_history to infer top consumers
+      const engine = getDbEngine();
+      const until = new Date();
+      const since = new Date(until.getTime() - 24*60*60*1000);
+      let rows = [];
+      if (engine.type === 'pg'){
+        const sql = `SELECT vendor, device_id, name, room, ts, state_on, power_w, energy_wh FROM device_history WHERE ts >= $1 AND ts <= $2 ORDER BY vendor, device_id, ts ASC`;
+        rows = (await engine.pgPool.query(sql, [since, until])).rows;
+      } else {
+        rows = engine.sqliteDb.prepare('SELECT vendor, device_id, name, room, ts, state_on, power_w, energy_wh FROM device_history WHERE ts >= ? AND ts <= ? ORDER BY vendor, device_id, ts ASC').all(since.toISOString(), until.toISOString());
       }
-      // Standby/possível carga fantasma
-      const phantom = withPower.filter(d => d.on === true && d.power_w > 3 && d.power_w < 15).slice(0, 5);
+      const byDev = new Map();
+      for (const r of rows){
+        const key = `${r.vendor}|${r.device_id}`; if (!byDev.has(key)) byDev.set(key, []); byDev.get(key).push(r);
+      }
+      const agg = [];
+      for (const d of list){
+        const key = `${d.vendor}|${d.id}`;
+        const samples = byDev.get(key) || [];
+        // Compute on-time and energy estimate
+        let totalMs = 0; let estWh = 0; let lastTs = null; let lastOn = null; let lastPower = null; let firstEnergy = null; let lastEnergy = null;
+        for (let i=0;i<samples.length;i++){
+          const s = samples[i];
+          const ts = new Date(s.ts).getTime();
+          if (firstEnergy==null && s.energy_wh!=null) firstEnergy = Number(s.energy_wh)||0;
+          if (s.energy_wh!=null) lastEnergy = Number(s.energy_wh)||0;
+          if (lastTs!=null){
+            const dt = Math.max(0, ts - lastTs);
+            if (lastOn===true) totalMs += dt;
+            const p = (Number.isFinite(Number(lastPower)) ? Number(lastPower) : null);
+            if (p!=null) estWh += (p * (dt/3600000));
+          }
+          lastTs = ts; lastOn = (s.state_on===true || s.state_on===1); lastPower = (Number.isFinite(Number(s.power_w))? Number(s.power_w): null);
+        }
+        // Fallback estimation if no power/energy: use guessed watts * on-time
+        if (!estWh || estWh < 0.001){
+          const watts = guessWatts(d.name);
+          estWh = watts * (totalMs/3600000);
+        }
+        // Prefer energy_wh delta when available
+        let deltaWh = null; if (firstEnergy!=null && lastEnergy!=null && lastEnergy>=firstEnergy) deltaWh = lastEnergy - firstEnergy;
+        const energyWh = (deltaWh!=null) ? deltaWh : estWh;
+        agg.push({ key, vendor: d.vendor, device_id: d.id, name: d.name, roomName: d.roomName||'', energy_wh: energyWh, on_minutes: Math.round(totalMs/60000) });
+      }
+
+      // Filter out essentials by meta or name
+      const safeAgg = agg.filter(a => {
+        const mm = metaMap[a.key] || {};
+        if (mm.essential === true) return false;
+        if (isEssentialByName(a.name)) return false;
+        return true;
+      });
+
+      // Top 3 consumers (últimas 24h)
+      const top3 = safeAgg.sort((a,b)=> (b.energy_wh||0)-(a.energy_wh||0)).slice(0,3);
+      for (const t of top3){
+        recs.unshift({ text: `"${t.name}" consumiu ~${(t.energy_wh/1000).toFixed(2)} kWh nas últimas 24h (ligado por ~${t.on_minutes} min).`, metric: { device_id: t.device_id, vendor: t.vendor, energy_kwh: +(t.energy_wh/1000).toFixed(3), on_minutes: t.on_minutes } });
+      }
+
+      // Top cômodo (somente 1), somando por roomName (fallback) ou app room quando possível
+      const byRoom = new Map();
+      for (const t of safeAgg){
+        const mm = metaMap[t.key] || {};
+        const appRoom = mm.room_id ? (roomsMap[String(mm.room_id)] || '') : '';
+        const rn = appRoom || t.roomName || 'Sem cômodo';
+        byRoom.set(rn, (byRoom.get(rn)||0) + (t.energy_wh||0));
+      }
+      const sortedRooms = Array.from(byRoom.entries()).sort((a,b)=> b[1]-a[1]);
+      if (sortedRooms.length){
+        const [rName, rWh] = sortedRooms[0];
+        recs.unshift({ text: `Cômodo com maior consumo nas últimas 24h: ${rName} (~${(rWh/1000).toFixed(2)} kWh).`, metric: { room: rName, energy_kwh: +(rWh/1000).toFixed(3) } });
+      }
+
+      // Standby simples a partir do instantâneo atual (<=15 W e ligado)
+      const withPower = list.filter(d => Number.isFinite(Number(d.power_w))).map(d => ({ ...d, power_w: Number(d.power_w) }));
+      const phantom = withPower.filter(d => d.on === true && d.power_w > 3 && d.power_w <= 15).slice(0, 3);
       if (phantom.length){
         const names = phantom.map(d => d.name).filter(Boolean).slice(0,3).join(', ');
-        recs.push({ text: `Possível consumo em standby (${names || phantom.length + ' dispositivos'}). Avalie desconectar da tomada quando não estiverem em uso.`, metric: { count: phantom.length } });
-      }
-      // Dispositivos com energia acumulada (quando disponível)
-      const withEnergy = list.filter(d => Number.isFinite(Number(d.energy_kwh))).map(d => ({ ...d, energy_kwh: Number(d.energy_kwh) }));
-      const heavyEnergy = withEnergy.sort((a,b)=> (b.energy_kwh||0) - (a.energy_kwh||0)).slice(0, 3);
-      for (const d of heavyEnergy){
-        if ((d.energy_kwh||0) <= 0) continue;
-        const nm = d.name || 'Dispositivo';
-        const room = d.roomName ? ` (${d.roomName})` : '';
-        recs.push({ text: `"${nm}"${room} acumulou ~${d.energy_kwh.toFixed(1)} kWh recentemente. Verifique programação ou uso fora do pico.`, metric: { device_id: d.id, vendor: d.vendor, energy_kwh: +d.energy_kwh.toFixed(2) } });
+        recs.push({ text: `Possível consumo em standby (${names || phantom.length + ' dispositivos'}). Avalie desconectar quando não estiver em uso.`, metric: { count: phantom.length } });
       }
     }
   } catch {}
 
   return { plant_id, recommendations: recs };
+}
+
+// -------- Device usage by hour (last 24h by default) --------
+export async function getDeviceUsageByHour({ vendor, device_id, minutes = 24*60, guessWattsFn }){
+  const engine = getDbEngine();
+  const until = new Date();
+  const since = new Date(until.getTime() - Math.max(1, Number(minutes))*60*1000);
+  let rows = [];
+  if (engine.type === 'pg'){
+    const sql = `SELECT ts, state_on, power_w, energy_wh FROM device_history WHERE vendor=$1 AND device_id=$2 AND ts >= $3 AND ts <= $4 ORDER BY ts ASC`;
+    rows = (await engine.pgPool.query(sql, [vendor, device_id, since, until])).rows;
+  } else {
+    rows = engine.sqliteDb.prepare('SELECT ts, state_on, power_w, energy_wh FROM device_history WHERE vendor=? AND device_id=? AND ts >= ? AND ts <= ? ORDER BY ts ASC').all(vendor, device_id, since.toISOString(), until.toISOString());
+  }
+  const hours = Array.from({ length: 24 }, (_,h)=> ({ hour:h, energy_kwh:0, on_minutes:0 }));
+  if (!rows.length) return { hours, total_energy_kwh: 0, total_on_minutes: 0 };
+  let last = null;
+  let energyBase = null; // first energy_wh when available
+  const now = until.getTime();
+  for (const cur of rows){
+    const ts = new Date(cur.ts).getTime();
+    if (!Number.isFinite(ts)) continue;
+    if (energyBase == null && cur.energy_wh!=null) energyBase = Number(cur.energy_wh)||0;
+    if (last){
+      const dt = Math.max(0, ts - last.ts);
+      const hIdx = new Date(last.ts).getHours();
+      let dWh = null;
+      const prevWh = (last.energy_wh!=null) ? Number(last.energy_wh) : null;
+      const curWh = (cur.energy_wh!=null) ? Number(cur.energy_wh) : null;
+      if (prevWh!=null && curWh!=null && curWh>=prevWh){
+        dWh = (curWh - prevWh);
+      } else {
+        const p = (last.power_w!=null && Number.isFinite(Number(last.power_w))) ? Number(last.power_w) : null;
+        if (p!=null){ dWh = p * (dt/3600000); }
+        else if (last.state_on===true || last.state_on===1){
+          const guess = typeof guessWattsFn === 'function' ? Number(guessWattsFn()) : 60;
+          dWh = guess * (dt/3600000);
+        }
+      }
+      if (dWh!=null) hours[hIdx].energy_kwh += (dWh/1000);
+      if (last.state_on===true || last.state_on===1) hours[hIdx].on_minutes += (dt/60000);
+    }
+    last = { ts, state_on: (cur.state_on===true || cur.state_on===1), power_w: (cur.power_w!=null? Number(cur.power_w): null), energy_wh: (cur.energy_wh!=null? Number(cur.energy_wh): null) };
+  }
+  const total_energy_kwh = hours.reduce((s,h)=> s + h.energy_kwh, 0);
+  const total_on_minutes = Math.round(hours.reduce((s,h)=> s + h.on_minutes, 0));
+  // Round for neatness
+  for (const h of hours){ h.energy_kwh = +h.energy_kwh.toFixed(3); h.on_minutes = Math.round(h.on_minutes); }
+  return { hours, total_energy_kwh: +total_energy_kwh.toFixed(3), total_on_minutes };
+}
+
+// -------- Cost projection using forecast --------
+export async function getCostProjection({ plant_id, hours = 24, tariff_brl_per_kwh = 1.0, fetchWeather }){
+  const f = await getForecast({ plant_id, hours, fetchWeather });
+  // Net import per hour (kWh)
+  const items = (f.items||[]).map(it => ({ time: it.time, net_import_kwh: Math.max(0, (it.consumption_kwh||0) - (it.generation_kwh||0)) }));
+  const net_kwh = items.reduce((s,it)=> s + it.net_import_kwh, 0);
+  const cost_brl = net_kwh * Number(tariff_brl_per_kwh||0);
+  return { ok:true, plant_id, hours: Number(hours||24), tariff_brl_per_kwh: Number(tariff_brl_per_kwh||0), net_import_kwh: +net_kwh.toFixed(3), projected_cost_brl: +cost_brl.toFixed(2), items };
+}
+
+// -------- Simple battery strategy (charge/discharge windows) --------
+export async function getBatteryStrategy({ plant_id, hours = 24, min_soc = 20, max_soc = 90, fetchWeather }){
+  const repo = await getRepo();
+  // Last SOC from battery history (fallback powerflow if needed handled by collector elsewhere)
+  const engine = getDbEngine(); let lastSoc = null;
+  try {
+    if (engine.type === 'pg'){
+      const r = await engine.pgPool.query("SELECT soc FROM battery_history WHERE plant_id = $1 AND soc IS NOT NULL ORDER BY timestamp DESC LIMIT 1", [plant_id]);
+      lastSoc = (r.rows[0]?.soc!=null)? Number(r.rows[0].soc) : null;
+    } else {
+      const r = engine.sqliteDb.prepare("SELECT soc FROM battery_history WHERE plant_id = ? AND soc IS NOT NULL ORDER BY timestamp DESC LIMIT 1").get(plant_id);
+      lastSoc = (r?.soc!=null)? Number(r.soc) : null;
+    }
+  } catch {}
+
+  const f = await getForecast({ plant_id, hours, fetchWeather });
+  // Score each hour by (generation - consumption); positive means surplus (good for charge), negative deficit (good for discharge)
+  const plan = [];
+  for (const it of (f.items||[])){
+    const surplus = (it.generation_kwh||0) - (it.consumption_kwh||0);
+    plan.push({ time: it.time, surplus });
+  }
+  const surplusSorted = plan.map((p,i)=> ({ i, ...p })).sort((a,b)=> b.surplus - a.surplus);
+  const deficitSorted = plan.map((p,i)=> ({ i, ...p })).sort((a,b)=> a.surplus - b.surplus);
+
+  // Heurística: 2 melhores horas para carga e 2 piores para descarga
+  const chargeIdx = surplusSorted.filter(x=> x.surplus>0).slice(0,2).map(x=> x.i);
+  const dischargeIdx = deficitSorted.filter(x=> x.surplus<0).slice(0,2).map(x=> x.i);
+
+  const windows = [];
+  for (const i of chargeIdx){ windows.push({ action: 'charge', from: f.items[i].time, to: f.items[i].time, reason: 'maior excedente previsto', target_soc: max_soc }); }
+  for (const i of dischargeIdx){ windows.push({ action: 'discharge', from: f.items[i].time, to: f.items[i].time, reason: 'maior déficit previsto', min_soc }); }
+
+  // Weather nublado/chuva: antecipa carga
+  try {
+    const w = typeof fetchWeather==='function' ? await fetchWeather() : null;
+    const sky = String(w?.data?.weather?.forecast?.[0]?.skycon || '').toLowerCase();
+    const clouds = Number(w?.data?.weather?.cloudrate ?? NaN);
+    if ((sky.includes('rain') || sky.includes('storm')) || (!Number.isNaN(clouds) && clouds>=0.7)){
+      windows.unshift({ action:'charge', from: f.items[0]?.time || new Date().toISOString(), to: f.items[1]?.time || new Date().toISOString(), reason: 'clima desfavorável (nublado/chuva)', target_soc: max_soc });
+    }
+  } catch {}
+
+  return { ok:true, plant_id, hours: Number(hours||24), last_soc: (lastSoc!=null? +lastSoc.toFixed(1): null), min_soc: Number(min_soc||0), max_soc: Number(max_soc||100), windows };
 }
