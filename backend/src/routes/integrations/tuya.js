@@ -12,6 +12,36 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
   const TUYA_LANG = String(process.env.TUYA_LANG || 'pt')
   let tuyaToken = { access_token: '', expire_time: 0 }
 
+  // Heuristic code lists for on/off
+  const SWITCH_CANDIDATES = [
+    'switch','switch_1','switch_2','switch_3','switch_main',
+    'power','power_switch','device_switch','master_switch','switch_led'
+  ]
+  const AVOID_CODES = new Set(['child_lock','countdown'])
+
+  function parseValues(v){ try { return typeof v === 'string' ? JSON.parse(v) : (v||{}); } catch { return {} } }
+  function findOnOffFunction(funcs){
+    // 1) Prefer known boolean switch-like codes
+    for (const c of SWITCH_CANDIDATES){
+      const f = funcs.find(x => x?.code === c && String(x?.type||'').toLowerCase() === 'boolean')
+      if (f) return { code: c, kind: 'boolean', on: true, off: false }
+    }
+    // 2) Any boolean that looks like power/switch
+    const fb = funcs.find(x => String(x?.type||'').toLowerCase() === 'boolean' && /switch|power/i.test(x?.code||''))
+    if (fb && !AVOID_CODES.has(fb.code)) return { code: fb.code, kind: 'boolean', on: true, off: false }
+    // 3) Enum with range that contains on/off-like values
+    const enums = funcs.filter(x => String(x?.type||'').toLowerCase() === 'enum')
+    for (const f of enums){
+      if (AVOID_CODES.has(f.code)) continue
+      const vals = parseValues(f.values)
+      const range = Array.isArray(vals?.range) ? vals.range.map(s=> String(s).toLowerCase()) : []
+      const onVal = range.find(v => ['on','open','start','enable'].includes(v))
+      const offVal = range.find(v => ['off','close','stop','disable'].includes(v))
+      if (onVal && offVal) return { code: f.code, kind: 'enum', on: onVal, off: offVal }
+    }
+    return null
+  }
+
   function sha256Hex(buf) { return crypto.createHash('sha256').update(buf).digest('hex') }
   function hmac256Hex(key, str) { return crypto.createHmac('sha256', key).update(str).digest('hex').toUpperCase() }
   function nowMs() { return Date.now().toString() }
@@ -242,13 +272,14 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       let normalized = null
       if (s.status === 200 && s.json?.success === true) {
         const arr = Array.isArray(s.json?.result) ? s.json.result : []
-        const known = ['switch', 'switch_1', 'switch_led', 'power']
-        let code = known.find(k => arr.some(x => x?.code === k)) || ''
+        let code = SWITCH_CANDIDATES.find(k => arr.some(x => x?.code === k)) || ''
         const entry = code ? arr.find(x => x?.code === code) : null
-        const v = entry?.value
-        const isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on')
-        const value = (entry == null) ? '' : (isOn ? 'on' : 'off')
-        normalized = { components: { main: { switch: { switch: { value } } } } }
+        if (entry) {
+          const v = entry.value
+          const isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on')
+          const value = isOn ? 'on' : 'off'
+          normalized = { components: { main: { switch: { switch: { value } } } } }
+        }
       }
       res.json({ ok: true, result: r.json?.result, status: normalized })
     } catch (e) {
@@ -271,15 +302,18 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       const map = Object.fromEntries(list.map(it => [it.code, it.value]));
       const fnPath = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/functions`
       const f = await tuyaSignAndFetch(fnPath, { method: 'GET', accessToken: token })
-      let code = ''
+      let isOn = null; let code = ''
       if (f.status === 200 && f.json?.success === true) {
         const funcs = Array.isArray(f.json?.result?.functions) ? f.json.result.functions : []
-        code = (['switch_led','switch','switch_1','power'].find(k => funcs.some(x => x?.code === k))) || ''
-      }
-      let isOn = null;
-      if (code && Object.prototype.hasOwnProperty.call(map, code)) {
-        const v = map[code];
-        isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on');
+        const pick = findOnOffFunction(funcs)
+        if (pick) {
+          code = pick.code
+          if (Object.prototype.hasOwnProperty.call(map, code)) {
+            const v = map[code];
+            if (pick.kind === 'boolean') isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on')
+            else if (pick.kind === 'enum') isOn = (String(v).toLowerCase() === String(pick.on))
+          }
+        }
       }
       // Normalize to SmartThings-like shape so the UI consegue ler 'components.main.switch.switch.value'
       const normalized = (isOn == null)
@@ -313,17 +347,17 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       const action = String(req.params.action || 'off').toLowerCase();
       const fnPath = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/functions`
       const f = await tuyaSignAndFetch(fnPath, { method: 'GET', accessToken: token })
-      let code = ''
-      if (f.status === 200 && f.json?.success === true) {
-        const funcs = Array.isArray(f.json?.result?.functions) ? f.json.result.functions : []
-        code = (['switch_led','switch','switch_1','power'].find(k => funcs.some(x => x?.code === k))) || ''
-      }
-      if (!code) return res.status(400).json({ ok: false, error: 'no switch code found for this device' });
-      const payload = { commands: [{ code, value: action === 'on' }] };
+      if (f.status !== 200 || f.json?.success !== true) return res.status(400).json({ ok:false, error:'cannot read functions' })
+      const funcs = Array.isArray(f.json?.result?.functions) ? f.json.result.functions : []
+      const pick = findOnOffFunction(funcs)
+      if (!pick) return res.status(400).json({ ok:false, error:'no compatible on/off function for this device' })
+      const code = pick.code
+      const value = (action === 'on') ? pick.on : pick.off
+      const payload = { commands: [{ code, value }] };
       const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/commands`;
       const { status, json } = await tuyaSignAndFetch(path, { method: 'POST', bodyObj: payload, accessToken: token });
       if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false });
-      res.json({ ok: true, result: json.result, code });
+      res.json({ ok: true, result: json.result, code, value });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 }

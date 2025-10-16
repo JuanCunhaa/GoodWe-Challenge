@@ -64,7 +64,8 @@ export function registerAiRoutes(router, { gw, helpers }){
     const user = await requireUser(req, res); if (!user) return;
     const plant_id = user.powerstation_id;
     try {
-      const data = await getRecommendations({ plant_id, fetchWeather: async () => {
+      const tariff = (req.query.tariff!=null) ? Number(req.query.tariff) : (process.env.TARIFF_BRL_PER_KWH!=null ? Number(process.env.TARIFF_BRL_PER_KWH) : undefined);
+      const data = await getRecommendations({ plant_id, tariff_brl_per_kwh: tariff, fetchWeather: async () => {
         try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null }
       }, fetchDevices: async () => devicesOverviewInternal(req, helpers), fetchDeviceMeta: async () => {
         try {

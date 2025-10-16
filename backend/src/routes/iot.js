@@ -112,6 +112,12 @@ export function registerIoTRoutes(router, { helpers }){
       const device_id = String(req.params.id || '');
       const minutes = (()=>{ const w = String(req.query.window||'24h').toLowerCase(); if (w.endsWith('h')) return Math.max(1, Math.round(parseFloat(w)*60)||1440); const n = parseInt(w,10); return Number.isFinite(n)? Math.max(1,n) : 1440; })();
       const data = await getDeviceUsageByHour({ vendor, device_id, minutes });
+      const tariff = (req.query.tariff!=null) ? Number(req.query.tariff) : (process.env.TARIFF_BRL_PER_KWH!=null ? Number(process.env.TARIFF_BRL_PER_KWH) : null);
+      if (typeof tariff === 'number' && !Number.isNaN(tariff)){
+        for (const h of (data.hours || [])) { h.cost_brl = +(Number(h.energy_kwh||0) * tariff).toFixed(2); }
+        data.tariff_brl_per_kwh = tariff;
+        const total = Number(data.total_energy_kwh || 0) * tariff; data.total_cost_brl = +total.toFixed(2);
+      }
       res.json({ ok:true, ...data });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });

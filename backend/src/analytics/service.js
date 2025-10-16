@@ -103,7 +103,7 @@ function isEssentialByName(name){
   return essential.some(x => s.includes(x));
 }
 
-export async function getRecommendations({ plant_id, fetchWeather, fetchDevices, fetchDeviceMeta, fetchRooms }){
+export async function getRecommendations({ plant_id, fetchWeather, fetchDevices, fetchDeviceMeta, fetchRooms, tariff_brl_per_kwh }){
   const repo = await getRepo();
   const consDaily = await repo.getDailyTotals({ table: 'consumption_history', plant_id, lookbackDays: 30 });
   const byHour = await repo.getHourlyProfile({ table: 'consumption_history', plant_id, lookbackDays: 14 });
@@ -238,6 +238,20 @@ export async function getRecommendations({ plant_id, fetchWeather, fetchDevices,
       if (phantom.length){
         const names = phantom.map(d => d.name).filter(Boolean).slice(0,3).join(', ');
         recs.push({ text: `Possível consumo em standby (${names || phantom.length + ' dispositivos'}). Avalie desconectar quando não estiver em uso.`, metric: { count: phantom.length } });
+      }
+    }
+  } catch {}
+
+  try {
+    const t = (typeof tariff_brl_per_kwh === 'number' && !Number.isNaN(tariff_brl_per_kwh)) ? Number(tariff_brl_per_kwh) : (process.env.TARIFF_BRL_PER_KWH!=null ? Number(process.env.TARIFF_BRL_PER_KWH) : null);
+    if (typeof t === 'number' && !Number.isNaN(t)){
+      for (let i=0; i<recs.length; i++){
+        const r = recs[i];
+        const ek = (r && r.metric && typeof r.metric.energy_kwh === 'number') ? Number(r.metric.energy_kwh) : null;
+        if (ek!=null && Number.isFinite(ek)){
+          const cost = +(ek * t).toFixed(2);
+          recs[i] = { ...r, metric: { ...r.metric, cost_brl: cost }, text: (String(r.text||'').replace(/\.*\s*$/,'') + ` (≈ R$ ${cost.toFixed(2)})`).trim() };
+        }
       }
     }
   } catch {}
