@@ -377,6 +377,25 @@
       } catch {}
 
       if (typeof answer === 'string' && answer.includes('*')) answer = answer.replace(/\*/g, '');
+      // Expand technical units for better clarity (also helpful for TTS)
+      function expandUnitsPtBR(s){
+        if (!s) return s;
+        let out = ' ' + String(s) + ' ';
+        out = out.replace(/\bMWh\b/g, ' megawatt hora ');
+        out = out.replace(/\bMW\b/g, ' megawatt ');
+        out = out.replace(/\bkWh\b/g, ' quilowatt hora ');
+        out = out.replace(/\bkW\b/g, ' quilowatt ');
+        out = out.replace(/\bWh\b/g, ' watt hora ');
+        out = out.replace(/\bW\b/g, ' watt ');
+        out = out.replace(/\bkVAh\b/g, ' quilovolt ampere hora ');
+        out = out.replace(/\bkVA\b/g, ' quilovolt ampere ');
+        out = out.replace(/\bAh\b/g, ' ampere hora ');
+        out = out.replace(/\bA\b/g, ' ampere ');
+        out = out.replace(/\bV\b/g, ' volt ');
+        out = out.replace(/\bHz\b/g, ' hertz ');
+        return out.trim().replace(/\s{2,}/g,' ');
+      }
+      if (typeof answer === 'string') answer = expandUnitsPtBR(answer);
       res.json({ ok: true, answer, steps });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });

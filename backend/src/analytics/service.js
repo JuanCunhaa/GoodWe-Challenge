@@ -350,3 +350,58 @@ export async function getBatteryStrategy({ plant_id, hours = 24, min_soc = 20, m
 
   return { ok:true, plant_id, hours: Number(hours||24), last_soc: (lastSoc!=null? +lastSoc.toFixed(1): null), min_soc: Number(min_soc||0), max_soc: Number(max_soc||100), windows };
 }
+
+// -------- Automation suggestions based on last days usage --------
+export async function suggestAutomations({ plant_id, days = 7 }){
+  const engine = getDbEngine();
+  const until = new Date();
+  const since = new Date(until.getTime() - Math.max(1, Number(days))*24*60*60*1000);
+  let rows = [];
+  if (engine.type === 'pg'){
+    const sql = `SELECT ts, state_on, power_w, energy_wh FROM device_history WHERE ts >= $1 AND ts <= $2 ORDER BY ts ASC`;
+    rows = (await engine.pgPool.query(sql, [since, until])).rows;
+  } else {
+    rows = engine.sqliteDb.prepare('SELECT ts, state_on, power_w, energy_wh FROM device_history WHERE ts >= ? AND ts <= ? ORDER BY ts ASC').all(since.toISOString(), until.toISOString());
+  }
+  const hourly = Array.from({ length: 24 }, (_,h)=> ({ hour:h, on_ms:0, energy_wh:0 }));
+  let last = null;
+  for (const cur of rows){
+    const ts = new Date(cur.ts).getTime(); if (!Number.isFinite(ts)) continue;
+    if (last){
+      const dt = Math.max(0, ts - last.ts);
+      const h = new Date(last.ts).getHours();
+      if (last.state_on===true || last.state_on===1) hourly[h].on_ms += dt;
+      const prevWh = (last.energy_wh!=null? Number(last.energy_wh): null);
+      const curWh = (cur.energy_wh!=null? Number(cur.energy_wh): null);
+      if (prevWh!=null && curWh!=null && curWh>=prevWh) hourly[h].energy_wh += (curWh - prevWh);
+      else if (last.power_w!=null && Number.isFinite(Number(last.power_w))) hourly[h].energy_wh += (Number(last.power_w) * (dt/3600000));
+    }
+    last = { ts, state_on: (cur.state_on===true||cur.state_on===1), power_w: (cur.power_w!=null? Number(cur.power_w): null), energy_wh: (cur.energy_wh!=null? Number(cur.energy_wh): null) };
+  }
+  const hours = hourly.map(h => ({ hour: h.hour, on_minutes: Math.round(h.on_ms/60000), energy_kwh: +(h.energy_wh/1000).toFixed(3) }));
+  // Heuristics for windows
+  const evening = hours.slice(17, 23); // 17..22
+  const eveningSum = evening.reduce((s,h)=> s + h.energy_kwh, 0);
+  const eveningAvg = eveningSum / (evening.length || 1);
+  const night = [...hours.slice(23,24), ...hours.slice(0,7)]; // 23..06
+  const nightSum = night.reduce((s,h)=> s + h.energy_kwh, 0);
+
+  const suggestions = [];
+  if (eveningSum > 0.1){
+    // Choose a 3-4h window with max sum
+    let best = { from: 18, to: 22, score: 0 };
+    for (let start=17; start<=19; start++){
+      const end = start+4; // inclusive-ish
+      let sc = 0; for (let h=start; h<end; h++) sc += hours[h]?.energy_kwh||0;
+      if (sc > best.score) best = { from:start+1, to:end, score: sc };
+    }
+    suggestions.push({ name:'Economia de Pico', kind:'peak_saver', schedule:{ days:[1,2,3,4,5], start: `${String(best.from).padStart(2,'0')}:00`, end: `${String(best.to).padStart(2,'0')}:00` }, actions:{ low:true, medium:true, restore_on:true }, reason:`Maior consumo noturno: ~${eveningSum.toFixed(2)} kWh (média ~${eveningAvg.toFixed(2)} kWh/h).` });
+  }
+  if (nightSum > 0.05){
+    suggestions.push({ name:'Sono', kind:'sleep', schedule:{ days:[0,1,2,3,4,5,6], start:'23:00', end:'06:00' }, actions:{ low:true, medium:false, restore_on:true }, reason:`Consumo noturno observado: ~${nightSum.toFixed(2)} kWh.` });
+  }
+  if (!suggestions.length){
+    suggestions.push({ name:'Economia Básica', kind:'peak_saver', schedule:{ days:[1,2,3,4,5], start:'18:00', end:'22:00' }, actions:{ low:true, medium:true, restore_on:true }, reason:'Sugestão padrão baseada em janelas de pico.' });
+  }
+  return { ok:true, plant_id, days, hours, suggestions };
+}
