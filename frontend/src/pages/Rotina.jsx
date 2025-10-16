@@ -11,21 +11,25 @@ export default function Rotina(){
   const [suggestions, setSuggestions] = useState([])
   const [cost, setCost] = useState(null)
   const [battery, setBattery] = useState(null)
+  const [autos, setAutos] = useState([])
+  const [busy, setBusy] = useState(false)
 
   useEffect(()=>{
     (async()=>{
       setLoading(true); setErr('')
       try{
         const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
-        const [sug, cp, bt] = await Promise.all([
+        const [sug, cp, bt, al] = await Promise.all([
           aiApi.automationsSuggest(token, 7).catch(()=>null),
           aiApi.costProjection(token, { hours: 24 }).catch(()=>null),
           aiApi.batteryStrategy(token, { hours: 24 }).catch(()=>null),
+          aiApi.automationsList(token).catch(()=>null),
         ])
         if (sug?.hours) setHours(Array.isArray(sug.hours)? sug.hours : [])
         if (Array.isArray(sug?.suggestions)) setSuggestions(sug.suggestions)
         if (cp && cp.ok!==false) setCost(cp)
         if (bt && bt.ok!==false) setBattery(bt)
+        if (al && Array.isArray(al.items)) setAutos(al.items)
       } catch(e){ setErr(String(e?.message||e)) }
       finally{ setLoading(false) }
     })()
@@ -39,6 +43,48 @@ export default function Rotina(){
     const peakWindow = (suggestions.find(s=> s.kind==='peak_saver')?.schedule) || null
     return { total_kwh: +total.toFixed(3), top, peakHour, firstOn, peakWindow }
   }, [hours, suggestions])
+
+  async function refreshAutos(){
+    try{
+      const { token } = loadSession(); if (!token) return;
+      const al = await aiApi.automationsList(token);
+      setAutos(Array.isArray(al.items)? al.items : [])
+    } catch {}
+  }
+
+  async function onApplySuggestions(){
+    try{
+      setBusy(true)
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      await aiApi.automationsApply(token, 7)
+      await refreshAutos()
+    } catch(e){ setErr(String(e?.message||e)) }
+    finally{ setBusy(false) }
+  }
+
+  async function onToggleEnabled(a){
+    try{
+      const { token } = loadSession(); if (!token) return;
+      await aiApi.automationsUpdate(token, a.id, { enabled: !a.enabled })
+      await refreshAutos()
+    } catch{}
+  }
+
+  async function onDelete(a){
+    try{
+      const { token } = loadSession(); if (!token) return;
+      await aiApi.automationsDelete(token, a.id)
+      await refreshAutos()
+    } catch{}
+  }
+
+  async function onRun(a){
+    try{
+      const { token } = loadSession(); if (!token) return;
+      await aiApi.automationsRun(token, a.id)
+      await refreshAutos()
+    } catch{}
+  }
 
   return (
     <section className="grid gap-4">
@@ -88,6 +134,9 @@ export default function Rotina(){
                   </div>
                 ))}
               </div>
+              <div className="mt-3">
+                <button className="btn btn-primary" disabled={busy} onClick={onApplySuggestions}>Aplicar sugestões</button>
+              </div>
             </div>
 
             <div className="card">
@@ -105,6 +154,29 @@ export default function Rotina(){
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="card">
+            <div className="h3 mb-2">Minhas Rotinas</div>
+            {autos.length === 0 ? (
+              <div className="panel">Nenhuma rotina criada ainda. Use “Aplicar sugestões”.</div>
+            ) : (
+              <div className="grid gap-2">
+                {autos.map((a)=> (
+                  <div key={a.id} className="panel flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{a.name} {a.enabled? '' : '(desativada)'}</div>
+                      <div className="muted text-xs">{a.kind}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button className="btn btn-secondary" onClick={()=> onRun(a)}>Executar agora</button>
+                      <button className="btn" onClick={()=> onToggleEnabled(a)}>{a.enabled? 'Desativar' : 'Ativar'}</button>
+                      <button className="btn btn-danger" onClick={()=> onDelete(a)}>Excluir</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
@@ -129,4 +201,3 @@ export default function Rotina(){
     </section>
   )
 }
-

@@ -92,12 +92,14 @@ export default function Dispositivos(){
             } else if (d.vendor === 'tuya') {
               const s = await integrationsApi.tuyaDeviceStatus(token, d.id);
               status = s?.status || null;
-              const v = status?.components?.main?.switch?.switch?.value;
+              // Store full payload for debugging
+              if (s) setStatusMap(m => ({ ...m, [d.id]: s }));
+              const v = (s?.status || null)?.components?.main?.switch?.switch?.value;
               isOn = String(v||'').toLowerCase() === 'on';
             } else {
               continue;
             }
-            if (status) setStatusMap(m => ({ ...m, [d.id]: status }))
+            if (status && d.vendor !== 'tuya') setStatusMap(m => ({ ...m, [d.id]: status }))
             const now = Date.now();
             setUptimeLive(m => {
               const prev = m[key] || { on:false, since:null, totalMs:0 };
@@ -202,7 +204,8 @@ export default function Dispositivos(){
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {list.map(d => {
             const caps = (Array.isArray(d.components)? d.components : []).flatMap(c => (c.capabilities||[]).map(x=> x.id||x.capability||'')).filter(Boolean)
-            const st = statusMap[d.id]
+            const stObj = statusMap[d.id]
+            const st = stObj?.status || stObj || null
             const hasSwitch = caps.includes('switch')
             const comp = getSwitchComponent(d)
             const rawVal = st?.components?.[comp]?.switch?.switch?.value
@@ -253,6 +256,12 @@ export default function Dispositivos(){
                     </>
                   ) : (
                     <span className="muted text-xs">Sem controle direto (switch não disponível)</span>
+                  )}
+                  {(!hasSwitch && d.vendor==='tuya' && statusMap[d.id]) && (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer">Debug Tuya</summary>
+                      <pre className="panel p-2 text-[10px] whitespace-pre-wrap break-all">{JSON.stringify({ code: statusMap[d.id].code, raw_status: statusMap[d.id].raw_status, status_map: statusMap[d.id].status_map, functions: statusMap[d.id].functions }, null, 2)}</pre>
+                    </details>
                   )}
                 </div>
                 {(() => {

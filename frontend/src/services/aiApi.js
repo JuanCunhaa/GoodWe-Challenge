@@ -30,4 +30,35 @@ export const aiApi = {
   },
   batteryStrategy: (token, { hours = 24, min_soc = 20, max_soc = 90 } = {}) =>
     request(`/ai/battery/strategy?hours=${encodeURIComponent(hours)}&min_soc=${encodeURIComponent(min_soc)}&max_soc=${encodeURIComponent(max_soc)}`, { token }),
+  // Automations
+  automationsSuggest: (token, days = 7) => request(`/ai/automations/suggest?days=${encodeURIComponent(days)}`, { token }),
+  automationsApply: (token, days = 7) => request(`/ai/automations/apply?days=${encodeURIComponent(days)}`, { token }),
+  automationsList: (token) => request(`/automations`, { token }),
+  automationsCreate: async (token, body) => {
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    const r = await fetch(`${API_BASE}/automations`, { method: 'POST', headers, body: JSON.stringify(body) });
+    const data = await r.json().catch(()=>null);
+    if (!r.ok) throw new Error(data?.error || `${r.status}`);
+    return data;
+  },
+  automationsUpdate: async (token, id, body) => {
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    const r = await fetch(`${API_BASE}/automations/${encodeURIComponent(String(id))}`, { method: 'PUT', headers, body: JSON.stringify(body) });
+    const data = await r.json().catch(()=>null);
+    if (!r.ok) throw new Error(data?.error || `${r.status}`);
+    return data;
+  },
+  automationsDelete: async (token, id) => {
+    const headers = { 'Authorization': `Bearer ${token}` };
+    const r = await fetch(`${API_BASE}/automations/${encodeURIComponent(String(id))}`, { method: 'DELETE', headers });
+    if (!r.ok) throw new Error(`${r.status}`);
+    return { ok: true };
+  },
+  automationsRun: async (token, id) => {
+    const headers = { 'Authorization': `Bearer ${token}` };
+    const r = await fetch(`${API_BASE}/automations/${encodeURIComponent(String(id))}/run`, { method: 'POST', headers });
+    const data = await r.json().catch(()=>null);
+    if (!r.ok) throw new Error(data?.error || `${r.status}`);
+    return data;
+  },
 };

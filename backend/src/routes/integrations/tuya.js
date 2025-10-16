@@ -314,12 +314,14 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
             else if (pick.kind === 'enum') isOn = (String(v).toLowerCase() === String(pick.on))
           }
         }
+        // Include raw debug into response
+        return res.json({ ok: true, on: isOn, status: (isOn==null? map : { components: { main: { switch: { switch: { value: isOn ? 'on' : 'off' } } } } }), code, raw_status: list, status_map: map, functions: funcs })
       }
       // Normalize to SmartThings-like shape so the UI consegue ler 'components.main.switch.switch.value'
       const normalized = (isOn == null)
         ? null
         : { components: { main: { switch: { switch: { value: isOn ? 'on' : 'off' } } } } };
-      res.json({ ok: true, on: isOn, status: normalized || map, code });
+      res.json({ ok: true, on: isOn, status: normalized || map, code, raw_status: list, status_map: map, functions: [] });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 
