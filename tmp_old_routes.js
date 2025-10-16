@@ -24,7 +24,7 @@ export function createRoutes(gw, dbApi) {
   }
 
   // ---------- Piper auto-detect (bundled) ----------
-  // Se PIPER_PATH/PIPER_VOICE não estiverem definidos, tenta achar em ../../piper ou vendor/piper
+  // Se PIPER_PATH/PIPER_VOICE nÃ£o estiverem definidos, tenta achar em ../../piper ou vendor/piper
   let piperDetected = null;
   async function detectBundledPiper(){
     if (piperDetected) return piperDetected;
@@ -80,7 +80,7 @@ export function createRoutes(gw, dbApi) {
         return list;
       }
 
-      // Localiza executável e vozes em subpastas (ex.: Linux/, Windows/, voices/)
+      // Localiza executÃ¡vel e vozes em subpastas (ex.: Linux/, Windows/, voices/)
       const exeNames = process.platform === 'win32' ? ['piper.exe', 'piper'] : ['piper', 'piper-linux', 'piper-amd64'];
       let piperPath = '';
       for (const root of candidateRoots){
@@ -101,7 +101,7 @@ export function createRoutes(gw, dbApi) {
         try { await fs.access(json1); voiceJson = json1; } catch { try { await fs.access(json2); voiceJson = json2; } catch {} }
       }
 
-      // Tenta garantir permissão de execução em Linux
+      // Tenta garantir permissÃ£o de execuÃ§Ã£o em Linux
       if (piperPath && process.platform !== 'win32'){
         try { await fs.chmod(piperPath, 0o755); } catch {}
       }
@@ -258,7 +258,7 @@ export function createRoutes(gw, dbApi) {
       }catch(e){ return res.status(500).json({ ok:false, error:String(e) }) }
     }
 
-    // 1) Tentativa com Piper (Node) se variáveis estiverem configuradas
+    // 1) Tentativa com Piper (Node) se variÃ¡veis estiverem configuradas
     const PIPER_PATH = resolveEnvPath('PIPER_PATH') || '';
     const PIPER_VOICE = resolveEnvPath('PIPER_VOICE') || '';
     const PIPER_VOICE_JSON = resolveEnvPath('PIPER_VOICE_JSON') || '';
@@ -269,17 +269,17 @@ export function createRoutes(gw, dbApi) {
 
     const canUsePiper = !!(PIPER_PATH && PIPER_VOICE);
     if (canUsePiper) {
-      // Opcional: verificação de existência ajuda a detectar path relativo inválido
+      // Opcional: verificaÃ§Ã£o de existÃªncia ajuda a detectar path relativo invÃ¡lido
       try {
         await fs.access(PIPER_PATH);
         await fs.access(PIPER_VOICE);
         if (PIPER_VOICE_JSON) { await fs.access(PIPER_VOICE_JSON).catch(()=>{}); }
       } catch (e) {
-        // Se o caminho não existe, não tente spawn; cai para fallback/erro
+        // Se o caminho nÃ£o existe, nÃ£o tente spawn; cai para fallback/erro
         // console.warn('[tts] invalid path', e);
       }
       const outPath = path.join(os.tmpdir(), `tts-${crypto.randomUUID()}.wav`);
-      // Piper recebe o texto via STDIN. Flags curtas são mais compatíveis (-m, -c, -f, -s, -l, -p, -r)
+      // Piper recebe o texto via STDIN. Flags curtas sÃ£o mais compatÃ­veis (-m, -c, -f, -s, -l, -p, -r)
       const args = ['-m', PIPER_VOICE, '-f', outPath];
       if (PIPER_VOICE_JSON) { args.push('-c', PIPER_VOICE_JSON); }
       if (PIPER_SPEAKER) { args.push('-s', String(PIPER_SPEAKER)); }
@@ -293,7 +293,7 @@ export function createRoutes(gw, dbApi) {
           const piperDir = path.dirname(PIPER_PATH);
           const env = { ...process.env };
           if (process.platform !== 'win32') {
-            // Ajudar o loader a encontrar as .so no mesmo diretório do binário
+            // Ajudar o loader a encontrar as .so no mesmo diretÃ³rio do binÃ¡rio
             env.LD_LIBRARY_PATH = [piperDir, process.env.LD_LIBRARY_PATH || ''].filter(Boolean).join(path.delimiter);
           }
           const child = spawn(PIPER_PATH, args, { stdio: ['pipe', 'ignore', 'pipe'], env, cwd: piperDir });
@@ -307,7 +307,7 @@ export function createRoutes(gw, dbApi) {
           });
           try { child.stdin.setDefaultEncoding('utf8'); child.stdin.write(text + "\n"); child.stdin.end(); } catch {}
         });
-        // Tenta ler o arquivo (com pequeno retry em caso de latência no FS)
+        // Tenta ler o arquivo (com pequeno retry em caso de latÃªncia no FS)
         let buf = await fs.readFile(outPath).catch(() => null);
         if (!buf) {
           await new Promise(r => setTimeout(r, 50));
@@ -352,7 +352,7 @@ export function createRoutes(gw, dbApi) {
       }
     }
 
-    // 3) Sem TTS disponível
+    // 3) Sem TTS disponÃ­vel
     return res.status(501).json({ ok: false, error: 'TTS not configured. Set PIPER_PATH and PIPER_VOICE, or PIPER_HTTP_URL/TTS_SERVER_URL.' });
   });
 
@@ -437,7 +437,7 @@ export function createRoutes(gw, dbApi) {
             for (const [k, v] of genMap.entries()) {
               if (k.startsWith(ym)) sum += Number(v) || 0;
             }
-            // fallback: soma inHouse + gridSell se não houver genMap
+            // fallback: soma inHouse + gridSell se nÃ£o houver genMap
             if (sum === 0) {
               for (const [k, v] of inHouseMap.entries()) {
                 if (k.startsWith(ym)) sum += Number(v) || 0;
@@ -451,7 +451,7 @@ export function createRoutes(gw, dbApi) {
 
           if (range === 'this_week') {
             const { genMap, inHouseMap, gridSellMap } = await parseGenFromChart(today);
-            // calcula início da semana (domingo) e fim (sábado)
+            // calcula inÃ­cio da semana (domingo) e fim (sÃ¡bado)
             const base = new Date(today);
             const day = base.getDay();
             const startD = new Date(base); startD.setDate(base.getDate() - day);
@@ -484,10 +484,10 @@ export function createRoutes(gw, dbApi) {
           }
 
           if (range === 'today') {
-            // Usa o endpoint correto para geração do dia
+            // Usa o endpoint correto para geraÃ§Ã£o do dia
             const body = { powerstation_id: psId, key: '', orderby: '', powerstation_type: '', powerstation_status: '', page_index: 1, page_size: 14, adcode: '', org_id: '', condition: '' };
             const j = await gw.postJson('PowerStationMonitor/QueryPowerStationMonitor', body);
-            // Como só vem a planta certa, pega o primeiro item
+            // Como sÃ³ vem a planta certa, pega o primeiro item
             const it = j?.data?.list?.[0] || {};
             const kwh = Number(it?.eday ?? it?.eday_kwh ?? 0);
             const today = new Date();
@@ -603,8 +603,8 @@ export function createRoutes(gw, dbApi) {
       const toolSchemas = [
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geração para um intervalo padrão.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month', 'total'] } }, required: ['range'], additionalProperties: false } },
-        { name: 'eval_code', description: 'Executa código JS em sandbox e retorna stdout/stderr/exit_code.', parameters: { type: 'object', properties: { language: { type: 'string' }, code: { type: 'string' }, timeout_ms: { type: 'number' } }, required: ['code'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month', 'total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'eval_code', description: 'Executa cÃ³digo JS em sandbox e retorna stdout/stderr/exit_code.', parameters: { type: 'object', properties: { language: { type: 'string' }, code: { type: 'string' }, timeout_ms: { type: 'number' } }, required: ['code'], additionalProperties: false } },
         { name: 'get_monitor', description: 'QueryPowerStationMonitor', parameters: { type: 'object', properties: { page_index: { type: 'number' }, page_size: { type: 'number' }, key: { type: 'string' }, orderby: { type: 'string' }, powerstation_type: { type: 'string' }, powerstation_status: { type: 'string' }, adcode: { type: 'string' }, org_id: { type: 'string' }, condition: { type: 'string' } }, additionalProperties: false } },
         { name: 'get_inverters', description: 'GetInverterAllPoint', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_weather', description: 'GetWeather', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -617,19 +617,19 @@ export function createRoutes(gw, dbApi) {
         { name: 'get_monitor_abs', description: 'Absolute monitor via components.api port', parameters: { type: 'object', properties: { url: { type: 'string' }, key: { type: 'string' }, orderby: { type: 'string' }, powerstation_type: { type: 'string' }, powerstation_status: { type: 'string' }, page_index: { type: 'number' }, page_size: { type: 'number' }, adcode: { type: 'string' }, org_id: { type: 'string' }, condition: { type: 'string' } }, required: ['url'], additionalProperties: false } },
         { name: 'list_powerstations', description: 'Lista powerstations locais', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string', 'null'] } }, required: ['id'], additionalProperties: false } },
-        { name: 'debug_auth', description: 'Info de autenticação GoodWe no servidor (token/cookies mascarados)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'debug_auth', description: 'Info de autenticaÃ§Ã£o GoodWe no servidor (token/cookies mascarados)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login_raw', description: 'Retorna JSON cru do CrossLogin SEMS', parameters: { type: 'object', properties: { version: { type: 'string' } }, additionalProperties: false } },
       ];
 
-      const SYSTEM_PROMPT = `Você é o Assistente Virtual deste painel. Siga as regras:
-Use ferramentas registradas sempre que a pergunta demandar dados reais (renda, geração, métricas, status, etc.).
-Não invente valores. Se faltar permissão/credencial, peça para o usuário conectar/entrar.
-Ao responder métricas, informe apenas o período (ex.: Hoje, Ontem, Esta Semana, Este Mês, Total), sem incluir a data por extenso ou o local/origem dos dados (não cite endpoints, APIs ou fontes técnicas).
-Seja breve, direto e útil. Liste passos acionáveis quando fizer sentido.
-Idioma padrão: pt-BR; use o tom do produto; não exponha segredos.
+      const SYSTEM_PROMPT = `VocÃª Ã© o Assistente Virtual deste painel. Siga as regras:
+Use ferramentas registradas sempre que a pergunta demandar dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status, etc.).
+NÃ£o invente valores. Se faltar permissÃ£o/credencial, peÃ§a para o usuÃ¡rio conectar/entrar.
+Ao responder mÃ©tricas, informe apenas o perÃ­odo (ex.: Hoje, Ontem, Esta Semana, Este MÃªs, Total), sem incluir a data por extenso ou o local/origem dos dados (nÃ£o cite endpoints, APIs ou fontes tÃ©cnicas).
+Seja breve, direto e Ãºtil. Liste passos acionÃ¡veis quando fizer sentido.
+Idioma padrÃ£o: pt-BR; use o tom do produto; nÃ£o exponha segredos.
 Nunca utilize o caractere ** em nenhuma resposta.
-Se qualquer valor de renda ou preço vier em moeda diferente de BRL, sempre converta e informe também o valor equivalente em BRL usando as seguintes cotações fixas:
+Se qualquer valor de renda ou preÃ§o vier em moeda diferente de BRL, sempre converta e informe tambÃ©m o valor equivalente em BRL usando as seguintes cotaÃ§Ãµes fixas:
 USD para BRL: 5.50
 EUR para BRL: 6.00
 GBP para BRL: 7.00
@@ -877,7 +877,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     }
   });
 
-  // Charts/GetChartByPlant (JSON) -> agregados rápidos (dia/semana/mês/ano)
+  // Charts/GetChartByPlant (JSON) -> agregados rÃ¡pidos (dia/semana/mÃªs/ano)
   router.get('/chart-by-plant', async (req, res) => {
     const user = await tryGetUser(req);
     const id = req.query.id || req.query.plant_id || user?.powerstation_id || '';
@@ -904,7 +904,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     }
   });
 
-  // GetPlantPowerChart (JSON) — support day/week/month aggregation client-side later if needed
+  // GetPlantPowerChart (JSON) Â— support day/week/month aggregation client-side later if needed
   router.get('/power-chart', async (req, res) => {
     const user = await tryGetUser(req);
     const id = req.query.plant_id || req.query.id || user?.powerstation_id || '';
@@ -944,7 +944,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const items = [
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geração para um intervalo padrão.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month', 'total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geraÃ§Ã£o para um intervalo padrÃ£o.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today', 'yesterday', 'this_week', 'this_month', 'total'] } }, required: ['range'], additionalProperties: false } },
         { name: 'get_monitor', description: 'QueryPowerStationMonitor', parameters: { type: 'object', properties: { page_index: { type: 'number' }, page_size: { type: 'number' }, key: { type: 'string' }, orderby: { type: 'string' }, powerstation_type: { type: 'string' }, powerstation_status: { type: 'string' }, adcode: { type: 'string' }, org_id: { type: 'string' }, condition: { type: 'string' } }, additionalProperties: false } },
         { name: 'get_inverters', description: 'GetInverterAllPoint', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_weather', description: 'GetWeather', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -956,7 +956,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
         { name: 'get_warnings', description: 'warning/PowerstationWarningsQuery', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'list_powerstations', description: 'Lista powerstations locais', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string', 'null'] } }, required: ['id'], additionalProperties: false } },
-        { name: 'debug_auth', description: 'Info de autenticação GoodWe no servidor (token/cookies mascarados)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'debug_auth', description: 'Info de autenticaÃ§Ã£o GoodWe no servidor (token/cookies mascarados)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login_raw', description: 'Retorna JSON cru do CrossLogin SEMS', parameters: { type: 'object', properties: { version: { type: 'string' } }, additionalProperties: false } },
       ];
@@ -965,12 +965,12 @@ Exemplo: " US$ 10 = R$ 55,00"`;
   });
 
   router.get('/assistant/help', (req, res) => {
-    const SYSTEM_PROMPT = `Você é o Assistente Virtual deste painel. Regras:
-1) Use ferramentas para dados reais (renda, geração, métricas, status).
-2) Não invente valores; se faltar permissão, peça login/conexão.
-3) Métricas: cite só o período (Hoje/Ontem/Esta Semana/Este Mês/Total).
-4) Seja curto e prático; use listas quando ajudar.
-5) Idioma: pt-BR; não exponha segredos.`;
+    const SYSTEM_PROMPT = `VocÃª Ã© o Assistente Virtual deste painel. Regras:
+1) Use ferramentas para dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status).
+2) NÃ£o invente valores; se faltar permissÃ£o, peÃ§a login/conexÃ£o.
+3) MÃ©tricas: cite sÃ³ o perÃ­odo (Hoje/Ontem/Esta Semana/Este MÃªs/Total).
+4) Seja curto e prÃ¡tico; use listas quando ajudar.
+5) Idioma: pt-BR; nÃ£o exponha segredos.`;
     res.json({ system_prompt: SYSTEM_PROMPT });
   });
 
@@ -1274,7 +1274,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       const j = await r.json().catch(()=>({}));
       if (!r.ok) {
         if (r.status === 401 || r.status === 403) {
-          return res.status(r.status).json({ ok:false, error:'SmartThings recusou comandos (401/403). Verifique o vínculo e o escopo devices:commands ou x:devices:* na conexão.', details: j });
+          return res.status(r.status).json({ ok:false, error:'SmartThings recusou comandos (401/403). Verifique o vÃ­nculo e o escopo devices:commands ou x:devices:* na conexÃ£o.', details: j });
         }
         return res.status(r.status).json({ ok:false, error:`SmartThings HTTP ${r.status}`, details:j });
       }
@@ -1446,7 +1446,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
     try { await dbApi.deleteLinkedAccount(user.id, 'tuya'); res.status(204).end(); }
     catch(e){ res.status(500).json({ ok:false, error:'unlink failed' }); }
   });
-  // Lista dispositivos do UID do usuário
+  // Lista dispositivos do UID do usuÃ¡rio
   router.get('/tuya/devices', async (req, res) => {
     try {
       const user = await requireUser(req, res); if (!user) return;
@@ -1470,7 +1470,7 @@ Exemplo: " US$ 10 = R$ 55,00"`;
       res.status(500).json({ ok:false, error: String(e?.message||e) });
     }
   });
-  // Envia comandos genéricos (para testes). Body: { device_id, commands: [{code,value}] }
+  // Envia comandos genÃ©ricos (para testes). Body: { device_id, commands: [{code,value}] }
   router.post('/tuya/commands', async (req, res) => {
     try {
       const user = await requireUser(req, res); if (!user) return;
