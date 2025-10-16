@@ -43,10 +43,9 @@ export async function getForecast({ plant_id, hours = 24, fetchWeather }){
   const dayShape = (() => {
     let sunrise = 6, sunset = 18;
     try {
-      // If weather carries sunrise/sunset (some GoodWe variants), prefer them
-      const w = await (async ()=> (typeof fetchWeather==='function' ? (await fetchWeather()) : null))();
-      const sr = w?.data?.weather?.sunrise; const ss = w?.data?.weather?.sunset;
-      if (typeof sr === 'number' && typeof ss === 'number' && ss>sr) { sunrise = sr; sunset = ss; }
+      // Prefer sunrise/sunset from already-fetched weather if available
+      const sr = weather?.data?.weather?.sunrise; const ss = weather?.data?.weather?.sunset;
+      if (typeof sr === 'number' && typeof ss === 'number' && ss > sr) { sunrise = sr; sunset = ss; }
     } catch {}
     const arr = slots.map(t => {
       const h = t.getHours();
