@@ -121,7 +121,7 @@ export default function Rotina(){
             <div className="card">
               <div className="h3 mb-1">Janela sugerida (pico)</div>
               {metrics.peakWindow ? (
-                <div className="muted">{metrics.peakWindow.start} → {metrics.peakWindow.end} (seg–sex)</div>
+                <div className="muted">{metrics.peakWindow.start} – {metrics.peakWindow.end} (seg–sex)</div>
               ) : (
                 <div className="muted">Sem janela específica no momento.</div>
               )}
@@ -130,7 +130,7 @@ export default function Rotina(){
                   <div key={i} className="panel text-sm">
                     <div className="font-semibold">{s.name}</div>
                     <div className="muted">{s.reason||''}</div>
-                    {s.schedule && <div className="muted text-xs">{s.schedule.start} → {s.schedule.end}</div>}
+                    {s.schedule && <div className="muted text-xs">{s.schedule.start} – {s.schedule.end}</div>}
                   </div>
                 ))}
               </div>
@@ -148,7 +148,7 @@ export default function Rotina(){
                   {metrics.top.map((h,i)=> (
                     <div key={i} className="panel flex items-center justify-between">
                       <div className="font-semibold">{hh(h.hour)}</div>
-                      <div className="muted text-sm">{(+h.energy_kwh).toFixed(3)} kWh · {Math.round(h.on_minutes||0)} min</div>
+                      <div className="muted text-sm">{(+h.energy_kwh).toFixed(3)} kWh • {Math.round(h.on_minutes||0)} min</div>
                     </div>
                   ))}
                 </div>
@@ -201,3 +201,4 @@ export default function Rotina(){
     </section>
   )
 }
+
