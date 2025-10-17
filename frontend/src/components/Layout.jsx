@@ -1,4 +1,4 @@
-﻿import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Activity, Zap, Factory, Bell, Wrench, FileBarChart2, Wallet, Settings, Users, ShieldCheck, User, Search } from 'lucide-react'
 import ThemeToggle from './ThemeToggle.jsx'
 import logoW from '../assets/logoW.png'
@@ -11,12 +11,13 @@ import { energyService } from '../services/energyService.js'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/geracao', label: 'GeraÃ§Ã£o', icon: Zap },
+  { to: '/geracao', label: 'Geração', icon: Zap },
   //{ to: '/consumo', label: 'Consumo', icon: Activity },
   { to: '/inversores', label: 'Inversores', icon: Factory },
-    { to: '/rotina', label: 'Rotina', icon: FileBarChart2 },\r\n  { to: '/sugestoes', label: 'Sugestoes', icon: ShieldCheck },
+  { to: '/rotina', label: 'Rotina', icon: FileBarChart2 },
+  { to: '/sugestoes', label: 'Sugestões', icon: ShieldCheck },
   { to: '/dispositivos', label: 'Dispositivos', icon: Activity },
-  //{ to: '/configuracoes', label: 'ConfiguraÃ§Ãµes', icon: Settings },
+  //{ to: '/configuracoes', label: 'Configurações', icon: Settings },
   { to: '/perfil', label: 'Perfil', icon: User },
 ]
 
@@ -67,7 +68,7 @@ export default function Layout(){
     })()
   }, [])
 
-  // Prefetch caches (day/week/month) logo apÃ³s carregar o layout
+  // Prefetch caches (day/week/month) logo apÃƒÂ³s carregar o layout
   useEffect(() => {
     const token = localStorage.getItem('token')
     const user = JSON.parse(localStorage.getItem('user') || 'null')
@@ -95,7 +96,7 @@ export default function Layout(){
         <div className="p-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="size-8 rounded-2xl bg-brand/20 border border-brand/30 animate-float" />
-            <div className={clsx("font-extrabold text-lg text-gray-900 dark:text-gray-100 transition-all", !open && "lg:opacity-0 lg:w-0 lg:overflow-hidden")}>Grupo 04 â€¢ Projeto GoodWe</div>
+            <div className={clsx("font-extrabold text-lg text-gray-900 dark:text-gray-100 transition-all", !open && "lg:opacity-0 lg:w-0 lg:overflow-hidden")}>Grupo 04 Ã¢Â€Â¢ Projeto GoodWe</div>
           </div>
         </div>
         <div className="px-4 pb-4">
@@ -118,7 +119,7 @@ export default function Layout(){
             <div className="flex items-center gap-3">
               <img src={logoW} alt="Logo" className="h-8 w-8 rounded-md shadow-md" />
               <div>
-                <h1 className="h1">Grupo 04 â€¢ Projeto GoodWe</h1>
+                <h1 className="h1">Grupo 04 Ã¢Â€Â¢ Projeto GoodWe</h1>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -147,10 +148,10 @@ export default function Layout(){
           {showRight && (
             <aside className="hidden lg:block">
               <div className="card">
-                <div className="h2 mb-2">Resumo rÃ¡pido</div>
+                <div className="h2 mb-2">Resumo rÃƒÂ¡pido</div>
                 <div className="grid gap-3">
-                  <div className="panel">Inversores: {inverterCount ?? 'â€”'}</div>
-                  <div className="panel">Alertas: <span className="text-secondary font-semibold">{warningCount ?? 'â€”'}</span></div>
+                  <div className="panel">Inversores: {inverterCount ?? 'Ã¢Â€Â”'}</div>
+                  <div className="panel">Alertas: <span className="text-secondary font-semibold">{warningCount ?? 'Ã¢Â€Â”'}</span></div>
                 </div>
               </div>
               <div className="grid gap-2 mt-4">
@@ -161,7 +162,7 @@ export default function Layout(){
         </div>
 
         <footer className="mx-auto max-w-[1400px] px-6 pb-8 text-center text-sm muted">
-          Grupo 04 â€¢ Projeto GoodWe
+          Grupo 04 Ã¢Â€Â¢ Projeto GoodWe
         </footer>
       </main>
 
