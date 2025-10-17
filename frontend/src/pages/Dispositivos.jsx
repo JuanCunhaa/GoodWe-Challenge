@@ -146,6 +146,17 @@ export default function Dispositivos(){
     finally{ setBusy(b => ({ ...b, [id]: false })) }
   }
 
+  async function toggleTuyaCode(id, code, nextValue){
+    try{
+      setBusy(b => ({ ...b, [id]: true }))
+      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      await integrationsApi.tuyaSendCommands(token, id, [{ code, value: nextValue }])
+      const s = await integrationsApi.tuyaDeviceStatus(token, id)
+      if (s) setStatusMap(m => ({ ...m, [id]: s }))
+    } catch(e){ setErr(String(e?.message||e)) }
+    finally { setBusy(b => ({ ...b, [id]: false })) }
+  }
+
   const linkErr = /not\s*linked|missing\s*uid|missing\s*token|unauthorized|401|403/i.test(err)
   const keyOf = (d) => `${d.vendor||''}|${d.id||''}`
   const appRoomName = (room_id) => { const r = appRooms.find(x => String(x.id) === String(room_id)); return r ? (r.name || r.id) : '' }
@@ -255,7 +266,7 @@ export default function Dispositivos(){
                       )}
                     </>
                   ) : (
-                    <span className="muted text-xs">Sem controle direto (switch não disponível)</span>
+                    <span className="muted text-xs">Sem controle direto (switch n�o disponível)</span>
                   )}
                   {(!hasSwitch && d.vendor==='tuya' && statusMap[d.id]) && (
                     <details className="mt-1">
@@ -264,6 +275,34 @@ export default function Dispositivos(){
                     </details>
                   )}
                 </div>
+                {d.vendor==='tuya' && statusMap[d.id] && (()=>{
+                  const raw = statusMap[d.id]
+                  const funcs = Array.isArray(raw.functions) ? raw.functions : []
+                  const map = raw.status_map || {}
+                  const boolFns = funcs.filter(fn => String(fn.type||'').toLowerCase().startsWith('bool'))
+                  if (!boolFns.length) return null
+                  return (
+                    <div className="mt-2 grid gap-1">
+                      <div className="muted text-xs">Opções Tuya</div>
+                      {boolFns.map(fn => {
+                        const cur = map.hasOwnProperty(fn.code) ? map[fn.code] : null
+                        const isOn = (cur === true) || (cur === 1) || (String(cur).toLowerCase() === 'on')
+                        return (
+                          <div key={fn.code} className="panel flex items-center justify-between py-1 px-2 text-xs">
+                            <div>{fn.name || fn.code}</div>
+                            <div>
+                              {isOn ? (
+                                <button className="btn btn-danger btn-xs" disabled={!!busy[d.id]} onClick={()=> toggleTuyaCode(d.id, fn.code, false)}>Desligar</button>
+                              ) : (
+                                <button className="btn btn-primary btn-xs" disabled={!!busy[d.id]} onClick={()=> toggleTuyaCode(d.id, fn.code, true)}>Ligar</button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
                 {(() => {
                   const u = uptimeLive[k];
                   if (!u) return null;

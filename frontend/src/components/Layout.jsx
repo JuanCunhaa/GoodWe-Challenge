@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Activity, Zap, Factory, Bell, Wrench, FileBarChart2, Wallet, Settings, Users, ShieldCheck, User, Search } from 'lucide-react'
+import { LayoutDashboard, Activity, Zap, Factory, FileBarChart2, ShieldCheck, User } from 'lucide-react'
 import ThemeToggle from './ThemeToggle.jsx'
 import logoW from '../assets/logoW.png'
 import CommandPalette from './CommandPalette.jsx'
@@ -30,9 +30,7 @@ export default function Layout(){
   const [warningCount, setWarningCount] = useState(null)
   const searchRef = useRef(null)
   useEffect(()=>{
-    const onKey = (e)=>{
-      if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); searchRef.current?.focus() }
-    }
+    const onKey = (e)=>{ if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); searchRef.current?.focus() } }
     window.addEventListener('keydown', onKey)
     return ()=> window.removeEventListener('keydown', onKey)
   },[])
@@ -68,16 +66,14 @@ export default function Layout(){
     })()
   }, [])
 
-  // Prefetch caches (day/week/month) logo apÃƒÂ³s carregar o layout
+  // Prefetch day/week/month caches after layout loads
   useEffect(() => {
     const token = localStorage.getItem('token')
     const user = JSON.parse(localStorage.getItem('user') || 'null')
     if (!token || !user?.powerstation_id) return
     const plantId = user.powerstation_id
     ;(async () => {
-      try {
-        await energyService.prewarm({ token, plantId, weekDays: 7, monthDays: 30, concurrency: 3 })
-      } catch {}
+      try { await energyService.prewarm({ token, plantId, weekDays: 7, monthDays: 30, concurrency: 3 }) } catch {}
     })()
     const intervalMs = Number(import.meta.env.VITE_INCREMENTAL_INTERVAL_MS || 600000)
     const id = setInterval(async () => {
@@ -96,11 +92,10 @@ export default function Layout(){
         <div className="p-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="size-8 rounded-2xl bg-brand/20 border border-brand/30 animate-float" />
-            <div className={clsx("font-extrabold text-lg text-gray-900 dark:text-gray-100 transition-all", !open && "lg:opacity-0 lg:w-0 lg:overflow-hidden")}>Grupo 04 Ã¢Â€Â¢ Projeto GoodWe</div>
+            <div className={clsx("font-extrabold text-lg text-gray-900 dark:text-gray-100 transition-all", !open && "lg:opacity-0 lg:w-0 lg:overflow-hidden")}>Grupo 04 • Projeto GoodWe</div>
           </div>
         </div>
-        <div className="px-4 pb-4">
-        </div>
+        <div className="px-4 pb-4" />
         <nav className="px-2 space-y-1">
           {NAV.map(({to,label,icon:Icon})=> (
             <NavLink key={to} to={to} className={({isActive})=> clsx("pill flex items-center gap-3", isActive && "pill-active") }>
@@ -119,7 +114,7 @@ export default function Layout(){
             <div className="flex items-center gap-3">
               <img src={logoW} alt="Logo" className="h-8 w-8 rounded-md shadow-md" />
               <div>
-                <h1 className="h1">Grupo 04 Ã¢Â€Â¢ Projeto GoodWe</h1>
+                <h1 className="h1">Grupo 04 • Projeto GoodWe</h1>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -148,10 +143,10 @@ export default function Layout(){
           {showRight && (
             <aside className="hidden lg:block">
               <div className="card">
-                <div className="h2 mb-2">Resumo rÃƒÂ¡pido</div>
+                <div className="h2 mb-2">Resumo rápido</div>
                 <div className="grid gap-3">
-                  <div className="panel">Inversores: {inverterCount ?? 'Ã¢Â€Â”'}</div>
-                  <div className="panel">Alertas: <span className="text-secondary font-semibold">{warningCount ?? 'Ã¢Â€Â”'}</span></div>
+                  <div className="panel">Inversores: {inverterCount ?? '-'}</div>
+                  <div className="panel">Alertas: <span className="text-secondary font-semibold">{warningCount ?? '-'}</span></div>
                 </div>
               </div>
               <div className="grid gap-2 mt-4">
@@ -162,7 +157,7 @@ export default function Layout(){
         </div>
 
         <footer className="mx-auto max-w-[1400px] px-6 pb-8 text-center text-sm muted">
-          Grupo 04 Ã¢Â€Â¢ Projeto GoodWe
+          Grupo 04 • Projeto GoodWe
         </footer>
       </main>
 

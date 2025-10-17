@@ -156,7 +156,7 @@ export default function Geracao(){
 
   async function fetchDay(token, pwid, d){
     const r = await goodweApi.powerChartDay(token, pwid, d)
-    if(String(r?.code)!=='0') throw new Error(r?.msg||'Falha ao consultar grÃ¡fico')
+    if(String(r?.code)!=='0') throw new Error(r?.msg||'Falha ao consultar gr�fico')
     const lines = r?.data?.lines||[]
     const byKey = Object.fromEntries(lines.map(l=>[l.key, l]))
     const sPV = byKey['PCurve_Power_PV']?.xy||[]
@@ -201,7 +201,7 @@ export default function Geracao(){
           setTotals({ gen:sum.gen, load:sum.load, batt:sum.batt, grid:sum.grid })
           setSeries([])
           setRevenueBRL(estimateRevenueBRL(sum.gridExp))
-          return; // não executar lógica antiga abaixo
+          return; // n�o executar lógica antiga abaixo
         } catch {}
         // Usa ChartByPlant (range=2) e recorta seg..dom por string (YYYY-MM-DD)
         const { start, end } = weekBounds(date)
@@ -470,7 +470,7 @@ export default function Geracao(){
     { label:'Rede', value: totals.grid, icon: PlugZap, cls:'text-rose-700', key:'Grid' },
   ], [totals])
 
-  // ConstrÃ³i sÃ©ries de linhas para agregados (mÃªs/ano) a partir de agg
+  // Constr�iÃ³i sÃ©ries de linhas para agregados (mÃªs/ano) a partir de agg
   const aggSeries = useMemo(()=>{
     if (!Array.isArray(agg) || agg.length===0) return []
     const toXY = (key)=> agg.map(r=> ({ x: String(r.label), y: Number(r[key]||0) }))
@@ -509,7 +509,7 @@ export default function Geracao(){
           <div className="flex items-center gap-2">
             <button className={`btn ${mode==='DAY'?'btn-primary':''}`} onClick={()=>setMode('DAY')}>Dia</button>
             <button className={`btn ${mode==='WEEK'?'btn-primary':''}`} onClick={()=>setMode('WEEK')}>Semana</button>
-            <button className={`btn ${mode==='MONTH'?'btn-primary':''}`} onClick={()=>setMode('MONTH')}>Mês</button>
+            <button className={`btn ${mode==='MONTH'?'btn-primary':''}`} onClick={()=>setMode('MONTH')}>M�s</button>
             {/* Removido Ano */}
             <div className="panel flex items-center gap-2 py-1"><Calendar className="w-4 h-4 muted"/><input type="date" className="outline-none" value={date} onChange={e=>setDate(e.target.value)} /></div>
             <button className="btn" onClick={refresh}><RefreshCw className="w-4 h-4"/></button>
