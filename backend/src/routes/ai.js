@@ -263,34 +263,5 @@ export function registerAiRoutes(router, { gw, helpers }){
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
-  // Automation suggestions (analyze last N days and propose routines)
-  router.get('/ai/automations/suggest', async (req, res) => {
-    const user = await requireUser(req, res); if (!user) return;
-    const plant_id = user.powerstation_id;
-    const days = Math.min(30, Math.max(3, Number(req.query.days || 7)));
-    try {
-      const { suggestAutomations } = await import('../analytics/service.js');
-      const data = await suggestAutomations({ plant_id, days });
-      res.json(data);
-    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
-  });
-
-  // Apply automation suggestions (creates peak_saver/sleep)
-  router.post('/ai/automations/apply', async (req, res) => {
-    const user = await requireUser(req, res); if (!user) return;
-    const plant_id = user.powerstation_id;
-    try {
-      const { suggestAutomations } = await import('../analytics/service.js');
-      const { upsertAutomation } = await import('../db.js');
-      const days = Math.min(30, Math.max(3, Number(req.query.days || req.body?.days || 7)));
-      const data = await suggestAutomations({ plant_id, days });
-      const list = Array.isArray(data?.suggestions)? data.suggestions : [];
-      const created = [];
-      for (const s of list){
-        const it = await upsertAutomation(user.id, { name: s.name, enabled: true, kind: s.kind, schedule: s.schedule, conditions: null, actions: s.actions });
-        created.push({ id: it?.id, name: it?.name, kind: it?.kind });
-      }
-      res.json({ ok:true, created, suggestions: list });
-    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
-  });
+  // (removed) /ai/automations/suggest and /ai/automations/apply
 }

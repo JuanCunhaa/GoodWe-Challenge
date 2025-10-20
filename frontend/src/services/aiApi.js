@@ -21,44 +21,4 @@ export const aiApi = {
   devicesOverview: (token) => request(`/ai/devices/overview`, { token }),
   iotUptime: (token, vendor, id, window = '24h') => request(`/iot/device/${encodeURIComponent(vendor)}/${encodeURIComponent(id)}/uptime?window=${encodeURIComponent(window)}`, { token }),
   topConsumers: (token, window = '60') => request(`/iot/top-consumers?window=${encodeURIComponent(window)}`, { token }),
-  automationsSuggest: (token, days = 7) => request(`/ai/automations/suggest?days=${encodeURIComponent(days)}`, { token }),
-  costProjection: (token, { hours = 24, tariff } = {}) => {
-    const q = new URLSearchParams({ hours: String(hours) });
-    const t = tariff ?? (import.meta.env.VITE_TARIFF_BRL_PER_KWH ? Number(import.meta.env.VITE_TARIFF_BRL_PER_KWH) : undefined);
-    if (typeof t === 'number' && !Number.isNaN(t)) q.set('tariff', String(t));
-    return request(`/ai/cost-projection?${q.toString()}`, { token });
-  },
-  batteryStrategy: (token, { hours = 24, min_soc = 20, max_soc = 90 } = {}) =>
-    request(`/ai/battery/strategy?hours=${encodeURIComponent(hours)}&min_soc=${encodeURIComponent(min_soc)}&max_soc=${encodeURIComponent(max_soc)}`, { token }),
-  // Automations
-  automationsSuggest: (token, days = 7) => request(`/ai/automations/suggest?days=${encodeURIComponent(days)}`, { token }),
-  automationsApply: (token, days = 7) => request(`/ai/automations/apply?days=${encodeURIComponent(days)}`, { token }),
-  automationsList: (token) => request(`/automations`, { token }),
-  automationsCreate: async (token, body) => {
-    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-    const r = await fetch(`${API_BASE}/automations`, { method: 'POST', headers, body: JSON.stringify(body) });
-    const data = await r.json().catch(()=>null);
-    if (!r.ok) throw new Error(data?.error || `${r.status}`);
-    return data;
-  },
-  automationsUpdate: async (token, id, body) => {
-    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-    const r = await fetch(`${API_BASE}/automations/${encodeURIComponent(String(id))}`, { method: 'PUT', headers, body: JSON.stringify(body) });
-    const data = await r.json().catch(()=>null);
-    if (!r.ok) throw new Error(data?.error || `${r.status}`);
-    return data;
-  },
-  automationsDelete: async (token, id) => {
-    const headers = { 'Authorization': `Bearer ${token}` };
-    const r = await fetch(`${API_BASE}/automations/${encodeURIComponent(String(id))}`, { method: 'DELETE', headers });
-    if (!r.ok) throw new Error(`${r.status}`);
-    return { ok: true };
-  },
-  automationsRun: async (token, id) => {
-    const headers = { 'Authorization': `Bearer ${token}` };
-    const r = await fetch(`${API_BASE}/automations/${encodeURIComponent(String(id))}/run`, { method: 'POST', headers });
-    const data = await r.json().catch(()=>null);
-    if (!r.ok) throw new Error(data?.error || `${r.status}`);
-    return data;
-  },
 };

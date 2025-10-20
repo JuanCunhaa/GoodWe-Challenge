@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Activity, Zap, Factory, FileBarChart2, ShieldCheck, User } from 'lucide-react'
+import { LayoutDashboard, Activity, Zap, Factory, ShieldCheck, User } from 'lucide-react'
 import ThemeToggle from './ThemeToggle.jsx'
 import logoW from '../assets/logoW.png'
 import CommandPalette from './CommandPalette.jsx'
@@ -14,7 +14,6 @@ const NAV = [
   { to: '/geracao', label: 'Geração', icon: Zap },
   //{ to: '/consumo', label: 'Consumo', icon: Activity },
   { to: '/inversores', label: 'Inversores', icon: Factory },
-  { to: '/rotina', label: 'Rotina', icon: FileBarChart2 },
   { to: '/sugestoes', label: 'Sugestões', icon: ShieldCheck },
   { to: '/dispositivos', label: 'Dispositivos', icon: Activity },
   //{ to: '/configuracoes', label: 'Configurações', icon: Settings },

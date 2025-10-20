@@ -16,7 +16,6 @@ import Configuracoes from './pages/Configuracoes.jsx'
 import Perfil from './pages/Perfil.jsx'
 import Dispositivos from './pages/Dispositivos.jsx'
 import Sugestoes from './pages/Sugestoes.jsx'
-import Rotina from './pages/Rotina.jsx'
 // Auth pages (new)
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
@@ -49,7 +48,6 @@ export default function App(){
         <Route path="/perfil" element={<Perfil/>} />
         <Route path="/dispositivos" element={<Dispositivos/>} />
         <Route path="/sugestoes" element={<Sugestoes/>} />
-        <Route path="/rotina" element={<Rotina/>} />
         <Route path="*" element={<Navigate to="/" replace/>} />
       </Route>
     </Routes>
