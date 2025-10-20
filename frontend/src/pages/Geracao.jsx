@@ -181,6 +181,32 @@ export default function Geracao(){
         setRevenueBRL(estimateRevenueBRL(energy.gridExp))
         setAgg([])
       } else if (mode==='WEEK'){
+        // Semana: agregados diretos via DB (uma chamada), evita N requisições
+        try {
+          const end = toDateStr(new Date())
+          const start = addDays(end, -6)
+          const { items } = await energyService.getRangeAggregates({ token, plantId: user.powerstation_id, start, end })
+          let list = []
+          let sum = { gen:0, load:0, batt:0, grid:0, gridExp:0 }
+          for (const it of (items||[])){
+            const ds = it?.date || ''
+            const e = it?.energy || {}
+            const lbl = new Date(ds+'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short' })
+            list.push({ label: lbl, ds, gen: Number(e.pv)||0, load: Number(e.load)||0, batt: Number(e.batt)||0, grid: Number(e.grid)||0 })
+            sum = {
+              gen:  sum.gen  + (Number(e.pv)||0),
+              load: sum.load + (Number(e.load)||0),
+              batt: sum.batt + (Number(e.batt)||0),
+              grid: sum.grid + (Number(e.grid)||0),
+              gridExp: sum.gridExp + (Number(e.gridExp)||0),
+            }
+          }
+          setAgg(list)
+          setTotals({ gen:sum.gen, load:sum.load, batt:sum.batt, grid:sum.grid })
+          setSeries([])
+          setRevenueBRL(estimateRevenueBRL(sum.gridExp))
+          return; // short-circuit otimizado
+        } catch {}
         // Semana baseada no mesmo carregamento do mÃªs: Ãºltimos 7 dias atÃ© hoje (inclusive)
         try {
           const end = toDateStr(new Date())
@@ -263,6 +289,31 @@ export default function Geracao(){
         }catch{}
         setAgg(list); setTotals({gen:sum.gen,load:sum.load,batt:sum.batt,grid:sum.grid}); setSeries([]); setRevenueBRL(estimateRevenueBRL(sum.gridExp))
       } else if (mode==='MONTH'){
+        // Mês selecionado: agregados diretos via DB (uma chamada)
+        try {
+          const base = new Date(date)
+          const y = base.getFullYear(), m = base.getMonth()
+          const start = new Date(y, m, 1).toISOString().slice(0,10)
+          const end = new Date(y, m+1, 0).toISOString().slice(0,10)
+          const { items } = await energyService.getRangeAggregates({ token, plantId: user.powerstation_id, start, end })
+          let list = []
+          let sum = { gen:0, load:0, batt:0, grid:0, gridExp:0 }
+          for (const it of (items||[])){
+            const ds = it?.date || ''
+            const e = it?.energy || {}
+            const lbl = (ds||'').slice(8,10)
+            list.push({ label: lbl, ds, gen: Number(e.pv)||0, load: Number(e.load)||0, batt: Number(e.batt)||0, grid: Number(e.grid)||0 })
+            sum = {
+              gen:  sum.gen  + (Number(e.pv)||0),
+              load: sum.load + (Number(e.load)||0),
+              batt: sum.batt + (Number(e.batt)||0),
+              grid: sum.grid + (Number(e.grid)||0),
+              gridExp: sum.gridExp + (Number(e.gridExp)||0),
+            }
+          }
+          setAgg(list); setTotals(sum); setSeries([]); setRevenueBRL(estimateRevenueBRL(sum.gridExp))
+          return; // short-circuit otimizado
+        } catch {}
         // 30 dias dia-a-dia, sem ChartByPlant (atalho com retorno)
         {
           const base = new Date(date);
