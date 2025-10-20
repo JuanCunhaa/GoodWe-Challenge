@@ -12,6 +12,7 @@ import { registerIoTRoutes } from './iot.js';
 import { registerRoomsRoutes } from './rooms.js';
 import { registerMetaRoutes } from './meta.js';
 import { registerAutomationsRoutes } from './automations.js';
+import { registerEnergyRoutes } from './energy.js';
 
 export function registerAllRoutes(router, { gw, dbApi }) {
   const helpers = createHelpers({ gw, dbApi });
@@ -35,6 +36,7 @@ export function registerAllRoutes(router, { gw, dbApi }) {
   registerRoomsRoutes(router, { dbApi, helpers });
   registerMetaRoutes(router, { helpers });
   registerAutomationsRoutes(router, { helpers });
+  registerEnergyRoutes(router, { helpers });
 
   return router;
 }

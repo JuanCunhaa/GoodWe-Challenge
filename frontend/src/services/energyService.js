@@ -37,6 +37,20 @@ export const energyService = {
     const isToday = date === todayStr;
     const fresh = cached && (now - (cached._ts || 0) < ttlMs);
     if (cached && !isToday && fresh) return { energy: cached };
+    // Prefer DB-backed aggregates for speed
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+      const r = await fetch(`${API_BASE}/energy/day-aggregates?date=${encodeURIComponent(date)}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        signal: AbortSignal.timeout(15000)
+      });
+      const j = await r.json().catch(()=>null);
+      if (r.ok && j && j.ok && j.energy){
+        dayCache.setEnergy(plantId, date, j.energy);
+        return { energy: j.energy };
+      }
+    } catch {}
+    // Fallback to GoodWe API if DB not available
     const { energy } = await fetchDayFromAPI(token, plantId, date);
     dayCache.setEnergy(plantId, date, energy);
     return { energy };
