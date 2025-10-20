@@ -50,6 +50,17 @@ export const energyService = {
         return { energy: j.energy };
       }
     } catch {}
+    // One-shot prefetch for the whole month to warm cache (reduces N requests in week/month views)
+    try {
+      const base = new Date(String(date)+'T00:00:00');
+      const start = new Date(base.getFullYear(), base.getMonth(), 1).toISOString().slice(0,10);
+      const end = new Date(base.getFullYear(), base.getMonth()+1, 0).toISOString().slice(0,10);
+      const res = await energyService.getRangeAggregates({ token, plantId, start, end }).catch(()=>null);
+      if (res && Array.isArray(res.items)){
+        const hit = res.items.find(it => (it?.date||'') === date);
+        if (hit && hit.energy){ dayCache.setEnergy(plantId, date, hit.energy); return { energy: hit.energy }; }
+      }
+    } catch {}
     // Fallback to GoodWe API if DB not available
     const { energy } = await fetchDayFromAPI(token, plantId, date);
     dayCache.setEnergy(plantId, date, energy);
