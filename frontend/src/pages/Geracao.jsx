@@ -102,7 +102,7 @@ function fmtTooltip(p){
   const v = Number(p.val)
   if (p.label==='PV') return `PV (W): ${v.toLocaleString('pt-BR')}`
   if (p.label==='Load') return `Load (W): ${v.toLocaleString('pt-BR')}`
-  // Battery removido da visualizaÃ§Ã£o
+  // Battery removido da visualizaÃÂ§ÃÂ£o
   if (p.label==='Grid') return `Grid (W) (${v>=0?'Buy':'Sell'}): ${v.toLocaleString('pt-BR')}`
   if (p.label==='SOC(%)') return `SOC (%): ${v.toFixed(0)}`
   return `${p.label}: ${v}`
@@ -136,7 +136,7 @@ export default function Geracao(){
   const [totals, setTotals] = useState({ gen:0, load:0, batt:0, grid:0 })
   const [revenueBRL, setRevenueBRL] = useState(0)
   const [enabled, setEnabled] = useState({ PV:true, Load:true, Grid:true })
-  const [socXY, setSocXY] = useState([]) // sÃ©rie SOC (%) para tooltip
+  const [socXY, setSocXY] = useState([]) // sÃÂ©rie SOC (%) para tooltip
 
   useEffect(()=>{ refresh() }, [mode, date])
 
@@ -156,7 +156,7 @@ export default function Geracao(){
 
   async function fetchDay(token, pwid, d){
     const r = await goodweApi.powerChartDay(token, pwid, d)
-    if(String(r?.code)!=='0') throw new Error(r?.msg||'Falha ao consultar gr�fico')
+    if(String(r?.code)!=='0') throw new Error(r?.msg||'Falha ao consultar gráfico')
     const lines = r?.data?.lines||[]
     const byKey = Object.fromEntries(lines.map(l=>[l.key, l]))
     const sPV = byKey['PCurve_Power_PV']?.xy||[]
@@ -181,7 +181,7 @@ export default function Geracao(){
         setRevenueBRL(estimateRevenueBRL(energy.gridExp))
         setAgg([])
       } else if (mode==='WEEK'){
-        // Semana baseada no mesmo carregamento do mês: últimos 7 dias até hoje (inclusive)
+        // Semana baseada no mesmo carregamento do mÃªs: Ãºltimos 7 dias atÃ© hoje (inclusive)
         try {
           const end = toDateStr(new Date())
           const start = addDays(end, -6)
@@ -201,7 +201,7 @@ export default function Geracao(){
           setTotals({ gen:sum.gen, load:sum.load, batt:sum.batt, grid:sum.grid })
           setSeries([])
           setRevenueBRL(estimateRevenueBRL(sum.gridExp))
-          return; // n�o executar lógica antiga abaixo
+          return; // não executar lÃ³gica antiga abaixo
         } catch {}
         // Usa ChartByPlant (range=2) e recorta seg..dom por string (YYYY-MM-DD)
         const { start, end } = weekBounds(date)
@@ -231,7 +231,7 @@ export default function Geracao(){
             sum={ gen:sum.gen+gen, load:sum.load+load, batt:sum.batt+batt, grid:sum.grid+grid, gridExp:sum.gridExp+(gridSell||0) }
           }
         }catch{}
-        // Fallback: se por algum motivo nÃ£o tiver dados, tenta dia-a-dia (mantido como Ãºltimo recurso)
+        // Fallback: se por algum motivo nÃÂ£o tiver dados, tenta dia-a-dia (mantido como ÃÂºltimo recurso)
         if (list.length===0){
           const { start } = weekBounds(date)
           const dsStart = new Date(start+'T00:00:00')
@@ -241,7 +241,7 @@ export default function Geracao(){
             try{ const { energy } = await energyService.getDayAggregatesCached(token, user.powerstation_id, dsStr); list.push({label: ds.toLocaleDateString('pt-BR',{weekday:'short'}), ds: dsStr, gen:energy.pv, load:energy.load, batt:energy.batt, grid:energy.grid}); sum={gen:sum.gen+energy.pv,load:sum.load+energy.load,batt:sum.batt+energy.batt,grid:sum.grid+energy.grid, gridExp:sum.gridExp+energy.gridExp} }catch{}
           }
         }
-        // Refinamento semanal: força todos os dias a virem do Day (consistente com modo Dia)
+        // Refinamento semanal: forÃ§a todos os dias a virem do Day (consistente com modo Dia)
         try{
           const up = new Map(list.map(r=> [r.ds, { ...r }]))
           let sum2={gen:0,load:0,batt:0,grid:0,gridExp:0}
@@ -287,7 +287,7 @@ export default function Geracao(){
           return;
         }
         const base=new Date(date); const y=base.getFullYear(), m=base.getMonth();
-        // Tenta endpoint agregado rÃ¡pido (range=2: pontos diÃ¡rios). Usa exatamente as datas do JSON.
+        // Tenta endpoint agregado rÃÂ¡pido (range=2: pontos diÃÂ¡rios). Usa exatamente as datas do JSON.
         let list=[]; let sum={gen:0,load:0,batt:0,grid:0,gridExp:0}
         try{
           const j = await goodweApi.chartByPlant(token, user.powerstation_id, { date: toDateStr(new Date(y,m,15)), range: 2, chartIndexId: 8 })
@@ -300,7 +300,7 @@ export default function Geracao(){
           const buyMap = mapXY(by['gridkwhbuy']||by['gridwkwhbuy']||by['gridbuykwh']||by['buykwh'])
           const sellMap= mapXY(by['gridkwhsell']||by['gridwkwhsell']||by['gridsellkwh']||by['sellkwh'])
           const inHouseMap = mapXY(by['inhousekwh']||by['selfusekwh'])
-          // Use as datas exatamente como vieram do JSON (uniÃ£o de chaves), ordenadas
+          // Use as datas exatamente como vieram do JSON (uniÃÂ£o de chaves), ordenadas
           const keys = Array.from(new Set([ ...genMap.keys(), ...loadMap.keys(), ...buyMap.keys(), ...sellMap.keys(), ...inHouseMap.keys() ])).sort()
           for(const ds of keys){
             let gen = genMap.get(ds)
@@ -322,7 +322,7 @@ export default function Geracao(){
           }
         }
         setAgg(list); setTotals(sum); setSeries([]); setRevenueBRL(estimateRevenueBRL(sum.gridExp))
-        // Refinamento mensal: forçar consistência com modo Dia usando cache local
+        // Refinamento mensal: forÃ§ar consistÃªncia com modo Dia usando cache local
         try {
           const token2 = localStorage.getItem('token');
           const user2 = JSON.parse(localStorage.getItem('user')||'null');
@@ -350,7 +350,7 @@ export default function Geracao(){
             setRevenueBRL(estimateRevenueBRL(sum2.gridExp));
           }
         } catch {}
-        // Refinamento (curvas diÃ¡rias) para MÃªs/Semana melhora bateria e venda
+        // Refinamento (curvas diÃÂ¡rias) para MÃÂªs/Semana melhora bateria e venda
         const dayKeys = list.map(r=> r.ds || extractYMD(r.label)).filter(d=> /^\d{4}-\d{2}-\d{2}$/.test(d))
         if (mode==='WEEK' || mode==='MONTH'){
           await (async ()=>{
@@ -419,7 +419,7 @@ export default function Geracao(){
             list.push({label:String(m+1).padStart(2,'0'), ...mm}); sum={gen:sum.gen+mm.gen,load:sum.load+mm.load,batt:sum.batt+mm.batt,grid:sum.grid+mm.grid, gridExp:sum.gridExp+mm.gridExp}
           }
         }
-        // Trim inÃ­cio do ano atÃ© o primeiro mÃªs com dados > 0
+        // Trim inÃÂ­cio do ano atÃÂ© o primeiro mÃÂªs com dados > 0
         const firstIdx = list.findIndex(r => (Number(r.gen)||0) > 0 || (Number(r.load)||0) > 0 || (Number(r.grid)||0) > 0)
         if (firstIdx > 0){
           list = list.slice(firstIdx)
@@ -455,7 +455,7 @@ export default function Geracao(){
     const region=up(import.meta.env.VITE_TARIFF_REGION || 'BRL');
     const feedin={ BRL:num(import.meta.env.VITE_FEEDIN_BRL_KWH), USD:num(import.meta.env.VITE_FEEDIN_USD_KWH), EUR:num(import.meta.env.VITE_FEEDIN_EUR_KWH), GBP:num(import.meta.env.VITE_FEEDIN_GBP_KWH), CNY:num(import.meta.env.VITE_FEEDIN_CNY_KWH) };
     let v = feedin[region] || 0;
-    // Fallback: se feed-in nÃ£o definido, usa tarifa padrÃ£o da regiÃ£o
+    // Fallback: se feed-in nÃÂ£o definido, usa tarifa padrÃÂ£o da regiÃÂ£o
     if (!v){
       const tariff={ BRL:num(import.meta.env.VITE_TARIFF_BRL_KWH), USD:num(import.meta.env.VITE_TARIFF_USD_KWH), EUR:num(import.meta.env.VITE_TARIFF_EUR_KWH), GBP:num(import.meta.env.VITE_TARIFF_GBP_KWH), CNY:num(import.meta.env.VITE_TARIFF_CNY_KWH) };
       v = tariff[region] || tariff.BRL || 0;
@@ -465,12 +465,12 @@ export default function Geracao(){
   function estimateRevenueBRL(exportKWh){ const t=feedinTariffBRL(); return (exportKWh||0) * t }
 
   const summary = useMemo(()=>[
-    { label:'Geração', value: totals.gen, icon: Zap, cls:'text-emerald-700', key:'PV' },
+    { label:'GeraÃ§Ã£o', value: totals.gen, icon: Zap, cls:'text-emerald-700', key:'PV' },
     { label:'Consumo', value: totals.load, icon: PlugZap, cls:'text-amber-700', key:'Load' },
     { label:'Rede', value: totals.grid, icon: PlugZap, cls:'text-rose-700', key:'Grid' },
   ], [totals])
 
-  // Constr�iÃ³i sÃ©ries de linhas para agregados (mÃªs/ano) a partir de agg
+  // ConstróiÃÂ³i sÃÂ©ries de linhas para agregados (mÃÂªs/ano) a partir de agg
   const aggSeries = useMemo(()=>{
     if (!Array.isArray(agg) || agg.length===0) return []
     const toXY = (key)=> agg.map(r=> ({ x: String(r.label), y: Number(r[key]||0) }))
@@ -505,11 +505,11 @@ export default function Geracao(){
     <section className="grid gap-6">
       <div className="card">
         <div className="flex items-center justify-between mb-3">
-          <div className="h2">Geração de Energia</div>
+          <div className="h2">GeraÃ§Ã£o de Energia</div>
           <div className="flex items-center gap-2">
             <button className={`btn ${mode==='DAY'?'btn-primary':''}`} onClick={()=>setMode('DAY')}>Dia</button>
             <button className={`btn ${mode==='WEEK'?'btn-primary':''}`} onClick={()=>setMode('WEEK')}>Semana</button>
-            <button className={`btn ${mode==='MONTH'?'btn-primary':''}`} onClick={()=>setMode('MONTH')}>M�s</button>
+            <button className={`btn ${mode==='MONTH'?'btn-primary':''}`} onClick={()=>setMode('MONTH')}>Mês</button>
             {/* Removido Ano */}
             <div className="panel flex items-center gap-2 py-1"><Calendar className="w-4 h-4 muted"/><input type="date" className="outline-none" value={date} onChange={e=>setDate(e.target.value)} /></div>
             <button className="btn" onClick={refresh}><RefreshCw className="w-4 h-4"/></button>
@@ -521,9 +521,9 @@ export default function Geracao(){
               const meta = user?.powerstation_id ? energyService.getBackfillMeta(user.powerstation_id) : {};
               return null;
               return (
-                <button className="btn" onClick={handleBackfill} disabled={backfilling} title="Pré-carregar últimos dias no cache local">
+                <button className="btn" onClick={handleBackfill} disabled={backfilling} title="PrÃ©-carregar Ãºltimos dias no cache local">
                   <Download className="w-4 h-4"/>
-                  {backfilling ? `Pré-carregando ${backfillInfo.completed}/${backfillInfo.total}` : 'Pré-carregar 365d'}
+                  {backfilling ? `PrÃ©-carregando ${backfillInfo.completed}/${backfillInfo.total}` : 'PrÃ©-carregar 365d'}
                 </button>
               )
             })()}

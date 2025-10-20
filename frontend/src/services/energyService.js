@@ -55,6 +55,20 @@ export const energyService = {
     dayCache.setEnergy(plantId, date, energy);
     return { energy };
   },
+  async getRangeAggregates({ token, plantId, start, end }){
+    const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+    const url = `${API_BASE}/energy/daily-aggregates?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    const r = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+    const j = await r.json().catch(()=>null);
+    if (!r.ok || !j || j.ok === false) throw new Error(j?.error || `${r.status}`);
+    const items = Array.isArray(j.items) ? j.items : [];
+    for (const it of items){
+      const ds = it?.date || '';
+      const energy = it?.energy || null;
+      if (ds && energy) dayCache.setEnergy(plantId, ds, energy);
+    }
+    return { items };
+  },
   async getDayCurvesCached(token, plantId, date){
     const now = Date.now();
     const todayStr = new Date().toISOString().slice(0,10);

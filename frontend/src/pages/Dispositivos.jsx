@@ -28,7 +28,7 @@ export default function Dispositivos(){
   async function fetchDevices(){
     setErr(''); setLoading(true)
     try{
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const { token } = loadSession(); if (!token) throw new Error('SessÃ£o expirada')
       const list = await currentAdapter.listDevices(token, { setRooms, setStatusMap, setErr })
       setItems(Array.isArray(list) ? list : [])
       const ok = await (currentAdapter.canControl?.(token) ?? false)
@@ -73,7 +73,7 @@ export default function Dispositivos(){
     return arr
   }, [items, q, vendor, appRoomFilter, metaMap])
 
-  // Live uptime (sessão): poll status periodicamente e acumula tempo "on"
+  // Live uptime (sessÃ£o): poll status periodicamente e acumula tempo "on"
   useEffect(()=>{
     let stop = false;
     const tick = async () => {
@@ -137,7 +137,7 @@ export default function Dispositivos(){
   async function sendSwitch(id, on, component){
     try{
       setBusy(b => ({ ...b, [id]: true }))
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const { token } = loadSession(); if (!token) throw new Error('SessÃ£o expirada')
       const dev = items.find(x => x.id === id)
       if (dev?.vendor === 'tuya' && dev.online === false) throw new Error('Dispositivo offline')
       const status = await currentAdapter.sendSwitch?.(token, { id, on, component })
@@ -149,7 +149,7 @@ export default function Dispositivos(){
   async function toggleTuyaCode(id, code, nextValue){
     try{
       setBusy(b => ({ ...b, [id]: true }))
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const { token } = loadSession(); if (!token) throw new Error('SessÃ£o expirada')
       await integrationsApi.tuyaSendCommands(token, id, [{ code, value: nextValue }])
       const s = await integrationsApi.tuyaDeviceStatus(token, id)
       if (s) setStatusMap(m => ({ ...m, [id]: s }))
@@ -168,7 +168,7 @@ export default function Dispositivos(){
   function closeEdit(){ setEditingDevice(null) }
   async function saveEdit(){
     try{
-      const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      const { token } = loadSession(); if (!token) throw new Error('SessÃ£o expirada')
       const d = editingDevice; if (!d) return
       const k = keyOf(d)
       const payload = { vendor: d.vendor, device_id: d.id }
@@ -202,13 +202,13 @@ export default function Dispositivos(){
 
         {!loading && !canControl && !linkErr && (
           <div className="panel border border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300 text-sm mb-3">
-            Comando indisponível para o fornecedor selecionado. Verifique permissões/conexão na página <a className="underline" href="/perfil">Perfil</a>.
+            Comando indisponÃ­vel para o fornecedor selecionado. Verifique permissÃµes/conexÃ£o na pÃ¡gina <a className="underline" href="/perfil">Perfil</a>.
           </div>
         )}
 
         {!loading && vendor === 'smartthings' && linkErr && (
           <div className="panel border border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300 text-sm mb-3">
-            Para usar o SmartThings aqui, conecte sua conta na página <a className="underline" href="/perfil">Perfil</a>.
+            Para usar o SmartThings aqui, conecte sua conta na pÃ¡gina <a className="underline" href="/perfil">Perfil</a>.
           </div>
         )}
 
@@ -245,8 +245,8 @@ export default function Dispositivos(){
                   </div>
                   {d.vendor==='tuya' && d.online===false && <div className="text-[11px] text-red-500 mt-1">Offline</div>}
                   <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">Cômodo: {meta.room_id ? (appRoomName(meta.room_id) || meta.room_id) : '-'}</span>
-                    <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">Prioridade: {meta.priority===3?'Alta': meta.priority===2?'Média': meta.priority===1?'Baixa':'-'}</span>
+                    <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">CÃ´modo: {meta.room_id ? (appRoomName(meta.room_id) || meta.room_id) : '-'}</span>
+                    <span className="px-2 py-0.5 rounded text-[11px] bg-gray-500/10 text-gray-600 dark:text-gray-300">Prioridade: {meta.priority===3?'Alta': meta.priority===2?'MÃ©dia': meta.priority===1?'Baixa':'-'}</span>
                   </div>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
@@ -262,11 +262,11 @@ export default function Dispositivos(){
                           <button className="btn btn-primary" disabled={!!busy[d.id] || (d.vendor==='tuya' && d.online===false)} onClick={()=>sendSwitch(d.id,true, comp)}>{busy[d.id]? '...' : 'Ligar'}</button>
                         )
                       ) : (
-                        <button className="btn btn-ghost" disabled title="Conecte com escopo de comandos na página Perfil">Comando indisponível</button>
+                        <button className="btn btn-ghost" disabled title="Conecte com escopo de comandos na pÃ¡gina Perfil">Comando indisponÃ­vel</button>
                       )}
                     </>
                   ) : (
-                    <span className="muted text-xs">Sem controle direto (switch n�o disponível)</span>
+                    <span className="muted text-xs">Sem controle direto (switch não disponÃ­vel)</span>
                   )}
                   {(!hasSwitch && d.vendor==='tuya' && statusMap[d.id]) && (
                     <details className="mt-1">
@@ -283,7 +283,7 @@ export default function Dispositivos(){
                   if (!boolFns.length) return null
                   return (
                     <div className="mt-2 grid gap-1">
-                      <div className="muted text-xs">Opções Tuya</div>
+                      <div className="muted text-xs">OpÃ§Ãµes Tuya</div>
                       {boolFns.map(fn => {
                         const cur = map.hasOwnProperty(fn.code) ? map[fn.code] : null
                         const isOn = (cur === true) || (cur === 1) || (String(cur).toLowerCase() === 'on')
@@ -309,7 +309,7 @@ export default function Dispositivos(){
                   const now = Date.now();
                   const total = u.totalMs + (u.on && u.since ? (now - u.since) : 0);
                   const minutes = Math.round(total/60000);
-                  return <div className="muted text-xs mt-1">Uptime (sessão): {minutes} min</div>
+                  return <div className="muted text-xs mt-1">Uptime (sessÃ£o): {minutes} min</div>
                 })()}
               </div>
             )
@@ -329,9 +329,9 @@ export default function Dispositivos(){
             <div className="muted text-sm mb-3">{editingDevice?.name} ({editingDevice?.vendor})</div>
             <div className="grid gap-3">
               <label className="grid gap-1 text-sm">
-                <span className="muted">Cômodo (App)</span>
+                <span className="muted">CÃ´modo (App)</span>
                 <select className="panel" value={String(editForm.room_id ?? '')} onChange={e=> setEditForm(f => ({ ...f, room_id: e.target.value===''? '' : e.target.value }))}>
-                  <option value="">Sem cômodo (App)</option>
+                  <option value="">Sem cÃ´modo (App)</option>
                   {appRooms.map(r => (<option key={r.id} value={String(r.id)}>{r.name||r.id}</option>))}
                 </select>
               </label>
@@ -340,7 +340,7 @@ export default function Dispositivos(){
                 <select className="panel" value={String(editForm.priority ?? '')} onChange={e=> setEditForm(f => ({ ...f, priority: e.target.value===''? '' : Number(e.target.value) }))}>
                   <option value="">Sem prioridade</option>
                   <option value="1">Baixa</option>
-                  <option value="2">Média</option>
+                  <option value="2">MÃ©dia</option>
                   <option value="3">Alta</option>
                 </select>
               </label>
