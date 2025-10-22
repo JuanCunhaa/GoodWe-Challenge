@@ -146,11 +146,14 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
   router.get('/tuya/devices', async (req, res) => {
     try {
       const user = await requireUser(req, res); if (!user) return
-      const { uid, uids } = await ensureTuyaLinkedUser(user)
+      let { uid, uids } = await ensureTuyaLinkedUser(user)
+      const qUid = String(req.query.uid || '').trim()
+      if (qUid) { uid = qUid }
       const token = await tuyaEnsureAppToken()
       
       async function fetchForUid(u){
         let items = []
+        const dbg = { base: {}, tried: [] }
         // 1) Antigo caminho que funcionava: /v1.0/users/{uid}/devices
         try {
           const r1 = await tuyaSignAndFetch(`/v1.0/users/${encodeURIComponent(u)}/devices`, { method: 'GET', accessToken: token })
@@ -158,6 +161,7 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
             const arr = Array.isArray(r1.json?.result) ? r1.json.result : []
             if (arr.length) items = arr
           }
+          dbg.base.users_devices = { status: r1?.status, success: r1?.json?.success===true, count: Array.isArray(r1?.json?.result)? r1.json.result.length : null }
         } catch {}
         // 2) Fallbacks mais novos (iot-03): users/{uid}/devices e devices?uid
         if (items.length === 0) {
@@ -168,6 +172,7 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
               const arr = Array.isArray(res?.list) ? res.list : (Array.isArray(res?.devices) ? res.devices : [])
               if (arr && arr.length) items = arr
             }
+            dbg.base.iot03_users_devices = { status: r2?.status, success: r2?.json?.success===true, len: (r2?.json?.result?.list?.length || r2?.json?.result?.devices?.length || 0) }
           } catch {}
         }
         if (items.length === 0) {
@@ -177,19 +182,22 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
               const arr = Array.isArray(r3.json?.result?.list) ? r3.json.result.list : []
               if (arr && arr.length) items = arr
             }
+            dbg.base.iot03_devices_uid = { status: r3?.status, success: r3?.json?.success===true, len: (r3?.json?.result?.list?.length || 0) }
           } catch {}
         }
-        return items
+        return { items, dbg }
       }
 
       // try primary uid, then any other registered uids
-      let items = await fetchForUid(uid)
+      let { items, dbg } = await fetchForUid(uid)
+      const dbgAll = { primary_uid: uid, attempts: [ { uid, ...dbg } ] }
       if ((!items || items.length === 0) && uids && Object.keys(uids).length > 0){
         for (const key of Object.keys(uids)){
           const alt = String(uids[key]||'').trim()
           if (!alt || alt === uid) continue
-          const arr = await fetchForUid(alt)
-          if (arr && arr.length){ items = arr; break }
+          const r = await fetchForUid(alt)
+          dbgAll.attempts.push({ uid: alt, ...r.dbg })
+          if (r.items && r.items.length){ items = r.items; break }
         }
       }
 
@@ -268,7 +276,8 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
         enriched.push({ ...d, roomId, roomName })
       }
 
-      res.json({ ok: true, items: enriched, total: enriched.length })
+      const debug = String(req.query.debug||'')==='1'
+      res.json(debug ? { ok:true, items: enriched, total: enriched.length, debug: dbgAll } : { ok: true, items: enriched, total: enriched.length })
     } catch (e) {
       const code = String(e?.code || '')
       if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() })
