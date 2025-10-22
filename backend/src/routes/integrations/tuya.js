@@ -103,9 +103,14 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     const row = await dbApi.getLinkedAccount(user.id, 'tuya')
     if (!row) throw Object.assign(new Error('not linked'), { code: 'NOT_LINKED' })
     const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {}
-    const uid = String(meta.uid || '')
+    let uid = String(meta.uid || '')
     const uids = (meta.uids && typeof meta.uids === 'object') ? meta.uids : null
-    if (!uid && (!uids || Object.keys(uids).length === 0)) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' })
+    if (!uid && uids && Object.keys(uids).length > 0){
+      const firstKey = Object.keys(uids)[0]
+      const firstVal = uids[firstKey]
+      if (firstVal) uid = String(firstVal)
+    }
+    if (!uid) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' })
     return { uid, uids, row }
   }
 
