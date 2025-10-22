@@ -185,6 +185,25 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
             dbg.base.iot03_devices_uid = { status: r3?.status, success: r3?.json?.success===true, len: (r3?.json?.result?.list?.length || 0) }
           } catch {}
         }
+        // 3) Homes -> devices by home (algumas contas expõem só por home)
+        if (items.length === 0) {
+          try {
+            const rh = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(u)}/homes`, { method: 'GET', accessToken: token })
+            const homes = (rh.status===200 && rh.json?.success===true) ? (Array.isArray(rh.json?.result) ? rh.json.result : (Array.isArray(rh.json?.result?.homes) ? rh.json.result.homes : [])) : []
+            dbg.base.iot03_homes = { status: rh?.status, success: rh?.json?.success===true, count: homes.length }
+            for (const h of homes){
+              const homeId = h?.home_id || h?.id
+              if (!homeId) continue
+              try {
+                const rd = await tuyaSignAndFetch(`/v1.0/iot-03/homes/${encodeURIComponent(homeId)}/devices`, { method: 'GET', accessToken: token })
+                if (rd.status===200 && rd.json?.success===true){
+                  const arr = Array.isArray(rd.json?.result?.list) ? rd.json.result.list : (Array.isArray(rd.json?.result?.devices) ? rd.json.result.devices : [])
+                  if (arr && arr.length) { items = arr; break }
+                }
+              } catch {}
+            }
+          } catch {}
+        }
         return { items, dbg }
       }
 
