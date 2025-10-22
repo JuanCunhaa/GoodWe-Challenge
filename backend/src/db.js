@@ -177,7 +177,7 @@ async function initPg() {
     last_seen TIMESTAMPTZ DEFAULT now(),
     confidence DOUBLE PRECISION,
     state TEXT NOT NULL DEFAULT 'shadow', -- shadow|suggested|active|paused|retired
-    undo_count BIGINT NOT NULL DEFAULT 0,
+    undo_count BIGINT NOT NULL DEFAULT 0
   );
 
   -- Unique index using expression to normalize null context
