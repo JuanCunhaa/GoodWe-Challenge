@@ -21,9 +21,16 @@ export default function Dispositivos(){
   const [appRoomFilter, setAppRoomFilter] = useState('') // '' | 'none' | id
   const [uptimeLive, setUptimeLive] = useState({}) // key -> { on:boolean, since:number|null, totalMs:number }
   const [editingDevice, setEditingDevice] = useState(null)
-  const [editForm, setEditForm] = useState({ room_id: '', priority: '' })
+  const [editForm, setEditForm] = useState({ room_id: '', priority: '', essential: false })
 
   const currentAdapter = adapters[vendor]
+
+  function startEdit(d){
+    setEditingDevice(d)
+    const k = keyOf(d)
+    const meta = metaMap[k] || {}
+    setEditForm({ room_id: meta.room_id ?? '', priority: meta.priority ?? '', essential: !!meta.essential })
+  }
 
   async function fetchDevices(){
     setErr(''); setLoading(true)
@@ -174,9 +181,10 @@ export default function Dispositivos(){
       const payload = { vendor: d.vendor, device_id: d.id }
       payload.room_id = (editForm.room_id===''||editForm.room_id==null)? null : editForm.room_id
       payload.priority = (editForm.priority===''||editForm.priority==null)? null : Number(editForm.priority)
+      payload.essential = !!editForm.essential || Number(editForm.priority)>=3
       const res = await metaApi.upsertDeviceMeta(token, payload)
       const item = res?.item || payload
-      setMetaMap(m => ({ ...m, [k]: { ...(m[k]||{}), room_id: item.room_id ?? payload.room_id ?? null, priority: item.priority ?? payload.priority ?? null } }))
+      setMetaMap(m => ({ ...m, [k]: { ...(m[k]||{}), room_id: item.room_id ?? payload.room_id ?? null, priority: item.priority ?? payload.priority ?? null, essential: (item.essential ?? payload.essential) } }))
       closeEdit()
     } catch(e) { alert(String(e?.message||e)) }
   }
@@ -343,6 +351,10 @@ export default function Dispositivos(){
                   <option value="2">MÃ©dia</option>
                   <option value="3">Alta</option>
                 </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={!!editForm.essential || Number(editForm.priority)>=3} onChange={e=> setEditForm(f=> ({ ...f, essential: e.target.checked }))} />
+                <span className="muted">Essencial (não desligar automaticamente)</span>
               </label>
               <div className="flex items-center justify-end gap-2">
                 <button className="btn btn-ghost" onClick={closeEdit}>Cancelar</button>

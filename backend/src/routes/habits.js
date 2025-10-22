@@ -1,4 +1,4 @@
-import { listHabitPatternsByUser, setHabitPatternState, incHabitUndo, insertHabitLog } from '../db.js';
+import { listHabitPatternsByUser, setHabitPatternState, incHabitUndo, insertHabitLog, listHabitLogsByUser } from '../db.js';
 
 export function registerHabitsRoutes(router, { helpers }){
   const { requireUser } = helpers;
@@ -30,5 +30,15 @@ export function registerHabitsRoutes(router, { helpers }){
       res.json({ ok:true });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
-}
 
+  // Timeline (logs)
+  router.get('/habits/logs', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const limit = Number(req.query.limit||50);
+      const pid = req.query.pattern_id ? Number(req.query.pattern_id) : null;
+      const items = await listHabitLogsByUser(user.id, { limit, pattern_id: pid });
+      res.json({ ok:true, items });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+}

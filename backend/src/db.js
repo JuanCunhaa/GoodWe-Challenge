@@ -393,10 +393,6 @@ async function initSqlite() {
   // Online migration for existing DBs (ignore if column already exists)
   try { sqliteDb.prepare('ALTER TABLE device_meta ADD COLUMN priority INTEGER').run(); } catch {}
   try { sqliteDb.prepare('ALTER TABLE automations ADD COLUMN conditions_json TEXT').run(); } catch {}
-  -- online migration guards (ignore errors if exist)
-  BEGIN TRANSACTION;
-  -- sqlite lacks IF NOT EXISTS on unique with expressions; best-effort only
-  COMMIT;
 }
 
 // Initialize selected engine
@@ -747,6 +743,57 @@ export async function insertHabitLog({ pattern_id, user_id, event, meta }){
     await pgPool.query('INSERT INTO habit_logs(pattern_id, user_id, event, meta) VALUES($1,$2,$3,$4)', [pattern_id, user_id, event, m]);
   } else {
     sqliteDb.prepare('INSERT INTO habit_logs(pattern_id, user_id, event, meta) VALUES(?,?,?,?)').run(pattern_id, user_id, event, m);
+  }
+}
+
+export async function listHabitLogsByUser(user_id, { limit=50, pattern_id=null }={}){
+  const lim = Math.max(1, Math.min(500, Number(limit)||50));
+  if (USE_PG) {
+    if (pattern_id) {
+      const sql = `SELECT l.id, l.ts, l.event, l.meta, l.pattern_id,
+        p.trigger_vendor, p.trigger_device_id, p.trigger_event,
+        p.action_vendor, p.action_device_id, p.action_event,
+        p.context_key, p.state
+        FROM habit_logs l JOIN habit_patterns p ON p.id = l.pattern_id
+        WHERE l.user_id=$1 AND l.pattern_id=$2
+        ORDER BY l.ts DESC
+        LIMIT $3`;
+      const r = await pgPool.query(sql, [user_id, Number(pattern_id), lim]);
+      return r.rows;
+    } else {
+      const sql = `SELECT l.id, l.ts, l.event, l.meta, l.pattern_id,
+        p.trigger_vendor, p.trigger_device_id, p.trigger_event,
+        p.action_vendor, p.action_device_id, p.action_event,
+        p.context_key, p.state
+        FROM habit_logs l JOIN habit_patterns p ON p.id = l.pattern_id
+        WHERE l.user_id=$1
+        ORDER BY l.ts DESC
+        LIMIT $2`;
+      const r = await pgPool.query(sql, [user_id, lim]);
+      return r.rows;
+    }
+  } else {
+    if (pattern_id) {
+      const sql = `SELECT l.id, l.ts, l.event, l.meta, l.pattern_id,
+        p.trigger_vendor, p.trigger_device_id, p.trigger_event,
+        p.action_vendor, p.action_device_id, p.action_event,
+        p.context_key, p.state
+        FROM habit_logs l JOIN habit_patterns p ON p.id = l.pattern_id
+        WHERE l.user_id=? AND l.pattern_id=?
+        ORDER BY l.ts DESC
+        LIMIT ?`;
+      return sqliteDb.prepare(sql).all(user_id, Number(pattern_id), lim);
+    } else {
+      const sql = `SELECT l.id, l.ts, l.event, l.meta, l.pattern_id,
+        p.trigger_vendor, p.trigger_device_id, p.trigger_event,
+        p.action_vendor, p.action_device_id, p.action_event,
+        p.context_key, p.state
+        FROM habit_logs l JOIN habit_patterns p ON p.id = l.pattern_id
+        WHERE l.user_id=?
+        ORDER BY l.ts DESC
+        LIMIT ?`;
+      return sqliteDb.prepare(sql).all(user_id, lim);
+    }
   }
 }
 

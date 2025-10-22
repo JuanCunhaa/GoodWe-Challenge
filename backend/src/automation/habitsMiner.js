@@ -56,8 +56,12 @@ export function startHabitMiner({ helpers }){
   async function execAction({ base, token, vendor, device_id, action, user }){
     const headers = { 'Authorization': `Bearer ${token}` };
     try {
-      // Respect essential flag
-      try { const meta = await getDeviceMetaMap(user.id); const m = meta[`${vendor}|${device_id}`]; if (m && m.essential === true) return false; } catch {}
+      // Respect essential and high priority
+      try {
+        const meta = await getDeviceMetaMap(user.id);
+        const m = meta[`${vendor}|${device_id}`];
+        if (m && (m.essential === true || Number(m.priority)>=3)) return false;
+      } catch {}
       if (vendor==='smartthings'){
         const r = await fetch(`${base}/smartthings/device/${encodeURIComponent(device_id)}/${action}`, { method:'POST', headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
         return r.ok;

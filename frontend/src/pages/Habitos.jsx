@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { habitsApi } from '../services/habitsApi.js'
+import { loadSession } from '../services/authApi.js'
 
 function Badge({ state }){
   const cls = {
@@ -20,6 +21,7 @@ function rowTitle(it){
 
 export default function Habitos(){
   const [items, setItems] = useState([])
+  const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -29,6 +31,8 @@ export default function Habitos(){
       const token = localStorage.getItem('token')
       const j = await habitsApi.list(token)
       setItems(Array.isArray(j.items)? j.items : [])
+      const lj = await habitsApi.logs(token, { limit: 100 })
+      setLogs(Array.isArray(lj.items)? lj.items : [])
     }catch(e){ setError(String(e.message||e)) }
     finally{ setLoading(false) }
   }
@@ -92,8 +96,24 @@ export default function Habitos(){
             </div>
           </div>
         ))}
+        <div className="card">
+          <div className="h2 mb-2">Timeline de decisões</div>
+          <div className="grid gap-2 max-h-[420px] overflow-auto pr-2">
+            {logs.length===0 ? (
+              <div className="muted text-sm">Sem eventos ainda.</div>
+            ) : logs.map(l => (
+              <div key={l.id} className="panel flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-sm">{new Date(l.ts||l.time||Date.now()).toLocaleString()} • {String(l.event)}</div>
+                  <div className="muted text-xs">
+                    {`${l.trigger_vendor}:${l.trigger_device_id} → ${String(l.trigger_event||'').toUpperCase()}  ⇒  ${l.action_vendor}:${l.action_device_id} → ${String(l.action_event||'').toUpperCase()}`} {l.context_key? ` • ctx:${l.context_key}`:''} {l.state? ` • ${l.state}`:''}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   )
 }
-
