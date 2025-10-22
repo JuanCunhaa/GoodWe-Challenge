@@ -158,6 +158,37 @@ async function initPg() {
     last_state TEXT,
     last_at TIMESTAMPTZ
   );
+
+  -- Habit mining: patterns and logs
+  CREATE TABLE IF NOT EXISTS habit_patterns (
+    id BIGSERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    trigger_vendor TEXT NOT NULL,
+    trigger_device_id TEXT NOT NULL,
+    trigger_event TEXT NOT NULL, -- 'on' | 'off' | other
+    action_vendor TEXT NOT NULL,
+    action_device_id TEXT NOT NULL,
+    action_event TEXT NOT NULL, -- 'on' | 'off'
+    context_key TEXT,
+    triggers_total BIGINT NOT NULL DEFAULT 0,
+    pairs_total BIGINT NOT NULL DEFAULT 0,
+    avg_delay_s DOUBLE PRECISION,
+    first_seen TIMESTAMPTZ DEFAULT now(),
+    last_seen TIMESTAMPTZ DEFAULT now(),
+    confidence DOUBLE PRECISION,
+    state TEXT NOT NULL DEFAULT 'shadow', -- shadow|suggested|active|paused|retired
+    undo_count BIGINT NOT NULL DEFAULT 0,
+    UNIQUE(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, COALESCE(context_key,'global'))
+  );
+
+  CREATE TABLE IF NOT EXISTS habit_logs (
+    id BIGSERIAL PRIMARY KEY,
+    pattern_id BIGINT REFERENCES habit_patterns(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+    event TEXT NOT NULL, -- trigger|pair|auto_action|undo|promote|pause|retire
+    meta TEXT
+  );
   `;
   await pgPool.query(ddl);
   // Best-effort online migration for older deployments (ignore errors)
@@ -327,10 +358,45 @@ async function initSqlite() {
     last_state TEXT,
     last_at TEXT
   );
+
+  -- Habit mining: patterns and logs
+  CREATE TABLE IF NOT EXISTS habit_patterns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    trigger_vendor TEXT NOT NULL,
+    trigger_device_id TEXT NOT NULL,
+    trigger_event TEXT NOT NULL,
+    action_vendor TEXT NOT NULL,
+    action_device_id TEXT NOT NULL,
+    action_event TEXT NOT NULL,
+    context_key TEXT,
+    triggers_total INTEGER NOT NULL DEFAULT 0,
+    pairs_total INTEGER NOT NULL DEFAULT 0,
+    avg_delay_s REAL,
+    first_seen TEXT DEFAULT (datetime('now')),
+    last_seen TEXT DEFAULT (datetime('now')),
+    confidence REAL,
+    state TEXT NOT NULL DEFAULT 'shadow',
+    undo_count INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, COALESCE(context_key,'global'))
+  );
+
+  CREATE TABLE IF NOT EXISTS habit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pattern_id INTEGER REFERENCES habit_patterns(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL,
+    ts TEXT NOT NULL DEFAULT (datetime('now')),
+    event TEXT NOT NULL,
+    meta TEXT
+  );
   `);
   // Online migration for existing DBs (ignore if column already exists)
   try { sqliteDb.prepare('ALTER TABLE device_meta ADD COLUMN priority INTEGER').run(); } catch {}
   try { sqliteDb.prepare('ALTER TABLE automations ADD COLUMN conditions_json TEXT').run(); } catch {}
+  -- online migration guards (ignore errors if exist)
+  BEGIN TRANSACTION;
+  -- sqlite lacks IF NOT EXISTS on unique with expressions; best-effort only
+  COMMIT;
 }
 
 // Initialize selected engine
@@ -576,6 +642,111 @@ export async function insertDeviceHistory({ vendor, device_id, name, room, ts, s
       sqliteDb.prepare('INSERT OR IGNORE INTO device_history(vendor, device_id, name, room, ts, state_on, power_w, energy_wh, source) VALUES(?,?,?,?,?,?,?,?,?)')
         .run(vendor, device_id, name ?? null, room ?? null, tDate.toISOString(), (state_on==null? null : (!!state_on?1:0)), (power_w!=null? Number(power_w): null), (energy_wh!=null? Number(energy_wh): null), source ?? null);
     } catch {}
+  }
+}
+
+// -------- Habit patterns (miner storage) --------
+export async function upsertHabitPattern({ user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, context_key='global', delay_s=null }){
+  const now = new Date();
+  const ctx = context_key || 'global';
+  if (USE_PG) {
+    const client = await pgPool.connect();
+    try {
+      await client.query('BEGIN');
+      // upsert row
+      const sel = await client.query(
+        `SELECT id, triggers_total, pairs_total, avg_delay_s FROM habit_patterns
+         WHERE user_id=$1 AND trigger_vendor=$2 AND trigger_device_id=$3 AND trigger_event=$4
+           AND action_vendor=$5 AND action_device_id=$6 AND action_event=$7 AND COALESCE(context_key,'global')=COALESCE($8,'global')
+         LIMIT 1`, [user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, ctx]
+      );
+      let id = sel.rows[0]?.id || null;
+      let triggers = Number(sel.rows[0]?.triggers_total||0);
+      let pairs = Number(sel.rows[0]?.pairs_total||0);
+      let avg = sel.rows[0]?.avg_delay_s==null? null : Number(sel.rows[0]?.avg_delay_s);
+      if (!id) {
+        const ins = await client.query(
+          `INSERT INTO habit_patterns(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, context_key, triggers_total, pairs_total, avg_delay_s, first_seen, last_seen, confidence, state)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,0,0,$9, $10, $10, 0.0, 'shadow') RETURNING id`,
+          [user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, ctx, (delay_s!=null? Number(delay_s): null), now]
+        );
+        id = ins.rows[0].id;
+      }
+      // increment counters
+      triggers += 1;
+      if (delay_s != null) {
+        const d = Number(delay_s);
+        if (avg==null) avg = d; else avg = 0.8*avg + 0.2*d;
+        pairs += 1;
+      }
+      const conf = triggers>0 ? (pairs / triggers) : 0;
+      await client.query(`UPDATE habit_patterns SET triggers_total=$1, pairs_total=$2, avg_delay_s=$3, last_seen=$4, confidence=$5,
+        state = CASE WHEN state='shadow' AND $5>=0.6 AND $2>=3 AND $1>=5 THEN 'suggested' ELSE state END
+      WHERE id=$6`, [triggers, pairs, avg, now, conf, id]);
+      await client.query('COMMIT');
+      return { id, triggers_total:triggers, pairs_total:pairs, avg_delay_s:avg, confidence: conf };
+    } catch (e) { try { await client.query('ROLLBACK') } catch {}; throw e; } finally { client.release(); }
+  } else {
+    const row = sqliteDb.prepare(
+      `SELECT id, triggers_total, pairs_total, avg_delay_s FROM habit_patterns WHERE user_id=? AND trigger_vendor=? AND trigger_device_id=? AND trigger_event=? AND action_vendor=? AND action_device_id=? AND action_event=? AND COALESCE(context_key,'global')=COALESCE(?, 'global') LIMIT 1`
+    ).get(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, ctx);
+    let id = row?.id || null;
+    let triggers = Number(row?.triggers_total||0);
+    let pairs = Number(row?.pairs_total||0);
+    let avg = row?.avg_delay_s==null? null : Number(row?.avg_delay_s);
+    if (!id) {
+      const info = sqliteDb.prepare(
+        `INSERT INTO habit_patterns(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, context_key, triggers_total, pairs_total, avg_delay_s, first_seen, last_seen, confidence, state)
+         VALUES(?,?,?,?,?,?,?,?,0,0,?,?,?,0.0,'shadow')`
+      ).run(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, ctx, (delay_s!=null? Number(delay_s): null), new Date().toISOString(), new Date().toISOString());
+      id = info.lastInsertRowid;
+    }
+    triggers += 1;
+    if (delay_s != null) {
+      const d = Number(delay_s);
+      if (avg==null) avg = d; else avg = 0.8*avg + 0.2*d;
+      pairs += 1;
+    }
+    const conf = triggers>0 ? (pairs / triggers) : 0;
+    sqliteDb.prepare(`UPDATE habit_patterns SET triggers_total=?, pairs_total=?, avg_delay_s=?, last_seen=?, confidence=?, state = CASE WHEN state='shadow' AND ?>=0.6 AND pairs_total>=3 AND triggers_total>=5 THEN 'suggested' ELSE state END WHERE id=?`)
+      .run(triggers, pairs, avg, new Date().toISOString(), conf, conf, id);
+    return { id, triggers_total:triggers, pairs_total:pairs, avg_delay_s:avg, confidence: conf };
+  }
+}
+
+export async function listHabitPatternsByUser(user_id){
+  if (USE_PG) {
+    const r = await pgPool.query('SELECT * FROM habit_patterns WHERE user_id=$1 ORDER BY state DESC, confidence DESC, last_seen DESC', [user_id]);
+    return r.rows;
+  } else {
+    return sqliteDb.prepare('SELECT * FROM habit_patterns WHERE user_id=? ORDER BY state DESC, confidence DESC, last_seen DESC').all(user_id);
+  }
+}
+
+export async function setHabitPatternState(id, state){
+  const st = String(state||'').toLowerCase();
+  if (!['shadow','suggested','active','paused','retired'].includes(st)) throw new Error('invalid state');
+  if (USE_PG) {
+    await pgPool.query('UPDATE habit_patterns SET state=$1 WHERE id=$2', [st, id]);
+  } else {
+    sqliteDb.prepare('UPDATE habit_patterns SET state=? WHERE id=?').run(st, id);
+  }
+}
+
+export async function incHabitUndo(id){
+  if (USE_PG) {
+    await pgPool.query('UPDATE habit_patterns SET undo_count = COALESCE(undo_count,0)+1 WHERE id=$1', [id]);
+  } else {
+    sqliteDb.prepare('UPDATE habit_patterns SET undo_count = COALESCE(undo_count,0)+1 WHERE id=?').run(id);
+  }
+}
+
+export async function insertHabitLog({ pattern_id, user_id, event, meta }){
+  const m = meta ? JSON.stringify(meta) : null;
+  if (USE_PG) {
+    await pgPool.query('INSERT INTO habit_logs(pattern_id, user_id, event, meta) VALUES($1,$2,$3,$4)', [pattern_id, user_id, event, m]);
+  } else {
+    sqliteDb.prepare('INSERT INTO habit_logs(pattern_id, user_id, event, meta) VALUES(?,?,?,?)').run(pattern_id, user_id, event, m);
   }
 }
 

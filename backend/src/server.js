@@ -11,6 +11,7 @@ import { startMqttPublisher } from './mqttPublisher.js';
 import { startIngestor } from './analytics/ingestor.js';
 import { startIotIngestor } from './analytics/iotIngestor.js';
 import { startAutomationRunner } from './automation/runner.js';
+import { startHabitMiner } from './automation/habitsMiner.js';
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -145,3 +146,4 @@ if (process.env.MQTT_URL) {
 try { startIngestor({ gw, dbApi }); } catch (e) { console.warn('[ingestor] init failed', e?.message || e) }
 try { startIotIngestor({ helpers: null }); } catch (e) { console.warn('[iot-ingestor] init failed', e?.message || e) }
 try { startAutomationRunner({ helpers: { deriveBaseUrl: (req)=> (process.env.BASE_URL||'') } }); } catch (e) { console.warn('[automation] init failed', e?.message || e) }
+try { startHabitMiner({ helpers: { deriveBaseUrl: (req)=> (process.env.BASE_URL||'') } }); } catch (e) { console.warn('[habits] init failed', e?.message || e) }

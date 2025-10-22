@@ -13,6 +13,7 @@ import { registerRoomsRoutes } from './rooms.js';
 import { registerMetaRoutes } from './meta.js';
 import { registerAutomationsRoutes } from './automations.js';
 import { registerEnergyRoutes } from './energy.js';
+import { registerHabitsRoutes } from './habits.js';
 
 export function registerAllRoutes(router, { gw, dbApi }) {
   const helpers = createHelpers({ gw, dbApi });
@@ -37,6 +38,7 @@ export function registerAllRoutes(router, { gw, dbApi }) {
   registerMetaRoutes(router, { helpers });
   registerAutomationsRoutes(router, { helpers });
   registerEnergyRoutes(router, { helpers });
+  registerHabitsRoutes(router, { helpers });
 
   return router;
 }

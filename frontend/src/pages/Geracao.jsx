@@ -291,10 +291,8 @@ export default function Geracao(){
       } else if (mode==='MONTH'){
         // Mês selecionado: agregados diretos via DB (uma chamada)
         try {
-          const base = new Date(date)
-          const y = base.getFullYear(), m = base.getMonth()
-          const start = new Date(y, m, 1).toISOString().slice(0,10)
-          const end = new Date(y, m+1, 0).toISOString().slice(0,10)
+          const end = toDateStr(new Date())
+          const start = addDays(end, -29)
           const { items } = await energyService.getRangeAggregates({ token, plantId: user.powerstation_id, start, end })
           let list = []
           let sum = { gen:0, load:0, batt:0, grid:0, gridExp:0 }
@@ -316,7 +314,7 @@ export default function Geracao(){
         } catch {}
         // 30 dias dia-a-dia, sem ChartByPlant (atalho com retorno)
         {
-          const base = new Date(date);
+          const base = new Date();
           let list = [];
           let sum = { gen:0, load:0, batt:0, grid:0, gridExp:0 };
           for (let i = 29; i >= 0; i--) {
@@ -431,6 +429,60 @@ export default function Geracao(){
           })()
         }
       } else {
+        // MONTH mode (rolling last 30 days instead of calendar month)
+        // 1) Fast path: use DB-backed daily aggregates for the last 30 days
+        try {
+          const end = toDateStr(new Date())
+          const start = addDays(end, -29) // inclusive window of 30 days
+          const { items } = await energyService.getRangeAggregates({ token, plantId: user.powerstation_id, start, end })
+          let list = []
+          let sum = { gen:0, load:0, batt:0, grid:0, gridExp:0 }
+          for (const it of (items||[])){
+            const ds = it?.date || ''
+            const e = it?.energy || {}
+            const lbl = ds ? ds.slice(8,10) : '' // show day number
+            list.push({ label: lbl, ds, gen: Number(e.pv)||0, load: Number(e.load)||0, batt: Number(e.batt)||0, grid: Number(e.grid)||0 })
+            sum = {
+              gen:  sum.gen  + (Number(e.pv)||0),
+              load: sum.load + (Number(e.load)||0),
+              batt: sum.batt + (Number(e.batt)||0),
+              grid: sum.grid + (Number(e.grid)||0),
+              gridExp: sum.gridExp + (Number(e.gridExp)||0),
+            }
+          }
+          if (list.length){
+            setAgg(list)
+            setTotals(sum)
+            setSeries([])
+            setRevenueBRL(estimateRevenueBRL(sum.gridExp))
+            return
+          }
+        } catch {}
+
+        // 2) Fallback: compute last 30 days via per-day aggregates
+        try {
+          const end = toDateStr(new Date())
+          const start = addDays(end, -29)
+          const d0 = new Date(start + 'T00:00:00')
+          let list = []
+          let sum = { gen:0, load:0, batt:0, grid:0, gridExp:0 }
+          for (let i = 0; i < 30; i++){
+            const d = new Date(d0); d.setDate(d0.getDate() + i)
+            const ds = d.toISOString().slice(0,10)
+            try {
+              const { energy } = await energyService.getDayAggregatesCached(token, user.powerstation_id, ds)
+              list.push({ label: ds.slice(8,10), ds, gen: energy.pv||0, load: energy.load||0, batt: energy.batt||0, grid: energy.grid||0 })
+              sum = { gen: sum.gen + (energy.pv||0), load: sum.load + (energy.load||0), batt: sum.batt + (energy.batt||0), grid: sum.grid + (energy.grid||0), gridExp: sum.gridExp + (energy.gridExp||0) }
+            } catch {}
+          }
+          setAgg(list)
+          setTotals(sum)
+          setSeries([])
+          setRevenueBRL(estimateRevenueBRL(sum.gridExp))
+          return
+        } catch {}
+
+        // 3) Legacy monthly view (calendar month) — keep as last resort
         const base=new Date(date); const y=base.getFullYear(); const months=[...Array(12).keys()];
         let list=[]; let sum={gen:0,load:0,batt:0,grid:0,gridExp:0}
         try{
