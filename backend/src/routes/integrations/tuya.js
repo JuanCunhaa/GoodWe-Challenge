@@ -67,9 +67,11 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     for (const base of TUYA_FALLBACK_BASES) {
       const res = await tuyaSignedFetchOnce(base, path, opts)
       last = res
+      // Success: return immediately
       if (res.status === 200 && res.json && res.json.success === true) return res
-      if (res.status === 401 || res.status === 429) return res
-      if (res.status !== 404 && res.status !== 502) return res
+      // For any failure, try next base instead of returning early.
+      // Some regions return 400/403/401 when hitting the wrong cluster; fallback may still succeed.
+      continue
     }
     return last
   }
@@ -144,38 +146,51 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
   router.get('/tuya/devices', async (req, res) => {
     try {
       const user = await requireUser(req, res); if (!user) return
-      const { uid } = await ensureTuyaLinkedUser(user)
+      const { uid, uids } = await ensureTuyaLinkedUser(user)
       const token = await tuyaEnsureAppToken()
       
-      // 1) Antigo caminho que funcionava: /v1.0/users/{uid}/devices
-      let items = []
-      try {
-        const r1 = await tuyaSignAndFetch(`/v1.0/users/${encodeURIComponent(uid)}/devices`, { method: 'GET', accessToken: token })
-        if (r1.status === 200 && r1.json?.success === true) {
-          const arr = Array.isArray(r1.json?.result) ? r1.json.result : []
-          if (arr.length) items = arr
+      async function fetchForUid(u){
+        let items = []
+        // 1) Antigo caminho que funcionava: /v1.0/users/{uid}/devices
+        try {
+          const r1 = await tuyaSignAndFetch(`/v1.0/users/${encodeURIComponent(u)}/devices`, { method: 'GET', accessToken: token })
+          if (r1.status === 200 && r1.json?.success === true) {
+            const arr = Array.isArray(r1.json?.result) ? r1.json.result : []
+            if (arr.length) items = arr
+          }
+        } catch {}
+        // 2) Fallbacks mais novos (iot-03): users/{uid}/devices e devices?uid
+        if (items.length === 0) {
+          try {
+            const r2 = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(u)}/devices`, { method: 'GET', query: 'page_no=1&page_size=100', accessToken: token })
+            if (r2.status === 200 && r2.json?.success === true) {
+              const res = r2.json?.result
+              const arr = Array.isArray(res?.list) ? res.list : (Array.isArray(res?.devices) ? res.devices : [])
+              if (arr && arr.length) items = arr
+            }
+          } catch {}
         }
-      } catch {}
-
-      // 2) Fallbacks mais novos (iot-03): users/{uid}/devices e devices?uid
-      if (items.length === 0) {
-        try {
-          const r2 = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(uid)}/devices`, { method: 'GET', query: 'page_no=1&page_size=100', accessToken: token })
-          if (r2.status === 200 && r2.json?.success === true) {
-            const res = r2.json?.result
-            const arr = Array.isArray(res?.list) ? res.list : (Array.isArray(res?.devices) ? res.devices : [])
-            if (arr && arr.length) items = arr
-          }
-        } catch {}
+        if (items.length === 0) {
+          try {
+            const r3 = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method: 'GET', query: `page_no=1&page_size=100&uid=${encodeURIComponent(u)}`, accessToken: token })
+            if (r3.status === 200 && r3.json?.success === true) {
+              const arr = Array.isArray(r3.json?.result?.list) ? r3.json.result.list : []
+              if (arr && arr.length) items = arr
+            }
+          } catch {}
+        }
+        return items
       }
-      if (items.length === 0) {
-        try {
-          const r3 = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method: 'GET', query: `page_no=1&page_size=100&uid=${encodeURIComponent(uid)}`, accessToken: token })
-          if (r3.status === 200 && r3.json?.success === true) {
-            const arr = Array.isArray(r3.json?.result?.list) ? r3.json.result.list : []
-            if (arr && arr.length) items = arr
-          }
-        } catch {}
+
+      // try primary uid, then any other registered uids
+      let items = await fetchForUid(uid)
+      if ((!items || items.length === 0) && uids && Object.keys(uids).length > 0){
+        for (const key of Object.keys(uids)){
+          const alt = String(uids[key]||'').trim()
+          if (!alt || alt === uid) continue
+          const arr = await fetchForUid(alt)
+          if (arr && arr.length){ items = arr; break }
+        }
       }
 
       // 3) Enriquecer com roomId/roomName
