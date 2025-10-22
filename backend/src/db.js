@@ -178,7 +178,12 @@ async function initPg() {
     confidence DOUBLE PRECISION,
     state TEXT NOT NULL DEFAULT 'shadow', -- shadow|suggested|active|paused|retired
     undo_count BIGINT NOT NULL DEFAULT 0,
-    UNIQUE(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, COALESCE(context_key,'global'))
+  );
+
+  -- Unique index using expression to normalize null context
+  CREATE UNIQUE INDEX IF NOT EXISTS habit_patterns_unq ON habit_patterns (
+    user_id, trigger_vendor, trigger_device_id, trigger_event,
+    action_vendor, action_device_id, action_event, (COALESCE(context_key,'global'))
   );
 
   CREATE TABLE IF NOT EXISTS habit_logs (
@@ -377,8 +382,7 @@ async function initSqlite() {
     last_seen TEXT DEFAULT (datetime('now')),
     confidence REAL,
     state TEXT NOT NULL DEFAULT 'shadow',
-    undo_count INTEGER NOT NULL DEFAULT 0,
-    UNIQUE(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, COALESCE(context_key,'global'))
+    undo_count INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS habit_logs (
