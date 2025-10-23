@@ -1,4 +1,4 @@
-﻿export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
+export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
   const { getBearerToken, requireUser, deriveBaseUrl } = helpers;
 
   router.post('/assistant/chat', async (req, res) => {

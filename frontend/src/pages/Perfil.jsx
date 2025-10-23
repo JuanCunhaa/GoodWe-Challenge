@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loadSession } from '../services/authApi.js'
 import AccountCard from '../components/perfil/AccountCard.jsx'
