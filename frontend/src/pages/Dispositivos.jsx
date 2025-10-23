@@ -200,8 +200,8 @@ export default function Dispositivos(){
               {adapterList.map(a => (<option key={a.key} value={a.key}>{a.label}</option>))}
             </select>
             <select className="panel w-full sm:w-auto" value={appRoomFilter} onChange={e=>setAppRoomFilter(e.target.value)}>
-              <option value="">Todos os comodos (App)</option>
-              <option value="none">Sem comodo (App)</option>
+              <option value="">Todos os cômodos (App)</option>
+              <option value="none">Sem cômodo (App)</option>
               {appRooms.map(r => (<option key={r.id} value={String(r.id)}>{r.name||r.id}</option>))}
             </select>
             <input className="panel outline-none w-full sm:w-64" placeholder="Buscar" value={q} onChange={e=>setQ(e.target.value)} />
