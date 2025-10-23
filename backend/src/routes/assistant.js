@@ -274,13 +274,13 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       };
 
       const toolSchemas = [
-        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondÃªncia aproximada.', parameters: { type:'object', properties: { name: { type:'string' }, action:{ type:'string', enum:['on','off'] } }, required:['name','action'], additionalProperties:false } },
-        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuÃ¡rio com status e mÃ©tricas (quando disponÃ­veis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
-        { name: 'get_forecast', description: 'PrevisÃ£o de geraÃ§Ã£o e consumo nas prÃ³ximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
-        { name: 'get_recommendations', description: 'SugestÃµes de economia baseadas no histÃ³rico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondência aproximada.', parameters: { type:'object', properties: { name: { type:'string' }, action:{ type:'string', enum:['on','off'] } }, required:['name','action'], additionalProperties:false } },
+        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuário com status e métricas (quando disponíveis).', parameters: { type:'object', properties:{}, additionalProperties:false } },
+        { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
+        { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_income_today', description: 'Retorna a renda agregada de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_total_income', description: 'Retorna a renda total acumulada da planta.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_generation', description: 'Retorna a geracao para um intervalo padrao.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
+        { name: 'get_generation', description: 'Retorna a geracao para um intervalo padrão.', parameters: { type: 'object', properties: { range: { type: 'string', enum: ['today','yesterday','this_week','this_month','total'] } }, required: ['range'], additionalProperties: false } },
         { name: 'get_monitor', description: 'QueryPowerStationMonitor', parameters: { type: 'object', properties: { page_index: { type: 'number' }, page_size: { type: 'number' }, key: { type: 'string' }, orderby: { type: 'string' }, powerstation_type: { type: 'string' }, powerstation_status: { type: 'string' }, adcode: { type: 'string' }, org_id: { type: 'string' }, condition: { type: 'string' } }, additionalProperties: false } },
         { name: 'get_inverters', description: 'GetInverterAllPoint', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'get_weather', description: 'GetWeather', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -304,7 +304,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       ];
 
       const messages = [
-        { role: 'system', content: 'NUNCA use o caractere * nas respostas. NÃ£o use markdown. Ao listar dispositivos, responda apenas os nomes (um por linha). Quando perguntarem o cÃ´modo de um dispositivo, responda no formato "O dispositivo \"NOME\" estÃ¡ no cÃ´modo SALA.". Seja breve, direto e Ãºtil.' },
+        { role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos, responda apenas os nomes (um por linha). Quando perguntarem o cômodo de um dispositivo, responda no formato "O dispositivo \"NOME\" está no cômodo SALA.". Seja breve, direto e útil.' },
         { role: 'system', content: 'Para perguntas sobre dispositivos, use get_devices_overview para basear-se em dispositivos realmente vinculados (SmartThings/Tuya); inclua status on/off e, quando disponivel, potencia (W) e energia (kWh). Para ligar/desligar por nome (ex.: "desligue minha TV"), use a ferramenta device_toggle fornecendo name e action. Considere previsao do clima para sugerir evitar dispositivos nao criticos em caso de nebulosidade/chuva.' },
         ...prev.filter(m => m && m.role && m.content),
         input ? { role: 'user', content: input } : null,
@@ -338,7 +338,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       try {
         const low = input.toLowerCase();
         const listIntent = /(lista(r)?|mostrar|ver)\b.*\bdispositiv/.test(low) || /\bdispositivos\b/.test(low);
-        const wantRoom = /(c[Ã´o]modo|comodo|sala|localiza|onde|qual)/.test(low);
+        const wantRoom = /(comodo|comodo|sala|localiza|onde|qual)/.test(low);
         if (listIntent && !wantRoom) {
           const listStep = steps.find(s => s && s.ok && (s.name === 'st_list_devices' || s.name === 'tuya_list_devices'));
           if (listStep && listStep.result && Array.isArray(listStep.result.items)) {
@@ -352,8 +352,8 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
         const findStep = steps.find(s => s && s.ok && s.name === 'st_find_device_room');
         if (findStep && findStep.result && findStep.result.ok) {
           const n = String(findStep.result.name || '').trim();
-          const r = String(findStep.result.roomName || 'local nÃ£o especificado').trim();
-          if (n) answer = `O dispositivo "${n}" estÃ¡ no cÃ´modo ${r}.`;
+          const r = String(findStep.result.roomName || 'local não especificado').trim();
+          if (n) answer = `O dispositivo "${n}" está no cômodo ${r}.`;
         }
       } catch {}
 
@@ -371,7 +371,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           } else {
             // comando falhou -> responda erro claro e nÃ£o acrescente "Prontinho"
             const err = String(lastCmd.error || 'Falha ao enviar comando');
-            answer = 'NÃ£o consegui executar o comando no dispositivo agora. ' + err.replace(/^[A-Z]+:\s*/i,'');
+            answer = 'Não consegui executar o comando no dispositivo agora. ' + err.replace(/^[A-Z]+:\s*/i,'');
           }
         }
       } catch {}
@@ -467,9 +467,9 @@ Regras:
   router.get('/assistant/help', (req, res) => {
     const SYSTEM_PROMPT = `VocÃª Ã© o Assistente Virtual deste painel.
 Regras:
-1) Use ferramentas para dados reais (renda, geraÃ§Ã£o, mÃ©tricas, status, dispositivos).
-2) NÃ£o invente valores; se faltar permissÃ£o/credencial, solicite conexÃ£o/login.
-3) MÃ©tricas: cite apenas o perÃ­odo (Hoje/Ontem/Esta Semana/Este MÃªs/Total).
+1) Use ferramentas para dados reais (renda, geração, métricas, status, dispositivos).
+2) Não invente valores; se faltar permissão/credencial, solicite conexão/login.
+3) Métricas: cite apenas o período (Hoje/Ontem/Esta Semana/Este Mês/Total).
 4) Ao listar dispositivos, responda apenas os nomes (um por linha).
 5) Nunca utilize o caractere * e nÃ£o use markdown/bold.
 6) Seja breve, direto e Ãºtil. Idioma: pt-BR.`;
