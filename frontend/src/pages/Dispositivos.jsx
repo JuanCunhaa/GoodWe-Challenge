@@ -24,6 +24,7 @@ export default function Dispositivos(){
   const [editForm, setEditForm] = useState({ room_id: '', priority: '', essential: false })
 
   const currentAdapter = adapters[vendor]
+  const TUYA_SHOW_FUNCTIONS = String(import.meta.env.VITE_TUYA_SHOW_FUNCTIONS || '').toLowerCase() === 'true'
 
   function startEdit(d){
     setEditingDevice(d)
@@ -283,7 +284,7 @@ export default function Dispositivos(){
                     </details>
                   )}
                 </div>
-                {d.vendor==='tuya' && statusMap[d.id] && (()=>{
+                {TUYA_SHOW_FUNCTIONS && d.vendor==='tuya' && statusMap[d.id] && (()=>{
                   const raw = statusMap[d.id]
                   const funcs = Array.isArray(raw.functions) ? raw.functions : []
                   const map = raw.status_map || {}

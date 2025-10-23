@@ -26,14 +26,35 @@ function normalizeTuyaDevice(d) {
 }
 
 function pickOnOffCodeFromFunctions(funcs = []) {
-  return (
-    funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase() === 'bool') ||
-    funcs.find(x => x.code === 'switch_led' && String(x.type).toLowerCase() === 'bool') ||
-    funcs.find(x => x.code === 'power' && String(x.type).toLowerCase() === 'bool') ||
-    funcs.find(x => /^switch(_\d+)?$/.test(x.code) && String(x.type).toLowerCase() === 'enum') ||
-    funcs.find(x => x.code === 'switch_led' && String(x.type).toLowerCase() === 'enum') ||
-    funcs.find(x => x.code === 'power' && String(x.type).toLowerCase() === 'enum')
-  )
+  const isBool = (x) => {
+    const t = String(x?.type || '').toLowerCase()
+    return t === 'bool' || t === 'boolean'
+  }
+  const isEnum = (x) => String(x?.type || '').toLowerCase() === 'enum'
+  const mainSwitchCodes = ['switch','switch_1','switch_2','switch_3','switch_main','switch_led','power','power_switch','device_switch','master_switch']
+  // 1) Prefer boolean main switch-like codes
+  for (const code of mainSwitchCodes) {
+    const f = funcs.find(x => x?.code === code && isBool(x))
+    if (f) return f
+  }
+  // 2) Generic boolean that looks like power/switch
+  const fb = funcs.find(x => isBool(x) && /switch|power/i.test(x?.code||''))
+  if (fb) return fb
+  // 3) Enum with on/off range on known codes
+  for (const code of mainSwitchCodes) {
+    const f = funcs.find(x => x?.code === code && isEnum(x))
+    if (f) return f
+  }
+  // 4) Any enum with on/off-like values
+  const enums = funcs.filter(isEnum)
+  for (const f of enums){
+    try {
+      const vals = safeParse(f.values)
+      const range = Array.isArray(vals?.range) ? vals.range.map(s=> String(s).toLowerCase()) : []
+      if (range.includes('on') && range.includes('off')) return f
+    } catch {}
+  }
+  return null
 }
 
 function makeTuyaValue(deviceId, code, on) {
@@ -127,7 +148,7 @@ const TuyaAdapter = {
       code = codeCache.get(id)
     }
     // 2) se ainda não, tenta fallbacks comuns
-    const fallbackCodes = ['switch', 'switch_1', 'switch_led', 'power']
+    const fallbackCodes = ['switch', 'switch_1', 'switch_led', 'power', 'switch_main', 'power_switch', 'device_switch', 'master_switch']
     const codesToTry = code ? [code, ...fallbackCodes.filter(c => c !== code)] : fallbackCodes
 
     let lastErr = null
