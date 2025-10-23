@@ -1,4 +1,4 @@
-﻿import crypto from 'node:crypto';
+﻿﻿import crypto from 'node:crypto';
 
 export function registerTuyaRoutes(router, { dbApi, helpers }) {
   const { requireUser } = helpers;
@@ -11,36 +11,6 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
   const TUYA_SIGN_VERSION = String(process.env.TUYA_SIGN_VERSION || '2.0')
   const TUYA_LANG = String(process.env.TUYA_LANG || 'pt')
   let tuyaToken = { access_token: '', expire_time: 0 }
-
-  // Heuristic code lists for on/off
-  const SWITCH_CANDIDATES = [
-    'switch','switch_1','switch_2','switch_3','switch_main',
-    'power','power_switch','device_switch','master_switch','switch_led'
-  ]
-  const AVOID_CODES = new Set(['child_lock','countdown'])
-
-  function parseValues(v){ try { return typeof v === 'string' ? JSON.parse(v) : (v||{}); } catch { return {} } }
-  function findOnOffFunction(funcs){
-    // 1) Prefer known boolean switch-like codes
-    for (const c of SWITCH_CANDIDATES){
-      const f = funcs.find(x => x?.code === c && String(x?.type||'').toLowerCase() === 'boolean')
-      if (f) return { code: c, kind: 'boolean', on: true, off: false }
-    }
-    // 2) Any boolean that looks like power/switch
-    const fb = funcs.find(x => String(x?.type||'').toLowerCase() === 'boolean' && /switch|power/i.test(x?.code||''))
-    if (fb && !AVOID_CODES.has(fb.code)) return { code: fb.code, kind: 'boolean', on: true, off: false }
-    // 3) Enum with range that contains on/off-like values
-    const enums = funcs.filter(x => String(x?.type||'').toLowerCase() === 'enum')
-    for (const f of enums){
-      if (AVOID_CODES.has(f.code)) continue
-      const vals = parseValues(f.values)
-      const range = Array.isArray(vals?.range) ? vals.range.map(s=> String(s).toLowerCase()) : []
-      const onVal = range.find(v => ['on','open','start','enable'].includes(v))
-      const offVal = range.find(v => ['off','close','stop','disable'].includes(v))
-      if (onVal && offVal) return { code: f.code, kind: 'enum', on: onVal, off: offVal }
-    }
-    return null
-  }
 
   function sha256Hex(buf) { return crypto.createHash('sha256').update(buf).digest('hex') }
   function hmac256Hex(key, str) { return crypto.createHmac('sha256', key).update(str).digest('hex').toUpperCase() }
@@ -67,11 +37,9 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     for (const base of TUYA_FALLBACK_BASES) {
       const res = await tuyaSignedFetchOnce(base, path, opts)
       last = res
-      // Success: return immediately
       if (res.status === 200 && res.json && res.json.success === true) return res
-      // For any failure, try next base instead of returning early.
-      // Some regions return 400/403/401 when hitting the wrong cluster; fallback may still succeed.
-      continue
+      if (res.status === 401 || res.status === 429) return res
+      if (res.status !== 404 && res.status !== 502) return res
     }
     return last
   }
@@ -105,14 +73,9 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     const row = await dbApi.getLinkedAccount(user.id, 'tuya')
     if (!row) throw Object.assign(new Error('not linked'), { code: 'NOT_LINKED' })
     const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {}
-    let uid = String(meta.uid || '')
+    const uid = String(meta.uid || '')
     const uids = (meta.uids && typeof meta.uids === 'object') ? meta.uids : null
-    if (!uid && uids && Object.keys(uids).length > 0){
-      const firstKey = Object.keys(uids)[0]
-      const firstVal = uids[firstKey]
-      if (firstVal) uid = String(firstVal)
-    }
-    if (!uid) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' })
+    if (!uid && (!uids || Object.keys(uids).length === 0)) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' })
     return { uid, uids, row }
   }
 
@@ -146,89 +109,38 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
   router.get('/tuya/devices', async (req, res) => {
     try {
       const user = await requireUser(req, res); if (!user) return
-      let { uid, uids } = await ensureTuyaLinkedUser(user)
-      const qUid = String(req.query.uid || '').trim()
-      if (qUid) { uid = qUid }
+      const { uid } = await ensureTuyaLinkedUser(user)
       const token = await tuyaEnsureAppToken()
       
-      async function fetchForUid(u){
-        let items = []
-        const dbg = { base: {}, tried: [] }
-        // 1) Antigo caminho que funcionava: /v1.0/users/{uid}/devices
-        try {
-          const r1 = await tuyaSignAndFetch(`/v1.0/users/${encodeURIComponent(u)}/devices`, { method: 'GET', accessToken: token })
-          if (r1.status === 200 && r1.json?.success === true) {
-            const arr = Array.isArray(r1.json?.result) ? r1.json.result : []
-            if (arr.length) items = arr
-          }
-          dbg.base.users_devices = { status: r1?.status, success: r1?.json?.success===true, count: Array.isArray(r1?.json?.result)? r1.json.result.length : null, apiBase: r1?.apiBase }
-        } catch {}
-        // 2) Fallbacks mais novos (iot-03): users/{uid}/devices e devices?uid
-        if (items.length === 0) {
-          try {
-            const r2 = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(u)}/devices`, { method: 'GET', query: 'page_no=1&page_size=100', accessToken: token })
-            if (r2.status === 200 && r2.json?.success === true) {
-              const res = r2.json?.result
-              const arr = Array.isArray(res?.list) ? res.list : (Array.isArray(res?.devices) ? res.devices : [])
-              if (arr && arr.length) items = arr
-            }
-            dbg.base.iot03_users_devices = { status: r2?.status, success: r2?.json?.success===true, len: (r2?.json?.result?.list?.length || r2?.json?.result?.devices?.length || 0), apiBase: r2?.apiBase }
-          } catch {}
+      // 1) Antigo caminho que funcionava: /v1.0/users/{uid}/devices
+      let items = []
+      try {
+        const r1 = await tuyaSignAndFetch(`/v1.0/users/${encodeURIComponent(uid)}/devices`, { method: 'GET', accessToken: token })
+        if (r1.status === 200 && r1.json?.success === true) {
+          const arr = Array.isArray(r1.json?.result) ? r1.json.result : []
+          if (arr.length) items = arr
         }
-        if (items.length === 0) {
-          try {
-            const r3 = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method: 'GET', query: `page_no=1&page_size=100&uid=${encodeURIComponent(u)}`, accessToken: token })
-            if (r3.status === 200 && r3.json?.success === true) {
-              const arr = Array.isArray(r3.json?.result?.list) ? r3.json.result.list : []
-              if (arr && arr.length) items = arr
-            }
-            dbg.base.iot03_devices_uid = { status: r3?.status, success: r3?.json?.success===true, len: (r3?.json?.result?.list?.length || 0), apiBase: r3?.apiBase }
-          } catch {}
-        }
-        // 2.3) Último fallback: todos os devices do projeto (sem uid)
-        if (items.length === 0) {
-          try {
-            const r4 = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method: 'GET', query: `page_no=1&page_size=100`, accessToken: token })
-            if (r4.status === 200 && r4.json?.success === true) {
-              const arr = Array.isArray(r4.json?.result?.list) ? r4.json.result.list : []
-              if (arr && arr.length) items = arr
-            }
-            dbg.base.iot03_devices_all = { status: r4?.status, success: r4?.json?.success===true, len: (r4?.json?.result?.list?.length || 0), apiBase: r4?.apiBase }
-          } catch {}
-        }
-        // 3) Homes -> devices by home (algumas contas expõem só por home)
-        if (items.length === 0) {
-          try {
-            const rh = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(u)}/homes`, { method: 'GET', accessToken: token })
-            const homes = (rh.status===200 && rh.json?.success===true) ? (Array.isArray(rh.json?.result) ? rh.json.result : (Array.isArray(rh.json?.result?.homes) ? rh.json.result.homes : [])) : []
-            dbg.base.iot03_homes = { status: rh?.status, success: rh?.json?.success===true, count: homes.length, apiBase: rh?.apiBase }
-            for (const h of homes){
-              const homeId = h?.home_id || h?.id
-              if (!homeId) continue
-              try {
-                const rd = await tuyaSignAndFetch(`/v1.0/iot-03/homes/${encodeURIComponent(homeId)}/devices`, { method: 'GET', accessToken: token })
-                if (rd.status===200 && rd.json?.success===true){
-                  const arr = Array.isArray(rd.json?.result?.list) ? rd.json.result.list : (Array.isArray(rd.json?.result?.devices) ? rd.json.result.devices : [])
-                  if (arr && arr.length) { items = arr; break }
-                }
-              } catch {}
-            }
-          } catch {}
-        }
-        return { items, dbg }
-      }
+      } catch {}
 
-      // try primary uid, then any other registered uids
-      let { items, dbg } = await fetchForUid(uid)
-      const dbgAll = { primary_uid: uid, attempts: [ { uid, ...dbg } ] }
-      if ((!items || items.length === 0) && uids && Object.keys(uids).length > 0){
-        for (const key of Object.keys(uids)){
-          const alt = String(uids[key]||'').trim()
-          if (!alt || alt === uid) continue
-          const r = await fetchForUid(alt)
-          dbgAll.attempts.push({ uid: alt, ...r.dbg })
-          if (r.items && r.items.length){ items = r.items; break }
-        }
+      // 2) Fallbacks mais novos (iot-03): users/{uid}/devices e devices?uid
+      if (items.length === 0) {
+        try {
+          const r2 = await tuyaSignAndFetch(`/v1.0/iot-03/users/${encodeURIComponent(uid)}/devices`, { method: 'GET', query: 'page_no=1&page_size=100', accessToken: token })
+          if (r2.status === 200 && r2.json?.success === true) {
+            const res = r2.json?.result
+            const arr = Array.isArray(res?.list) ? res.list : (Array.isArray(res?.devices) ? res.devices : [])
+            if (arr && arr.length) items = arr
+          }
+        } catch {}
+      }
+      if (items.length === 0) {
+        try {
+          const r3 = await tuyaSignAndFetch(`/v1.0/iot-03/devices`, { method: 'GET', query: `page_no=1&page_size=100&uid=${encodeURIComponent(uid)}`, accessToken: token })
+          if (r3.status === 200 && r3.json?.success === true) {
+            const arr = Array.isArray(r3.json?.result?.list) ? r3.json.result.list : []
+            if (arr && arr.length) items = arr
+          }
+        } catch {}
       }
 
       // 3) Enriquecer com roomId/roomName
@@ -306,8 +218,7 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
         enriched.push({ ...d, roomId, roomName })
       }
 
-      const debug = String(req.query.debug||'')==='1'
-      res.json(debug ? { ok:true, items: enriched, total: enriched.length, debug: dbgAll } : { ok: true, items: enriched, total: enriched.length })
+      res.json({ ok: true, items: enriched, total: enriched.length })
     } catch (e) {
       const code = String(e?.code || '')
       if (code === 'NOT_LINKED' || code === 'MISSING_UID') return res.status(401).json({ ok: false, error: code.toLowerCase() })
@@ -331,14 +242,13 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       let normalized = null
       if (s.status === 200 && s.json?.success === true) {
         const arr = Array.isArray(s.json?.result) ? s.json.result : []
-        let code = SWITCH_CANDIDATES.find(k => arr.some(x => x?.code === k)) || ''
+        const known = ['switch', 'switch_1', 'switch_led', 'power']
+        let code = known.find(k => arr.some(x => x?.code === k)) || ''
         const entry = code ? arr.find(x => x?.code === code) : null
-        if (entry) {
-          const v = entry.value
-          const isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on')
-          const value = isOn ? 'on' : 'off'
-          normalized = { components: { main: { switch: { switch: { value } } } } }
-        }
+        const v = entry?.value
+        const isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on')
+        const value = (entry == null) ? '' : (isOn ? 'on' : 'off')
+        normalized = { components: { main: { switch: { switch: { value } } } } }
       }
       res.json({ ok: true, result: r.json?.result, status: normalized })
     } catch (e) {
@@ -361,26 +271,21 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       const map = Object.fromEntries(list.map(it => [it.code, it.value]));
       const fnPath = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/functions`
       const f = await tuyaSignAndFetch(fnPath, { method: 'GET', accessToken: token })
-      let isOn = null; let code = ''
+      let code = ''
       if (f.status === 200 && f.json?.success === true) {
         const funcs = Array.isArray(f.json?.result?.functions) ? f.json.result.functions : []
-        const pick = findOnOffFunction(funcs)
-        if (pick) {
-          code = pick.code
-          if (Object.prototype.hasOwnProperty.call(map, code)) {
-            const v = map[code];
-            if (pick.kind === 'boolean') isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on')
-            else if (pick.kind === 'enum') isOn = (String(v).toLowerCase() === String(pick.on))
-          }
-        }
-        // Include raw debug into response
-        return res.json({ ok: true, on: isOn, status: (isOn==null? map : { components: { main: { switch: { switch: { value: isOn ? 'on' : 'off' } } } } }), code, raw_status: list, status_map: map, functions: funcs })
+        code = (['switch_led','switch','switch_1','power'].find(k => funcs.some(x => x?.code === k))) || ''
+      }
+      let isOn = null;
+      if (code && Object.prototype.hasOwnProperty.call(map, code)) {
+        const v = map[code];
+        isOn = (v === true) || (v === 1) || (String(v).toLowerCase() === 'true') || (String(v).toLowerCase() === 'on');
       }
       // Normalize to SmartThings-like shape so the UI consegue ler 'components.main.switch.switch.value'
       const normalized = (isOn == null)
         ? null
         : { components: { main: { switch: { switch: { value: isOn ? 'on' : 'off' } } } } };
-      res.json({ ok: true, on: isOn, status: normalized || map, code, raw_status: list, status_map: map, functions: [] });
+      res.json({ ok: true, on: isOn, status: normalized || map, code });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 
@@ -408,19 +313,17 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       const action = String(req.params.action || 'off').toLowerCase();
       const fnPath = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/functions`
       const f = await tuyaSignAndFetch(fnPath, { method: 'GET', accessToken: token })
-      if (f.status !== 200 || f.json?.success !== true) return res.status(400).json({ ok:false, error:'cannot read functions' })
-      const funcs = Array.isArray(f.json?.result?.functions) ? f.json.result.functions : []
-      const pick = findOnOffFunction(funcs)
-      if (!pick) return res.status(400).json({ ok:false, error:'no compatible on/off function for this device' })
-      const code = pick.code
-      const value = (action === 'on') ? pick.on : pick.off
-      const payload = { commands: [{ code, value }] };
+      let code = ''
+      if (f.status === 200 && f.json?.success === true) {
+        const funcs = Array.isArray(f.json?.result?.functions) ? f.json.result.functions : []
+        code = (['switch_led','switch','switch_1','power'].find(k => funcs.some(x => x?.code === k))) || ''
+      }
+      if (!code) return res.status(400).json({ ok: false, error: 'no switch code found for this device' });
+      const payload = { commands: [{ code, value: action === 'on' }] };
       const path = `/v1.0/iot-03/devices/${encodeURIComponent(id)}/commands`;
       const { status, json } = await tuyaSignAndFetch(path, { method: 'POST', bodyObj: payload, accessToken: token });
       if (status !== 200 || json?.success !== true) return res.status(status).json(json || { ok: false });
-      res.json({ ok: true, result: json.result, code, value });
+      res.json({ ok: true, result: json.result, code });
     } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
   });
 }
-
-
