@@ -226,7 +226,12 @@ export default function Dispositivos(){
             const caps = (Array.isArray(d.components)? d.components : []).flatMap(c => (c.capabilities||[]).map(x=> x.id||x.capability||'')).filter(Boolean)
             const stObj = statusMap[d.id]
             const st = stObj?.status || stObj || null
-            const hasSwitch = caps.includes('switch')
+            let hasSwitch = caps.includes('switch')
+            // Tuya: se já temos status normalizado com switch, habilitar botão mesmo sem capability
+            if (!hasSwitch && d.vendor === 'tuya'){
+              const v = st?.components?.main?.switch?.switch?.value
+              if (v !== undefined) hasSwitch = true
+            }
             const comp = getSwitchComponent(d)
             const rawVal = st?.components?.[comp]?.switch?.switch?.value
             let isOn = false

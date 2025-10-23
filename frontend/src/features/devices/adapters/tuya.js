@@ -131,7 +131,8 @@ const TuyaAdapter = {
     })
 
     // carrega status real (via endpoint normalizado do backend)
-    const ids = items.filter(d => codeCache.get(d.id)).map(d => d.id)
+    // buscamos status de todos para permitir que o backend sugira o DP e o botão apareça
+    const ids = items.map(d => d.id)
     await batch(ids, 6, async (id) => {
       try {
         const s = await integrationsApi.tuyaDeviceStatus(token, id) // { ok, code, status }
