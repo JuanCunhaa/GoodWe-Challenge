@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { goodweApi, convertToBRL } from '../services/goodweApi.js'
 import { energyService } from '../services/energyService.js'
-import { Calendar, Downãoad, RefreshCw, Zap, PlugZap, Eye, EyeOff } from 'lucide-react'
+import { Calendar, Download, RefreshCw, Zap, PlugZap, Eye, EyeOff } from 'lucide-react'
 
 function parseHM(hm){ try{ const [h,m]=String(hm).split(':').map(Number); return h*60+m }catch{return null} }
 function integrateSeries(xy){ if(!xy||xy.length<2) return 0; let kwh=0; for(let i=1;i<xy.length;i++){ const a=xy[i-1], b=xy[i]; const m0=parseHM(a.x), m1=parseHM(b.x); if(m0==null||m1==null) continue; const dtH=Math.max(0,(m1-m0)/60); const y=Number(a.y)||0; kwh+=(y*dtH)/1000; } return kwh; }
@@ -30,7 +30,7 @@ function LineChart({ series=[], height=260, socXY=[], xLabels=[] }){
   }
 
   const [hover, setHover] = useState(null) // { i, x }
-  functionãonãove(e){
+  function onMove(e){
     const rect = e.currentTarget.getBoundingClientRect()
     const scale = width / rect.width // css px -> svg units
     let xSvg = (e.clientX - rect.left) * scale
@@ -55,7 +55,7 @@ function LineChart({ series=[], height=260, socXY=[], xLabels=[] }){
 
   return (
     <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="block"
-      onãouseMove={onãove} onãouseLeave={()=>setHover(null)}>
+      onMouseMove={onMove} onMouseLeave={()=>setHover(null)}>
       <g opacity={0.12}>{[0.25,0.5,0.75].map((t,i)=>(<line key={i} x1={pad} x2={width-pad} y1={pad + (height-pad*2)*t} y2={pad + (height-pad*2)*t} stroke="#94a3b8" strokeDasharray="4 4"/>))}</g>
       {(minY < 0 && maxY > 0) && (
         <line x1={pad} x2={width-pad} y1={mapY(0)} y2={mapY(0)} stroke="#64748b" strokeDasharray="4 4" opacity="0.35"/>
@@ -242,14 +242,14 @@ export default function Geracao(){
           const loadMap= mapXY(by['consumptionkwh']||by['loadkwh'])
           const buyMap = mapXY(by['gridkwhbuy']||by['gridwkwhbuy']||by['gridbuykwh']||by['buykwh'])
           const sellMap= mapXY(by['gridkwhsell']||by['gridwkwhsell']||by['gridsellkwh']||by['sellkwh'])
-          const inãouseMap = mapXY(by['inãousekwh']||by['selfusekwh'])
-          const keys = Array.from(new Set([ ...genMap.keys(), ...loadMap.keys(), ...buyMap.keys(), ...sellMap.keys(), ...inãouseMap.keys() ])).filter(ds=> ds>=start && ds<=end).sort()
+          const inhouseMap = mapXY(by['inhousekwh']||by['selfusekwh'])
+          const keys = Array.from(new Set([ ...genMap.keys(), ...loadMap.keys(), ...buyMap.keys(), ...sellMap.keys(), ...inhouseMap.keys() ])).filter(ds=> ds>=start && ds<=end).sort()
           for(const ds of keys){
             let gen = genMap.get(ds)
             const load= loadMap.get(ds) ?? 0
             const gridBuy = buyMap.get(ds)
             const gridSell= sellMap.get(ds)
-            if (gen==null) gen = (inãouseMap.get(ds)||0) + (gridSell||0)
+            if (gen==null) gen = (inhouseMap.get(ds)||0) + (gridSell||0)
             const grid = (gridBuy||0) + (gridSell||0) || (gridBuy ?? gridSell ?? 0)
             const batt = Math.max(0, Math.abs((gen + (gridBuy||0)) - (load + (gridSell||0))))
             const lbl = new Date(ds+'T00:00:00').toLocaleDateString('pt-BR',{ weekday:'short' })
@@ -348,15 +348,15 @@ export default function Geracao(){
           const loadMap= mapXY(by['consumptionkwh']||by['loadkwh'])
           const buyMap = mapXY(by['gridkwhbuy']||by['gridwkwhbuy']||by['gridbuykwh']||by['buykwh'])
           const sellMap= mapXY(by['gridkwhsell']||by['gridwkwhsell']||by['gridsellkwh']||by['sellkwh'])
-          const inãouseMap = mapXY(by['inãousekwh']||by['selfusekwh'])
+          const inhouseMap = mapXY(by['inhousekwh']||by['selfusekwh'])
           // Use as datas exatamente como vieram do JSON (união de chaves), ordenadas
-          const keys = Array.from(new Set([ ...genMap.keys(), ...loadMap.keys(), ...buyMap.keys(), ...sellMap.keys(), ...inãouseMap.keys() ])).sort()
+          const keys = Array.from(new Set([ ...genMap.keys(), ...loadMap.keys(), ...buyMap.keys(), ...sellMap.keys(), ...inhouseMap.keys() ])).sort()
           for(const ds of keys){
             let gen = genMap.get(ds)
             const load= loadMap.get(ds) ?? 0
             const gridBuy = buyMap.get(ds)
             const gridSell= sellMap.get(ds)
-            if (gen==null) gen = (inãouseMap.get(ds)||0) + (gridSell||0)
+            if (gen==null) gen = (inhouseMap.get(ds)||0) + (gridSell||0)
             const grid = (gridBuy||0) + (gridSell||0) || (gridBuy ?? gridSell ?? 0)
             const batt = Math.max(0, Math.abs((gen + (gridBuy||0)) - (load + (gridSell||0))))
             list.push({ label: ds.slice(8,10), ds, gen, load, batt, grid })
@@ -498,14 +498,14 @@ export default function Geracao(){
           const loadMap= mapXY(by['consumptionkwh']||by['loadkwh'])
           const buyMap = mapXY(by['gridkwhbuy']||by['gridwkwhbuy']||by['gridbuykwh']||by['buykwh'])
           const sellMap= mapXY(by['gridkwhsell']||by['gridwkwhsell']||by['gridsellkwh']||by['sellkwh'])
-          const inãouseMap = mapXY(by['inãousekwh']||by['selfusekwh'])
-          const keys = Array.from(new Set([ ...genMap.keys(), ...loadMap.keys(), ...buyMap.keys(), ...sellMap.keys(), ...inãouseMap.keys() ])).sort()
+          const inhouseMap = mapXY(by['inhousekwh']||by['selfusekwh'])
+          const keys = Array.from(new Set([ ...genMap.keys(), ...loadMap.keys(), ...buyMap.keys(), ...sellMap.keys(), ...inhouseMap.keys() ])).sort()
           for (const key of keys){
             let gen = genMap.get(key)
             const load= loadMap.get(key) ?? 0
             const gridBuy= buyMap.get(key)
             const gridSell= sellMap.get(key)
-            if (gen==null) gen = (inãouseMap.get(key)||0) + (gridSell||0)
+            if (gen==null) gen = (inhouseMap.get(key)||0) + (gridSell||0)
             const grid= (gridBuy||0) + (gridSell||0) || (gridBuy ?? gridSell ?? 0)
             const batt= Math.max(0, Math.abs((gen + (gridBuy||0)) - (load + (gridSell||0))))
             list.push({ label: key, gen, load, batt, grid })
@@ -549,7 +549,7 @@ export default function Geracao(){
       const gr=series.find(s=>s.label==='Grid')?.xy?.[i]?.y ?? ''
       return `${p.x},${pv},${ld},${gr}`
     }) : agg.map(r=> `${r.label},${r.gen.toFixed(3)},${r.load.toFixed(3)},${r.grid.toFixed(3)}`)).join('\n')
-    const blob=new Blob([header+rows],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.downãoad=`generation_${mode.toLowerCase()}_${date}.csv`; a.click(); URL.revokeObjectURL(url)
+    const blob=new Blob([header+rows],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`generation_${mode.toLowerCase()}_${date}.csv`; a.click(); URL.revokeObjectURL(url)
   }
 
   function feedinTariffBRL(){
@@ -616,7 +616,7 @@ export default function Geracao(){
             {/* Removido Ano */}
             <div className="panel flex items-center gap-2 py-1"><Calendar className="w-4 h-4 muted"/><input type="date" className="outline-none" value={date} onChange={e=>setDate(e.target.value)} /></div>
             <button className="btn" onClick={refresh}><RefreshCw className="w-4 h-4"/></button>
-            <button className="btn" onClick={exportCSV}><Downãoad className="w-4 h-4"/> Exportar</button>
+            <button className="btn" onClick={exportCSV}><Download className="w-4 h-4"/> Exportar</button>
             {(() => {
               // Hide after first seed per navegador/planta
               const token = localStorage.getItem('token');
@@ -625,7 +625,7 @@ export default function Geracao(){
               return null;
               return (
                 <button className="btn" onClick={handleBackfill} disabled={backfilling} title="Pré-carregar últimos dias no cache local">
-                  <Downãoad className="w-4 h-4"/>
+                  <Download className="w-4 h-4"/>
                   {backfilling ? `Pré-carreganão ${backfillInão.completed}/${backfillInão.total}` : 'Pré-carregar 365d'}
                 </button>
               )
@@ -660,6 +660,9 @@ export default function Geracao(){
     </section>
   )
 }
+
+
+
 
 
 
