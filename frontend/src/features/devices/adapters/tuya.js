@@ -31,14 +31,14 @@ function pickOnOffCodeFromFunctions(funcs = []) {
     return t === 'bool' || t === 'boolean'
   }
   const isEnum = (x) => String(x?.type || '').toLowerCase() === 'enum'
-  const mainSwitchCodes = ['switch','switch_1','switch_2','switch_3','switch_main','switch_led','power','power_switch','device_switch','master_switch']
+  const mainSwitchCodes = ['switch','switch_spray','switch_1','switch_2','switch_3','switch_main','power','power_switch','device_switch','master_switch','power_go','light','switch_led','switch_charge']
   // 1) Prefer boolean main switch-like codes
   for (const code of mainSwitchCodes) {
     const f = funcs.find(x => x?.code === code && isBool(x))
     if (f) return f
   }
-  // 2) Generic boolean that looks like power/switch
-  const fb = funcs.find(x => isBool(x) && /switch|power/i.test(x?.code||''))
+  // 2) Generic boolean that looks like power/switch/spray/light
+  const fb = funcs.find(x => isBool(x) && /(switch|power|spray|light)/i.test(x?.code||''))
   if (fb) return fb
   // 3) Enum with on/off range on known codes
   for (const code of mainSwitchCodes) {
@@ -117,15 +117,21 @@ const TuyaAdapter = {
     // (mantém statusMap por device conforme re-carregado abaixo)
 
     // pré-carrega functions e on/off code para quem parece switch
-    const candidates = items.filter(d => (d.components?.[0]?.capabilities || []).some(c => (c.id || c.capability) === 'switch'))
-    await batch(candidates, 6, async (d) => {
+    await batch(items, 6, async (d) => {
       try {
         await ensureFunctionsCached(token, d.id)
+        const code = codeCache.get(d.id)
+        if (code) {
+          const caps = Array.isArray(d.components?.[0]?.capabilities) ? d.components[0].capabilities : []
+          if (!caps.some(c => (c.id || c.capability) === 'switch')) {
+            d.components = [{ id: 'main', capabilities: [...caps, { id: 'switch' }] }]
+          }
+        }
       } catch {}
     })
 
     // carrega status real (via endpoint normalizado do backend)
-    const ids = candidates.map(d => d.id)
+    const ids = items.filter(d => codeCache.get(d.id)).map(d => d.id)
     await batch(ids, 6, async (id) => {
       try {
         const s = await integrationsApi.tuyaDeviceStatus(token, id) // { ok, code, status }
@@ -148,7 +154,7 @@ const TuyaAdapter = {
       code = codeCache.get(id)
     }
     // 2) se ainda não, tenta fallbacks comuns
-    const fallbackCodes = ['switch', 'switch_1', 'switch_led', 'power', 'switch_main', 'power_switch', 'device_switch', 'master_switch']
+    const fallbackCodes = ['switch', 'switch_1', 'switch_led', 'power', 'switch_main', 'power_switch', 'device_switch', 'master_switch', 'switch_spray', 'power_go', 'light', 'switch_charge']
     const codesToTry = code ? [code, ...fallbackCodes.filter(c => c !== code)] : fallbackCodes
 
     let lastErr = null

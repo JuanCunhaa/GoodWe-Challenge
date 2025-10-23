@@ -212,10 +212,27 @@ export async function getRecommendations({ plant_id, fetchWeather, fetchDevices,
         return true;
       });
 
-      // Top 3 consumers (últimas 24h)
-      const top3 = safeAgg.sort((a,b)=> (b.energy_wh||0)-(a.energy_wh||0)).slice(0,3);
-      for (const t of top3){
-        recs.unshift({ text: `"${t.name}" consumiu ~${(t.energy_wh/1000).toFixed(2)} kWh nas últimas 24h (ligado por ~${t.on_minutes} min).`, metric: { device_id: t.device_id, vendor: t.vendor, energy_kwh: +(t.energy_wh/1000).toFixed(3), on_minutes: t.on_minutes } });
+      // Em vez de repetir o "top consumidor" (já exibido na UI), sumarize e proponha ações por prioridade
+      const lowMedium = safeAgg
+        .map(t => {
+          const mm = metaMap[t.key] || {};
+          const pr = Number(mm.priority||0) || null;
+          return { ...t, priority: pr };
+        })
+        .filter(t => t.priority===1 || t.priority===2);
+
+      if (lowMedium.length){
+        const sorted = lowMedium.slice().sort((a,b)=> (b.energy_wh||0)-(a.energy_wh||0));
+        const topLM = sorted.slice(0, 5);
+        const totalKwhLM = +(topLM.reduce((s,it)=> s + (Number(it.energy_wh||0)/1000), 0).toFixed(3));
+        const names = topLM.map(x => x.name).filter(Boolean).slice(0,3).join(', ');
+        recs.unshift({
+          text: `Dispositivos de prioridade baixa/média nas últimas 24h somaram ~${totalKwhLM.toFixed(2)} kWh (${names || (topLM.length+" itens")}). Considere desligá-los quando não essenciais.`,
+          metric: {
+            total_energy_kwh: totalKwhLM,
+            items: topLM.map(x => ({ vendor: x.vendor, device_id: x.device_id, name: x.name, energy_kwh: +((x.energy_wh||0)/1000).toFixed(3), priority: x.priority })),
+          }
+        });
       }
 
       // Top cômodo (somente 1), somando por roomName (fallback) ou app room quando possível

@@ -14,10 +14,10 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
 
   // Heuristic code lists for on/off
   const SWITCH_CANDIDATES = [
-    'switch','switch_1','switch_2','switch_3','switch_main',
-    'power','power_switch','device_switch','master_switch','switch_led'
+    'switch','switch_spray','switch_1','switch_2','switch_3','switch_main',
+    'power','power_switch','device_switch','master_switch','power_go','light','switch_led','switch_charge'
   ]
-  const AVOID_CODES = new Set(['child_lock','countdown'])
+  const AVOID_CODES = new Set(['child_lock','countdown','countdown_1','countdown_2','quick_feed','manual_feed','export_calibrate','weight_calibrate','factory_reset','reset_map','reset_edge_brush','reset_roll_brush','reset_filter','reset_duster_cloth','seek','request','path_data','command_trans','voice_data','timer','notification','volume_set','snooze','snooze_time','meal_plan','moodlighting','colour_data_hsv'])
 
   function parseValues(v){ try { return typeof v === 'string' ? JSON.parse(v) : (v||{}); } catch { return {} } }
   function findOnOffFunction(funcs){
@@ -26,8 +26,8 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       const f = funcs.find(x => x?.code === c && String(x?.type||'').toLowerCase() === 'boolean')
       if (f) return { code: c, kind: 'boolean', on: true, off: false }
     }
-    // 2) Any boolean that looks like power/switch
-    const fb = funcs.find(x => String(x?.type||'').toLowerCase() === 'boolean' && /switch|power/i.test(x?.code||''))
+    // 2) Any boolean that looks like power/switch/spray/light
+    const fb = funcs.find(x => String(x?.type||'').toLowerCase() === 'boolean' && /(switch|power|spray|light)/i.test(x?.code||''))
     if (fb && !AVOID_CODES.has(fb.code)) return { code: fb.code, kind: 'boolean', on: true, off: false }
     // 3) Enum with range that contains on/off-like values
     const enums = funcs.filter(x => String(x?.type||'').toLowerCase() === 'enum')

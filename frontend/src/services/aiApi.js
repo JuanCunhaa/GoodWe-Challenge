@@ -20,5 +20,10 @@ export const aiApi = {
   },
   devicesOverview: (token) => request(`/ai/devices/overview`, { token }),
   iotUptime: (token, vendor, id, window = '24h') => request(`/iot/device/${encodeURIComponent(vendor)}/${encodeURIComponent(id)}/uptime?window=${encodeURIComponent(window)}`, { token }),
+  deviceUsageByHour: (token, vendor, id, window = '24h', tariff) => {
+    const q = new URLSearchParams({ window: String(window) });
+    if (typeof tariff === 'number' && !Number.isNaN(tariff)) q.set('tariff', String(tariff));
+    return request(`/iot/device/${encodeURIComponent(vendor)}/${encodeURIComponent(id)}/usage-by-hour?${q.toString()}`, { token });
+  },
   topConsumers: (token, window = '60') => request(`/iot/top-consumers?window=${encodeURIComponent(window)}`, { token }),
 };

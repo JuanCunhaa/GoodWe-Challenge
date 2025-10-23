@@ -14,6 +14,7 @@ export default function Sugestoes(){
   const [recs, setRecs] = useState([])
   const [devices, setDevices] = useState([])
   const [uptime, setUptime] = useState({})
+  const [usage, setUsage] = useState({}) // key -> { kwh, cost_brl? }
 
   const totals = useMemo(()=>({
     gen: Number(forecast?.total_generation_kwh||0),
@@ -43,21 +44,35 @@ export default function Sugestoes(){
 
   const topNow = useMemo(()=> devices.filter(d => d && d.on && Number.isFinite(+d.power_w)).sort((a,b)=> b.power_w - a.power_w).slice(0,5), [devices])
 
-  // Fetch uptime for top devices (janela 60 min)
+  // Fetch uptime (24h) and energy usage (24h) for top devices
   useEffect(()=>{
     const run = async () => {
       try{
         const token = localStorage.getItem('token'); if (!token) return;
+        const tariff = (import.meta.env.VITE_TARIFF_BRL_PER_KWH!=null) ? Number(import.meta.env.VITE_TARIFF_BRL_PER_KWH) : undefined;
         await Promise.all(topNow.map(async (d)=>{
           try{
-            const r = await aiApi.iotUptime(token, d.vendor, d.id, '60');
-            if (r && typeof r.total_on_minutes === 'number') setUptime(m => ({ ...m, [d.vendor+'|'+d.id]: r.total_on_minutes }));
+            const key = d.vendor+'|'+d.id;
+            const r = await aiApi.iotUptime(token, d.vendor, d.id, '24h');
+            if (r && typeof r.total_on_minutes === 'number') setUptime(m => ({ ...m, [key]: r.total_on_minutes }));
+            const u = await aiApi.deviceUsageByHour(token, d.vendor, d.id, '24h', tariff);
+            const kwh = Number(u?.total_energy_kwh || 0);
+            const cost = Number(u?.total_cost_brl || NaN);
+            setUsage(m => ({ ...m, [key]: { kwh, cost_brl: Number.isFinite(cost)? cost : undefined } }));
           } catch {}
         }))
       } catch {}
     };
     if (topNow.length) run();
   }, [topNow])
+
+  function formatMinutes(total){
+    const m = Math.round(Number(total||0));
+    const h = Math.floor(m/60);
+    const mm = m % 60;
+    if (h <= 0) return `${m} min`;
+    return `${h}h ${mm}m`;
+  }
 
   return (
     <div className="grid gap-4">
@@ -104,8 +119,16 @@ export default function Sugestoes(){
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-extrabold">{Math.round(d.power_w)} W</div>
-                      {Number.isFinite(+d.energy_kwh) && <div className="muted text-xs">{(+d.energy_kwh).toFixed(1)} kWh</div>}
-                      {typeof uptime[d.vendor+'|'+d.id] === 'number' && <div className="muted text-xs">Uptime (60m): {Math.round(uptime[d.vendor+'|'+d.id])} min</div>}
+                      {(() => {
+                        const key = d.vendor+'|'+d.id; const u = usage[key];
+                        if (!u) return null;
+                        return (
+                          <>
+                            <div className="muted text-xs">{(u.kwh||0).toFixed(2)} kWh (24h){Number.isFinite(u.cost_brl)? ` • R$ ${u.cost_brl.toFixed(2)}`: ''}</div>
+                          </>
+                        );
+                      })()}
+                      {typeof uptime[d.vendor+'|'+d.id] === 'number' && <div className="muted text-xs">Uptime (24h): {formatMinutes(uptime[d.vendor+'|'+d.id])}</div>}
                     </div>
                   </div>
                 ))}
