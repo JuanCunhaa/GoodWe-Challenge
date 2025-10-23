@@ -55,6 +55,11 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     const str = TUYA_ACCESS_ID + (accessToken || '') + t + stringToSign
     const sign = hmac256Hex(TUYA_ACCESS_SECRET, str)
     const headers = { 'client_id': TUYA_ACCESS_ID, 'sign': sign, 't': t, 'sign_method': 'HMAC-SHA256', 'sign_version': TUYA_SIGN_VERSION, 'lang': TUYA_LANG }
+    // Tuya OpenAPI 2.1 exige headers adicionais em alguns projetos
+    if (String(TUYA_SIGN_VERSION) === '2.1') {
+      headers['sign_headers'] = 'client_id'
+      headers['mode'] = 'sha256'
+    }
     if (accessToken) headers['access_token'] = accessToken
     if (body) headers['Content-Type'] = 'application/json'
     const url = `${apiBase}${urlPath}`
@@ -68,8 +73,8 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
       const res = await tuyaSignedFetchOnce(base, path, opts)
       last = res
       if (res.status === 200 && res.json && res.json.success === true) return res
-      if (res.status === 401 || res.status === 429) return res
-      if (res.status !== 404 && res.status !== 502) return res
+      // Não pare cedo em erros; tente as demais regiões
+      continue
     }
     return last
   }
@@ -85,6 +90,7 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     const stringToSign = ['GET', contentHash, '', `${path}?${query}`].join('\n')
     const sign = hmac256Hex(TUYA_ACCESS_SECRET, TUYA_ACCESS_ID + t + stringToSign)
     const headers = { 'client_id': TUYA_ACCESS_ID, 'sign': sign, 't': t, 'sign_method': 'HMAC-SHA256', 'sign_version': TUYA_SIGN_VERSION }
+    if (String(TUYA_SIGN_VERSION) === '2.1') { headers['sign_headers'] = 'client_id'; headers['mode'] = 'sha256' }
     let last
     for (const base of TUYA_FALLBACK_BASES) {
       const url = `${base}${path}?${query}`
