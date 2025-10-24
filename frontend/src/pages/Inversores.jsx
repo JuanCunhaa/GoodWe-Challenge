@@ -75,6 +75,11 @@ export default function Inversores(){
   useEffect(() => {
     try { localStorage.setItem('inverters_view', view) } catch {}
   }, [view])
+  const [fade, setFade] = useState(1)
+  function setViewWithAnim(next){
+    if (next === view) return
+    try{ setFade(0); setTimeout(()=> { setView(next); setFade(1) }, 130) } catch { setView(next) }
+  }
 
   function InverterCard({ r }){
     const b = badgeStatus(r.status)
@@ -136,16 +141,20 @@ export default function Inversores(){
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
           <div className="h2">Inversores {count!=null && <span className="muted text-sm">(total: {count})</span>}</div>
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="panel flex items-center gap-1 py-1 px-1">
-              <span className="hidden sm:inline text-xs muted ml-1">Visualização:</span>
-              <button className={`btn ${view==='cards' ? 'btn-primary' : ''}`} onClick={()=>setView('cards')} aria-label="Cards" title="Cards">
-                <LayoutGrid className="w-4 h-4"/>
-                <span className="hidden sm:inline">Cards</span>
+            <div className="panel flex items-center gap-3 py-1 px-2">
+              <span className="text-xs muted">Visualização</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={view==='cards'}
+                onClick={()=> setViewWithAnim(view==='cards' ? 'table' : 'cards')}
+                className={`${view==='cards' ? 'bg-brand' : 'bg-gray-300 dark:bg-gray-700'} relative inline-flex h-6 w-12 items-center rounded-full transition-colors duration-200`}
+                aria-label={view==='cards' ? 'Cards (ligado)' : 'Tabela (desligado)'}
+                title={view==='cards' ? 'Cards' : 'Tabela'}
+              >
+                <span className={`${view==='cards' ? 'translate-x-6' : 'translate-x-1'} inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-200`} />
               </button>
-              <button className={`btn ${view==='table' ? 'btn-primary' : ''}`} onClick={()=>setView('table')} aria-label="Tabela" title="Tabela">
-                <TableIcon className="w-4 h-4"/>
-                <span className="hidden sm:inline">Tabela</span>
-              </button>
+              <span className="text-xs">{view==='cards' ? 'Cards' : 'Tabela'}</span>
             </div>
             <button className="btn" onClick={refresh} disabled={loading} aria-label="Atualizar" title="Atualizar">{loading ? 'Atualizando...' : 'Atualizar'}</button>
             {error && <div className="text-red-500 text-sm">{error}</div>}
@@ -154,7 +163,7 @@ export default function Inversores(){
         {(!loading && rows.length===0) ? (
           <div className="panel">Nenhum inversor retornado.</div>
         ) : (
-          <>
+          <div className={`transition-opacity duration-200 ${fade ? 'opacity-100' : 'opacity-0'}`}>
             {view==='cards' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {rows.map((r)=> (
@@ -196,7 +205,7 @@ export default function Inversores(){
                 </table>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </section>
