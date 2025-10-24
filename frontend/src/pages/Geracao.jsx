@@ -631,8 +631,14 @@ export default function Geracao(){
               <Calendar className="w-4 h-4 muted"/>
               <input type="date" className="outline-none w-[140px] sm:w-auto" value={date} onChange={e=>setDate(e.target.value)} />
             </div>
-            <button className="btn" onClick={refresh}><RefreshCw className="w-4 h-4"/></button>
-            <button className="btn" onClick={exportCSV}><Download className="w-4 h-4"/> Exportar</button>
+            <button className="btn" onClick={refresh} aria-label="Atualizar" title="Atualizar">
+              <RefreshCw className="w-4 h-4"/>
+              <span className="hidden sm:inline">Atualizar</span>
+            </button>
+            <button className="btn" onClick={exportCSV} aria-label="Exportar" title="Exportar CSV">
+              <Download className="w-4 h-4"/>
+              <span className="hidden sm:inline">Exportar</span>
+            </button>
             {(() => {
               // Hide after first seed per navegador/planta
               const token = localStorage.getItem('token');
