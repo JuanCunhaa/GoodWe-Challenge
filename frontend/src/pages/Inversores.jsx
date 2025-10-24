@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { goodweApi } from '../services/goodweApi.js'
+import { Zap, PlugZap, Battery, Thermometer, Hash, Clock } from 'lucide-react'
 
 function pairsToMap(block){
   const res = {}
@@ -61,6 +62,75 @@ export default function Inversores(){
 
   useEffect(()=>{ refresh() },[])
 
+  const variant = useMemo(() => {
+    const n = rows.length
+    if (n <= 4) return 'large'
+    if (n <= 12) return 'medium'
+    return 'compact'
+  }, [rows])
+
+  function InverterCard({ r }){
+    const b = badgeStatus(r.status)
+    const labelCls = variant === 'compact' ? 'text-[11px] muted' : 'text-xs muted'
+    const valueCls = variant === 'large' ? 'text-lg font-extrabold' : (variant === 'medium' ? 'text-base font-bold' : 'text-sm font-semibold')
+    const gridCols = variant === 'large' ? 'grid-cols-2' : 'grid-cols-2'
+    return (
+      <div className="panel">
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div className="min-w-0">
+            <div className="font-semibold truncate" title={r.name}>{r.name}</div>
+            <div className="text-[11px] muted truncate" title={r.model || ''}>{r.model || '—'}</div>
+          </div>
+          <span className={`px-2 py-1 rounded-lg text-xs border shrink-0 ${b.cls}`}>{b.label}</span>
+        </div>
+        <div className={`mt-2 grid ${gridCols} gap-2`}> 
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-emerald-500"/>
+            <div>
+              <div className={labelCls}>Potência</div>
+              <div className={valueCls}>{r.out_pac!=null ? `${Number(r.out_pac).toLocaleString('pt-BR')} W` : '—'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <PlugZap className="w-4 h-4 text-amber-600"/>
+            <div>
+              <div className={labelCls}>Energia (dia)</div>
+              <div className={valueCls}>{r.eday!=null ? `${Number(r.eday).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh` : '—'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Battery className="w-4 h-4 text-purple-500"/>
+            <div>
+              <div className={labelCls}>SOC</div>
+              <div className={valueCls}>{r.soc || '—'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Thermometer className="w-4 h-4 text-sky-500"/>
+            <div>
+              <div className={labelCls}>Temperatura</div>
+              <div className={valueCls}>{r.temp!=null ? `${r.temp} °C` : '—'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Hash className="w-4 h-4 text-gray-500"/>
+            <div>
+              <div className={labelCls}>SN</div>
+              <div className={`${valueCls} font-mono`}>{r.sn || '—'}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-gray-500"/>
+            <div>
+              <div className={labelCls}>Atualizado</div>
+              <div className={`${valueCls} whitespace-nowrap`}>{r.last || '—'}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <section className="grid gap-6">
       <div className="card">
@@ -69,44 +139,19 @@ export default function Inversores(){
           <button className="btn" onClick={refresh} disabled={loading}>{loading ? 'Atualizando...' : 'Atualizar'}</button>
           {error && <div className="text-red-500 text-sm">{error}</div>}
         </div>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="muted text-left">
-              <tr>
-                <th className="py-2 hidden sm:table-cell">SN</th>
-                <th>Modelo</th>
-                <th>Potência</th>
-                <th className="hidden md:table-cell">Energia (dia)</th>
-                <th className="hidden lg:table-cell">SOC</th>
-                <th className="hidden lg:table-cell">Temp</th>
-                <th>Status</th>
-                <th className="hidden md:table-cell">Atualizado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100/70 dark:divide-gray-800/70">
-              {rows.map((r)=>{
-                const b = badgeStatus(r.status)
-                return (
-                  <tr key={r.sn} className="text-gray-900 dark:text-gray-100">
-                    <td className="py-3 font-mono hidden sm:table-cell">{r.sn}</td>
-                    <td className="truncate max-w-[220px]" title={r.model}>{r.model || '—'}</td>
-                    <td>{r.out_pac!=null ? `${Number(r.out_pac).toLocaleString('pt-BR')} W` : '—'}</td>
-                    <td className="hidden md:table-cell">{r.eday!=null ? `${Number(r.eday).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh` : '—'}</td>
-                    <td className="hidden lg:table-cell">{r.soc || '—'}</td>
-                    <td className="hidden lg:table-cell">{r.temp!=null ? `${r.temp} °C` : '—'}</td>
-                    <td>
-                      <span className={`px-2 py-1 rounded-lg text-xs border ${b.cls}`}>{b.label}</span>
-                    </td>
-                    <td className="whitespace-nowrap hidden md:table-cell">{r.last || '—'}</td>
-                  </tr>
-                )
-              })}
-              {!loading && rows.length===0 && (
-                <tr><td colSpan={8} className="py-6 text-center muted">Nenhum inversor retornado.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {(!loading && rows.length===0) ? (
+          <div className="panel">Nenhum inversor retornado.</div>
+        ) : (
+          <div className={`grid gap-3 
+            ${variant==='large' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : ''}
+            ${variant==='medium' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : ''}
+            ${variant==='compact' ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : ''}
+          `}>
+            {rows.map((r)=> (
+              <InverterCard key={r.sn||r.name} r={r} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )
