@@ -19,6 +19,12 @@ export const aiApi = {
     return request(path, { token });
   },
   devicesOverview: (token) => request(`/ai/devices/overview`, { token }),
+  suggestions: (token, hours = 24, topWindow = '60') => {
+    const t = import.meta.env.VITE_TARIFF_BRL_PER_KWH ? Number(import.meta.env.VITE_TARIFF_BRL_PER_KWH) : undefined;
+    const q = new URLSearchParams({ hours: String(hours), topWindow: String(topWindow) });
+    if (typeof t === 'number' && !Number.isNaN(t)) q.set('tariff', String(t));
+    return request(`/ai/suggestions?${q.toString()}`, { token });
+  },
   iotUptime: (token, vendor, id, window = '24h') => request(`/iot/device/${encodeURIComponent(vendor)}/${encodeURIComponent(id)}/uptime?window=${encodeURIComponent(window)}`, { token }),
   deviceUsageByHour: (token, vendor, id, window = '24h', tariff) => {
     const q = new URLSearchParams({ window: String(window) });

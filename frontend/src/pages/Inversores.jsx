@@ -123,11 +123,11 @@ export default function Inversores(){
               <div className={valueCls}>{r.temp!=null ? `${r.temp} °C` : '—'}</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:col-span-2">
             <Hash className="w-4 h-4 text-gray-500"/>
-            <div>
+            <div className="min-w-0">
               <div className={labelCls}>SN</div>
-              <div className={`${valueCls} font-mono break-all`}>{r.sn || '—'}</div>
+              <div className={`${valueCls} font-mono truncate`} title={r.sn || '—'}>{r.sn || '—'}</div>
             </div>
           </div>
         </div>
