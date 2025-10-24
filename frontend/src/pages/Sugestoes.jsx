@@ -27,18 +27,26 @@ export default function Sugestoes(){
     if (!token || !user?.powerstation_id) { setErr('Sem autenticaÃ§Ã£o'); setLoading(false); return }
     ;(async ()=>{
       try {
-        const [f, r, d] = await Promise.all([
-          aiApi.forecast(token, 24),
-          aiApi.recommendations(token),
-          aiApi.devicesOverview(token)
-        ])
-        // order by ascending time
+        const s = await aiApi.suggestions(token, 24, '60')
+        const f = s?.forecast || null
         const items = (f?.items||[]).slice().sort((a,b)=> new Date(a.time)-new Date(b.time))
-        setForecast({ ...f, items })
-        setRecs(r?.recommendations || [])
-        setDevices(d?.items || [])
-      } catch (e) { setErr(String(e?.message||e)); }
-      finally { setLoading(false) }
+        setForecast(f? { ...f, items } : null)
+        setRecs(Array.isArray(s?.recommendations) ? s.recommendations : [])
+        setDevices(Array.isArray(s?.devices) ? s.devices : [])
+      } catch (e) {
+        // fallback para rotas antigas
+        try {
+          const [f, r, d] = await Promise.all([
+            aiApi.forecast(token, 24),
+            aiApi.recommendations(token),
+            aiApi.devicesOverview(token)
+          ])
+          const items = (f?.items||[]).slice().sort((a,b)=> new Date(a.time)-new Date(b.time))
+          setForecast({ ...f, items })
+          setRecs(r?.recommendations || [])
+          setDevices(d?.items || [])
+        } catch(err2){ setErr(String(err2?.message||err2)); }
+      } finally { setLoading(false) }
     })()
   }, [])
 
@@ -128,12 +136,12 @@ export default function Sugestoes(){
             ) : (
               <div className="grid gap-2">
                 {topNow.map((d,idx)=> (
-                  <div key={idx} className="panel flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold">{d.name}{d.roomName? ` (${d.roomName})`: ''}</div>
-                      <div className="muted text-xs">{d.vendor} â€¢ {d.on? 'Ligado':'Desligado'}</div>
+                  <div key={idx} className="panel flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate" title={d.name}>{d.name}{d.roomName? ` (${d.roomName})`: ''}</div>
+                      <div className="muted text-xs truncate">{d.vendor} â€¢ {d.on? 'Ligado':'Desligado'}</div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       {(() => {
                         const key = d.vendor+'|'+d.id; const u = usage[key];
                         const kwh = (u && typeof u.kwh === 'number') ? u.kwh : (Number(d.energy_kwh)||0);
@@ -154,7 +162,6 @@ export default function Sugestoes(){
             )}
           </div>
 
-          <div className="card">
           <div className="card">
             <div className="h3 mb-2">Top cômodos agora</div>
             {topRooms.length === 0 ? (
