@@ -125,13 +125,6 @@ export default function Inversores(){
               <div className={`${valueCls} font-mono break-all`}>{r.sn || '—'}</div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-gray-500"/>
-            <div>
-              <div className={labelCls}>Atualizado</div>
-              <div className={`${valueCls} whitespace-nowrap`}>{r.last || '—'}</div>
-            </div>
-          </div>
         </div>
       </div>
     )
@@ -180,7 +173,6 @@ export default function Inversores(){
                       <th className="hidden lg:table-cell">SOC</th>
                       <th className="hidden lg:table-cell">Temp</th>
                       <th>Status</th>
-                      <th className="hidden md:table-cell">Atualizado</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100/70 dark:divide-gray-800/70">
@@ -197,7 +189,6 @@ export default function Inversores(){
                           <td>
                             <span className={`px-2 py-1 rounded-lg text-xs border ${b.cls}`}>{b.label}</span>
                           </td>
-                          <td className="whitespace-nowrap hidden md:table-cell">{r.last || '—'}</td>
                         </tr>
                       )
                     })}
