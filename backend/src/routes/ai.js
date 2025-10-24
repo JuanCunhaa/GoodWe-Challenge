@@ -44,7 +44,32 @@ export function registerAiRoutes(router, { gw, helpers }){
         api(`/iot/top-consumers?window=${encodeURIComponent(windowTop)}`).catch(()=>({ ok:true, items: [] }))
       ]);
 
-      res.json({ ok:true, forecast, recommendations: recs?.recommendations || [], devices: devices?.items || [], top_consumers: Array.isArray(top?.items)? top.items : [] });
+      // Post-process: dicas personalizadas simples baseadas em forecast + dispositivos
+      const recommendations = Array.isArray(recs?.recommendations) ? recs.recommendations.slice() : [];
+      try {
+        const items = Array.isArray(forecast?.items) ? forecast.items : [];
+        const gen = Number(forecast?.total_generation_kwh || 0);
+        const cons = Number(forecast?.total_consumption_kwh || 0);
+        if (items.length >= 4) {
+          // Horas com maior geração nas próximas 24h
+          const ranked = items.map((it, i) => ({ i, t: it.time, g: Number(it.generation_kwh||0) })).sort((a,b)=> b.g-a.g);
+          const best = ranked.slice(0, 3).sort((a,b)=> new Date(a.t)-new Date(b.t));
+          const label = best.map(b => new Date(b.t).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })).join(', ');
+          if (gen > 0) recommendations.push({ text: `Aproveite a geração prevista para concentrar usos pesados (${label}).` });
+        }
+        if (cons > gen * 1.2) {
+          const falta = +(cons - gen).toFixed(1);
+          const custo = (typeof tariff==='number' && tariff>0) ? ` (~R$ ${(falta*tariff).toFixed(2)}/dia)` : '';
+          recommendations.push({ text: `Consumo previsto acima da geração em ~${falta} kWh${custo}. Reduza stand-by, adie lavagens/chuveiro elétrico para janelas com sol e ajuste setpoint do ar-condicionado.` });
+        }
+        const devs = Array.isArray(devices?.items) ? devices.items : [];
+        const pesados = devs.filter(d => Number(d.power_w||0) >= 800);
+        for (const d of pesados.slice(0,3)){
+          recommendations.push({ text: `Dispositivo em alto consumo agora: ${d.name}${d.roomName? ` (${d.roomName})`:''}. Se não for essencial, desligue para economizar.` });
+        }
+      } catch {}
+
+      res.json({ ok:true, forecast, recommendations, devices: devices?.items || [], top_consumers: Array.isArray(top?.items)? top.items : [] });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
