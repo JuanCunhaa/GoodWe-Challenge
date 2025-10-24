@@ -338,7 +338,7 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
       try {
         const low = input.toLowerCase();
         const listIntent = /(lista(r)?|mostrar|ver)\b.*\bdispositiv/.test(low) || /\bdispositivos\b/.test(low);
-        const wantRoom = /(c[Ã´o]modo|comodo|sala|localiza|onde|qual)/.test(low);
+        const wantRoom = /(comodo|comodo|sala|localiza|onde|qual)/.test(low);
         if (listIntent && !wantRoom) {
           const listStep = steps.find(s => s && s.ok && (s.name === 'st_list_devices' || s.name === 'tuya_list_devices'));
           if (listStep && listStep.result && Array.isArray(listStep.result.items)) {

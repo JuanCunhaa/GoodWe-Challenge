@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { aiApi } from '../services/aiApi.js'
 
 function StatusDot({ ok }){
   return <span className={ok? 'inline-block w-2.5 h-2.5 rounded-full bg-emerald-500' : 'inline-block w-2.5 h-2.5 rounded-full bg-rose-500'} />
 }
 
-// (Gráfico removido a pedido; manter UI clean)
+// (GrÃ¡fico removido a pedido; manter UI clean)
 
 export default function Sugestoes(){
   const [loading, setLoading] = useState(true)
@@ -24,7 +24,7 @@ export default function Sugestoes(){
   useEffect(()=>{
     const token = localStorage.getItem('token')
     const user = JSON.parse(localStorage.getItem('user') || 'null')
-    if (!token || !user?.powerstation_id) { setErr('Sem autenticação'); setLoading(false); return }
+    if (!token || !user?.powerstation_id) { setErr('Sem autenticaÃ§Ã£o'); setLoading(false); return }
     ;(async ()=>{
       try {
         const [f, r, d] = await Promise.all([
@@ -42,7 +42,23 @@ export default function Sugestoes(){
     })()
   }, [])
 
-  const topNow = useMemo(()=> devices.filter(d => d && d.on && Number.isFinite(+d.power_w)).sort((a,b)=> b.power_w - a.power_w).slice(0,5), [devices])
+  const topNow = useMemo(()=> devices.filter(d => d && d.on && Number.isFinite(+d.power_w)).sort((a,b)=> b.power_w - a.power_w).slice(0,3), [devices])
+
+  const topRooms = useMemo(() => {
+    const byRoom = new Map()
+    for (const d of devices) {
+      if (!d) continue
+      const room = d.roomName || 'Sem cÃ´modo'
+      const key = d.vendor + '|' + d.id
+      const energy = (usage[key] && typeof usage[key].kwh === 'number') ? usage[key].kwh : (Number(d.energy_kwh) || 0)
+      const obj = byRoom.get(room) || { room, power: 0, energy: 0, count: 0 }
+      obj.power += Number(d.power_w) || 0
+      obj.energy += Number.isFinite(energy) ? energy : 0
+      obj.count += 1
+      byRoom.set(room, obj)
+    }
+    return Array.from(byRoom.values()).sort((a,b)=> (b.power||0)-(a.power||0)).slice(0,3)
+  }, [devices, usage])
 
   // Fetch uptime (24h) and energy usage (24h) for top devices
   useEffect(()=>{
@@ -77,30 +93,30 @@ export default function Sugestoes(){
   return (
     <div className="grid gap-4">
       <div className="card">
-        <div className="h2">Sugestões de Economia</div>
-        <div className="muted">Previsões + dicas baseadas no seu histórico</div>
+        <div className="h2">SugestÃµes de Economia</div>
+        <div className="muted">PrevisÃµes + dicas baseadas no seu histÃ³rico</div>
       </div>
       {loading ? (
-        <div className="panel">Carregando…</div>
+        <div className="panel">Carregandoâ€¦</div>
       ) : err ? (
         <div className="panel text-rose-500">{err}</div>
       ) : (
         <>
           <div className="grid md:grid-cols-3 gap-4">
             <div className="panel">
-              <div className="text-xs muted">Próximas {forecast?.hours||24}h</div>
+              <div className="text-xs muted">PrÃ³ximas {forecast?.hours||24}h</div>
               <div className="text-3xl font-extrabold mt-1">{totals.gen.toFixed(1)} kWh</div>
-              <div className="muted text-xs">Geração estimada</div>
+              <div className="muted text-xs">GeraÃ§Ã£o estimada</div>
             </div>
             <div className="panel">
-              <div className="text-xs muted">Próximas {forecast?.hours||24}h</div>
+              <div className="text-xs muted">PrÃ³ximas {forecast?.hours||24}h</div>
               <div className="text-3xl font-extrabold mt-1">{totals.cons.toFixed(1)} kWh</div>
               <div className="muted text-xs">Consumo estimado</div>
             </div>
             <div className="panel">
               <div className="text-xs muted">Clima</div>
               <div className="mt-1 text-sm">
-                {recs.find(r=>/Previs[ãa]o clim|clim[aá]tica|nublado|chuva/i.test(r.text))?.text || 'Sem alerta climático no momento.'}
+                {recs.find(r=>/Previs[Ã£a]o clim|clim[aÃ¡]tica|nublado|chuva/i.test(r.text))?.text || 'Sem alerta climÃ¡tico no momento.'}
               </div>
             </div>
           </div>
@@ -115,20 +131,22 @@ export default function Sugestoes(){
                   <div key={idx} className="panel flex items-center justify-between">
                     <div>
                       <div className="font-semibold">{d.name}{d.roomName? ` (${d.roomName})`: ''}</div>
-                      <div className="muted text-xs">{d.vendor} • {d.on? 'Ligado':'Desligado'}</div>
+                      <div className="muted text-xs">{d.vendor} â€¢ {d.on? 'Ligado':'Desligado'}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-extrabold">{Math.round(d.power_w)} W</div>
                       {(() => {
                         const key = d.vendor+'|'+d.id; const u = usage[key];
-                        if (!u) return null;
+                        const kwh = (u && typeof u.kwh === 'number') ? u.kwh : (Number(d.energy_kwh)||0);
+                        const cost = (u && Number.isFinite(u.cost_brl)) ? u.cost_brl : null;
+                        const costText = (cost!=null) ? (' - R$ ' + cost.toFixed(2)) : '';
                         return (
                           <>
-                            <div className="muted text-xs">{(u.kwh||0).toFixed(2)} kWh (24h){Number.isFinite(u.cost_brl)? ` • R$ ${u.cost_brl.toFixed(2)}`: ''}</div>
+                            <div className="text-lg font-extrabold">{(kwh||0).toFixed(2)} kWh</div>
+                            <div className="muted text-xs">Potência agora: {Math.round(Number(d.power_w)||0)} W{costText}</div>
                           </>
                         );
                       })()}
-                      {typeof uptime[d.vendor+'|'+d.id] === 'number' && <div className="muted text-xs">Uptime (24h): {formatMinutes(uptime[d.vendor+'|'+d.id])}</div>}
+                      {typeof uptime[d.vendor+'|'+d.id] === 'number' && <div className="mt-0.5 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">Uptime 24h: {formatMinutes(uptime[d.vendor+'|'+d.id])}</div>}
                     </div>
                   </div>
                 ))}
@@ -137,6 +155,27 @@ export default function Sugestoes(){
           </div>
 
           <div className="card">
+          <div className="card">
+            <div className="h3 mb-2">Top cômodos agora</div>
+            {topRooms.length === 0 ? (
+              <div className="muted text-sm">Sem dados de cômodos.</div>
+            ) : (
+              <div className="grid gap-2">
+                {topRooms.map((r,idx)=> (
+                  <div key={idx} className="panel flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold">{r.room}</div>
+                      <div className="muted text-xs">{r.count} dispositivos</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-extrabold">{(r.energy||0).toFixed(2)} kWh</div>
+                      <div className="muted text-xs">Potência agora: {Math.round(r.power||0)} W</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
             <div className="h3 mb-1">Dicas personalizadas</div>
             <div className="grid gap-2">
               {recs.length === 0 && <div className="panel">Nada por aqui por enquanto.</div>}

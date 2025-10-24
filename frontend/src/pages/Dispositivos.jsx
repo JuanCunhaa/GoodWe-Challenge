@@ -1,4 +1,4 @@
-// src/pages/Dispositivos.jsx
+﻿// src/pages/Dispositivos.jsx
 import { useEffect, useMemo, useState } from 'react'
 import { loadSession } from '../services/authApi.js'
 import { metaApi } from '../services/metaApi.js'
@@ -23,7 +23,7 @@ export default function Dispositivos(){
   const [editingDevice, setEditingDevice] = useState(null)
   const [editForm, setEditForm] = useState({ room_id: '', priority: '', essential: false })
 
-  const currentAdapter = adapters[vendor]
+  const currentAdapter = adapters[vendor] || adapters[(Object.keys(adapters)[0] || "smartthings")]
   const TUYA_SHOW_FUNCTIONS = String(import.meta.env.VITE_TUYA_SHOW_FUNCTIONS || '').toLowerCase() === 'true'
 
   function startEdit(d){
@@ -37,9 +37,10 @@ export default function Dispositivos(){
     setErr(''); setLoading(true)
     try{
       const { token } = loadSession(); if (!token) throw new Error('Sessão expirada')
+      if (!currentAdapter || typeof currentAdapter.listDevices !== "function") { throw new Error("Adaptador de dispositivos indisponível") }
       const list = await currentAdapter.listDevices(token, { setRooms, setStatusMap, setErr })
       setItems(Array.isArray(list) ? list : [])
-      const ok = await (currentAdapter.canControl?.(token) ?? false)
+      const ok = currentAdapter && (await (currentAdapter.canControl?.(token) ?? false))
       setCanControl(!!ok)
     }catch(e){
       setErr(String(e?.message || e))
@@ -50,7 +51,7 @@ export default function Dispositivos(){
     }
   }
 
-  useEffect(()=>{ fetchDevices() }, [vendor])
+  useEffect(()=>{ if (!adapters[vendor]) { const fb = (adapterList?.[0]?.key) || "smartthings"; setVendor(fb); return; } fetchDevices() }, [vendor])
 
   // Load App Rooms (Perfil) and current device meta map
   useEffect(()=>{
@@ -373,3 +374,5 @@ export default function Dispositivos(){
     </section>
   )
 }
+
+
