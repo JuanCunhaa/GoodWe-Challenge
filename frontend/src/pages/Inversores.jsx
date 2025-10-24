@@ -73,14 +73,14 @@ export default function Inversores(){
           <table className="w-full text-sm">
             <thead className="muted text-left">
               <tr>
-                <th className="py-2">SN</th>
+                <th className="py-2 hidden sm:table-cell">SN</th>
                 <th>Modelo</th>
                 <th>Potência</th>
-                <th>Energia (dia)</th>
-                <th>SOC</th>
-                <th>Temp</th>
+                <th className="hidden md:table-cell">Energia (dia)</th>
+                <th className="hidden lg:table-cell">SOC</th>
+                <th className="hidden lg:table-cell">Temp</th>
                 <th>Status</th>
-                <th>Atualizado</th>
+                <th className="hidden md:table-cell">Atualizado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100/70 dark:divide-gray-800/70">
@@ -88,16 +88,16 @@ export default function Inversores(){
                 const b = badgeStatus(r.status)
                 return (
                   <tr key={r.sn} className="text-gray-900 dark:text-gray-100">
-                    <td className="py-3 font-mono">{r.sn}</td>
+                    <td className="py-3 font-mono hidden sm:table-cell">{r.sn}</td>
                     <td className="truncate max-w-[220px]" title={r.model}>{r.model || '—'}</td>
                     <td>{r.out_pac!=null ? `${Number(r.out_pac).toLocaleString('pt-BR')} W` : '—'}</td>
-                    <td>{r.eday!=null ? `${Number(r.eday).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh` : '—'}</td>
-                    <td>{r.soc || '—'}</td>
-                    <td>{r.temp!=null ? `${r.temp} °C` : '—'}</td>
+                    <td className="hidden md:table-cell">{r.eday!=null ? `${Number(r.eday).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh` : '—'}</td>
+                    <td className="hidden lg:table-cell">{r.soc || '—'}</td>
+                    <td className="hidden lg:table-cell">{r.temp!=null ? `${r.temp} °C` : '—'}</td>
                     <td>
                       <span className={`px-2 py-1 rounded-lg text-xs border ${b.cls}`}>{b.label}</span>
                     </td>
-                    <td className="whitespace-nowrap">{r.last || '—'}</td>
+                    <td className="whitespace-nowrap hidden md:table-cell">{r.last || '—'}</td>
                   </tr>
                 )
               })}
