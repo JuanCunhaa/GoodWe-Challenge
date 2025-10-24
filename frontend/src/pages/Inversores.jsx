@@ -80,17 +80,16 @@ export default function Inversores(){
     const b = badgeStatus(r.status)
     const labelCls = variant === 'compact' ? 'text-[11px] muted' : 'text-xs muted'
     const valueCls = variant === 'large' ? 'text-lg font-extrabold' : (variant === 'medium' ? 'text-base font-bold' : 'text-sm font-semibold')
-    const gridCols = variant === 'large' ? 'grid-cols-2' : 'grid-cols-2'
     return (
       <div className="panel">
-        <div className="flex items-start justify-between gap-3 mb-1">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
           <div className="min-w-0">
             <div className="font-semibold truncate" title={r.name}>{r.name}</div>
             <div className="text-[11px] muted truncate" title={r.model || ''}>{r.model || '—'}</div>
           </div>
           <span className={`px-2 py-1 rounded-lg text-xs border shrink-0 ${b.cls}`}>{b.label}</span>
         </div>
-        <div className={`mt-2 grid ${gridCols} gap-2`}> 
+        <div className={`mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2`}> 
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-emerald-500"/>
             <div>
@@ -123,7 +122,7 @@ export default function Inversores(){
             <Hash className="w-4 h-4 text-gray-500"/>
             <div>
               <div className={labelCls}>SN</div>
-              <div className={`${valueCls} font-mono`}>{r.sn || '—'}</div>
+              <div className={`${valueCls} font-mono break-all`}>{r.sn || '—'}</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -164,11 +163,7 @@ export default function Inversores(){
         ) : (
           <>
             {view==='cards' ? (
-              <div className={`grid gap-3 
-                ${variant==='large' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : ''}
-                ${variant==='medium' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : ''}
-                ${variant==='compact' ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : ''}
-              `}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {rows.map((r)=> (
                   <InverterCard key={r.sn||r.name} r={r} />
                 ))}
