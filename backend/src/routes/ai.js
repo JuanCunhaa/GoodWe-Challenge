@@ -17,6 +17,37 @@ export function registerAiRoutes(router, { gw, helpers }){
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
+  // Aggregate endpoint for Sugestões: forecast + recommendations + devices overview + top consumers
+  router.get('/ai/suggestions', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    const plant_id = user.powerstation_id;
+    const hours = Number(req.query.hours || 24);
+    const windowTop = String(req.query.topWindow || '60');
+    try {
+      const authHeader = req.headers['authorization'] || '';
+      const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+      async function api(path){
+        const r = await fetch(base + path, { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
+        const j = await r.json().catch(()=>null); if (!r.ok) throw new Error(j?.error || `${r.status}`); return j;
+      }
+
+      const tariff = (req.query.tariff!=null) ? Number(req.query.tariff) : (process.env.TARIFF_BRL_PER_KWH!=null ? Number(process.env.TARIFF_BRL_PER_KWH) : undefined);
+
+      const [forecast, recs, devices, top] = await Promise.all([
+        getForecast({ plant_id, hours, fetchWeather: async () => { try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null } } }),
+        getRecommendations({ plant_id, tariff_brl_per_kwh: tariff, fetchWeather: async () => { try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null } }, fetchDevices: async () => devicesOverviewInternal(req, helpers), fetchDeviceMeta: async () => {
+          try { const r = await api('/device-meta'); const j = (r && r.items) ? r.items : (r || {}); return j; } catch { return {}; }
+        }, fetchRooms: async () => {
+          try { const r = await api('/rooms'); const arr = Array.isArray(r?.items)? r.items : []; return arr; } catch { return []; }
+        } }),
+        devicesOverviewInternal(req, helpers),
+        api(`/iot/top-consumers?window=${encodeURIComponent(windowTop)}`).catch(()=>({ ok:true, items: [] }))
+      ]);
+
+      res.json({ ok:true, forecast, recommendations: recs?.recommendations || [], devices: devices?.items || [], top_consumers: Array.isArray(top?.items)? top.items : [] });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
   async function devicesOverviewInternal(req, helpers){
     const authHeader = req.headers['authorization'] || '';
     const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
