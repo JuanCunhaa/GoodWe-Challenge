@@ -75,3 +75,6 @@
   .h1 { font-size: 1.125rem; line-height: 1.4; }
   .h2 { font-size: 1rem; }
 }
+
+/* Bottom tab bar safe-area support */
+.mobile-tabbar { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
