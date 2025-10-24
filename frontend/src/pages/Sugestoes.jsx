@@ -149,6 +149,7 @@ export default function Sugestoes(){
           </div>
 
           {/* Seção "Top cômodos" removida a pedido do cliente */}
+          <div className="card">
             <div className="h3 mb-1">Dicas personalizadas</div>
             <div className="grid gap-2">
               {recs.length === 0 && <div className="panel">Nada por aqui por enquanto.</div>}
