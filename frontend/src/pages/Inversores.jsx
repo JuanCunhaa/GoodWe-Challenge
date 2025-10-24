@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { goodweApi } from '../services/goodweApi.js'
-import { Zap, PlugZap, Battery, Thermometer, Hash, Clock } from 'lucide-react'
+import { Zap, PlugZap, Battery, Thermometer, Hash, Clock, LayoutGrid, Table as TableIcon } from 'lucide-react'
 
 function pairsToMap(block){
   const res = {}
@@ -69,6 +69,13 @@ export default function Inversores(){
     return 'compact'
   }, [rows])
 
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem('inverters_view') || 'cards' } catch { return 'cards' }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('inverters_view', view) } catch {}
+  }, [view])
+
   function InverterCard({ r }){
     const b = badgeStatus(r.status)
     const labelCls = variant === 'compact' ? 'text-[11px] muted' : 'text-xs muted'
@@ -134,23 +141,76 @@ export default function Inversores(){
   return (
     <section className="grid gap-6">
       <div className="card">
-        <div className="h2 mb-2">Inversores {count!=null && <span className="muted text-sm">(total: {count})</span>}</div>
-        <div className="flex items-center gap-3 mb-3">
-          <button className="btn" onClick={refresh} disabled={loading}>{loading ? 'Atualizando...' : 'Atualizar'}</button>
-          {error && <div className="text-red-500 text-sm">{error}</div>}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+          <div className="h2">Inversores {count!=null && <span className="muted text-sm">(total: {count})</span>}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="panel flex items-center gap-1 py-1 px-1">
+              <span className="hidden sm:inline text-xs muted ml-1">Visualização:</span>
+              <button className={`btn ${view==='cards' ? 'btn-primary' : ''}`} onClick={()=>setView('cards')} aria-label="Cards" title="Cards">
+                <LayoutGrid className="w-4 h-4"/>
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button className={`btn ${view==='table' ? 'btn-primary' : ''}`} onClick={()=>setView('table')} aria-label="Tabela" title="Tabela">
+                <TableIcon className="w-4 h-4"/>
+                <span className="hidden sm:inline">Tabela</span>
+              </button>
+            </div>
+            <button className="btn" onClick={refresh} disabled={loading} aria-label="Atualizar" title="Atualizar">{loading ? 'Atualizando...' : 'Atualizar'}</button>
+            {error && <div className="text-red-500 text-sm">{error}</div>}
+          </div>
         </div>
         {(!loading && rows.length===0) ? (
           <div className="panel">Nenhum inversor retornado.</div>
         ) : (
-          <div className={`grid gap-3 
-            ${variant==='large' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : ''}
-            ${variant==='medium' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : ''}
-            ${variant==='compact' ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : ''}
-          `}>
-            {rows.map((r)=> (
-              <InverterCard key={r.sn||r.name} r={r} />
-            ))}
-          </div>
+          <>
+            {view==='cards' ? (
+              <div className={`grid gap-3 
+                ${variant==='large' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : ''}
+                ${variant==='medium' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : ''}
+                ${variant==='compact' ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : ''}
+              `}>
+                {rows.map((r)=> (
+                  <InverterCard key={r.sn||r.name} r={r} />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="muted text-left">
+                    <tr>
+                      <th className="py-2 hidden sm:table-cell">SN</th>
+                      <th>Modelo</th>
+                      <th>Potência</th>
+                      <th className="hidden md:table-cell">Energia (dia)</th>
+                      <th className="hidden lg:table-cell">SOC</th>
+                      <th className="hidden lg:table-cell">Temp</th>
+                      <th>Status</th>
+                      <th className="hidden md:table-cell">Atualizado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100/70 dark:divide-gray-800/70">
+                    {rows.map((r)=>{
+                      const b = badgeStatus(r.status)
+                      return (
+                        <tr key={r.sn} className="text-gray-900 dark:text-gray-100">
+                          <td className="py-3 font-mono hidden sm:table-cell">{r.sn}</td>
+                          <td className="truncate max-w-[220px]" title={r.model}>{r.model || '—'}</td>
+                          <td>{r.out_pac!=null ? `${Number(r.out_pac).toLocaleString('pt-BR')} W` : '—'}</td>
+                          <td className="hidden md:table-cell">{r.eday!=null ? `${Number(r.eday).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh` : '—'}</td>
+                          <td className="hidden lg:table-cell">{r.soc || '—'}</td>
+                          <td className="hidden lg:table-cell">{r.temp!=null ? `${r.temp} °C` : '—'}</td>
+                          <td>
+                            <span className={`px-2 py-1 rounded-lg text-xs border ${b.cls}`}>{b.label}</span>
+                          </td>
+                          <td className="whitespace-nowrap hidden md:table-cell">{r.last || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
