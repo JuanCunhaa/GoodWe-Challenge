@@ -37,7 +37,7 @@ function LineChart({ series=[], height=260, socXY=[], xLabels=[] }){
     xSvg = Math.max(pad, Math.min(width - pad, xSvg))
     const ratio = (xSvg - pad) / (width - pad*2)
     const i = Math.max(0, Math.min(maxX, Math.round(ratio * maxX)))
-    setHover({ i, x: mapX(i) }) // trava a linha no ponão amostrado
+    setHover({ i, x: mapX(i) }) // trava a linha no ponto amostrado
   }
 
   const hoverPoints = useMemo(()=>{
@@ -147,11 +147,11 @@ export default function Geracao(){
     const msAgg = Number(import.meta.env.VITE_REFRESH_MS_GENERATION_AGG || Math.max(30000, base))
     const ms = mode==='DAY' ? Math.max(5000, msDay) : Math.max(30000, msAgg)
     const id = setInterval(()=> { try{ refresh() } catch {} }, ms)
-    const onãocus = ()=> { try{ refresh() } catch {} }
+    const onFocus = ()=> { try{ refresh() } catch {} }
     const onVis = ()=> { if (document.visibilityState === 'visible') { try{ refresh() } catch {} } }
-    winãow.addEventListener('focus', onãocus)
+    window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVis)
-    return ()=> { clearInterval(id); winãow.removeEventListener('focus', onãocus); document.removeEventListener('visibilitychange', onVis) }
+    return ()=> { clearInterval(id); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onVis) }
   }, [mode, date])
 
   async function fetchDay(token, pwid, d){
@@ -336,7 +336,7 @@ export default function Geracao(){
           return;
         }
         const base=new Date(date); const y=base.getFullYear(), m=base.getMonth();
-        // Tenta endpoint agregado rápido (range=2: ponãos diários). Usa exatamente as datas do JSON.
+        // Tenta endpoint agregado rápido (range=2: pontos diários). Usa exatamente as datas do JSON.
         let list=[]; let sum={gen:0,load:0,batt:0,grid:0,gridExp:0}
         try{
           const j = await goodweApi.chartByPlant(token, user.powerstation_id, { date: toDateStr(new Date(y,m,15)), range: 2, chartIndexId: 8 })
@@ -433,7 +433,7 @@ export default function Geracao(){
         // 1) Fast path: use DB-backed daily aggregates for the last 30 days
         try {
           const end = toDateStr(new Date())
-          const start = addDays(end, -29) // inclusive winãow of 30 days
+          const start = addDays(end, -29) // inclusive window of 30 days
           const { items } = await energyService.getRangeAggregates({ token, plantId: user.powerstation_id, start, end })
           let list = []
           let sum = { gen:0, load:0, batt:0, grid:0, gridExp:0 }
@@ -626,7 +626,7 @@ export default function Geracao(){
               return (
                 <button className="btn" onClick={handleBackfill} disabled={backfilling} title="Pré-carregar últimos dias no cache local">
                   <Download className="w-4 h-4"/>
-                  {backfilling ? `Pré-carreganão ${backfillInão.completed}/${backfillInão.total}` : 'Pré-carregar 365d'}
+                  {backfilling ? `Pré-carregando ${backfillInfo.completed}/${backfillInfo.total}` : 'Pré-carregar 365d'}
                 </button>
               )
             })()}
@@ -660,6 +660,9 @@ export default function Geracao(){
     </section>
   )
 }
+
+
+
 
 
 
