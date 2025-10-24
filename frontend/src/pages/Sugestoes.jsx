@@ -52,21 +52,7 @@ export default function Sugestoes(){
 
   const topNow = useMemo(()=> devices.filter(d => d && d.on && Number.isFinite(+d.power_w)).sort((a,b)=> b.power_w - a.power_w).slice(0,3), [devices])
 
-  const topRooms = useMemo(() => {
-    const byRoom = new Map()
-    for (const d of devices) {
-      if (!d) continue
-      const room = d.roomName || 'Sem cÃ´modo'
-      const key = d.vendor + '|' + d.id
-      const energy = (usage[key] && typeof usage[key].kwh === 'number') ? usage[key].kwh : (Number(d.energy_kwh) || 0)
-      const obj = byRoom.get(room) || { room, power: 0, energy: 0, count: 0 }
-      obj.power += Number(d.power_w) || 0
-      obj.energy += Number.isFinite(energy) ? energy : 0
-      obj.count += 1
-      byRoom.set(room, obj)
-    }
-    return Array.from(byRoom.values()).sort((a,b)=> (b.power||0)-(a.power||0)).slice(0,3)
-  }, [devices, usage])
+  // Removido: cálculo de "Top cômodos" para focar apenas em dicas
 
   // Fetch uptime (24h) and energy usage (24h) for top devices
   useEffect(()=>{
@@ -162,27 +148,7 @@ export default function Sugestoes(){
             )}
           </div>
 
-          <div className="card">
-            <div className="h3 mb-2">Top cômodos agora</div>
-            {topRooms.length === 0 ? (
-              <div className="muted text-sm">Sem dados de cômodos.</div>
-            ) : (
-              <div className="grid gap-2">
-                {topRooms.map((r,idx)=> (
-                  <div key={idx} className="panel flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold">{r.room}</div>
-                      <div className="muted text-xs">{r.count} dispositivos</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-lg font-extrabold">{(r.energy||0).toFixed(2)} kWh</div>
-                      <div className="muted text-xs">Potência agora: {Math.round(r.power||0)} W</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Seção "Top cômodos" removida a pedido do cliente */}
             <div className="h3 mb-1">Dicas personalizadas</div>
             <div className="grid gap-2">
               {recs.length === 0 && <div className="panel">Nada por aqui por enquanto.</div>}
