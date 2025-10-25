@@ -50,10 +50,11 @@ export default function App(){
         <Route path="/perfil" element={<Perfil/>} />
         <Route path="/dispositivos" element={<Dispositivos/>} />
         <Route path="/sugestoes" element={<Sugestoes/>} />
-        <Route path="/habitos" element={<Habitos/>} />
-        <Route path="/economia" element={<Economia/>} />
+        <Route path="/habitos" element={<Habitos/>} />`n        <Route path="/economia" element={<Economia/>} />
         <Route path="*" element={<Navigate to="/" replace/>} />
       </Route>
     </Routes>
   )
 }
+
+
