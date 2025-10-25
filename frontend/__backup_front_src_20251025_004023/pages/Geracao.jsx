@@ -604,41 +604,19 @@ export default function Geracao(){
 
   // removed handleBackfill UI (preload via Layout now)
 
-  // Responsividade simples para altura do gráfico e header no mobile
-  const [isMobile, setIsMobile] = useState(() => {
-    try { return window.matchMedia && window.matchMedia('(max-width: 640px)').matches } catch { return false }
-  })
-  useEffect(() => {
-    try {
-      const mq = window.matchMedia('(max-width: 640px)')
-      const on = (e) => setIsMobile(!!e.matches)
-      mq.addEventListener ? mq.addEventListener('change', on) : mq.addListener(on)
-      return () => { mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on) }
-    } catch {}
-  }, [])
-
   return (
     <section className="grid gap-6">
       <div className="card">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
+        <div className="flex items-center justify-between mb-3">
           <div className="h2">Geração de Energia</div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <button className={`btn ${mode==='DAY'?'btn-primary':''}`} onClick={()=>setMode('DAY')}>Dia</button>
             <button className={`btn ${mode==='WEEK'?'btn-primary':''}`} onClick={()=>setMode('WEEK')}>Semana</button>
             <button className={`btn ${mode==='MONTH'?'btn-primary':''}`} onClick={()=>setMode('MONTH')}>Mês</button>
             {/* Removido Ano */}
-            <div className="panel flex items-center gap-2 py-1 px-2">
-              <Calendar className="w-4 h-4 muted"/>
-              <input type="date" className="outline-none w-[140px] sm:w-auto" value={date} onChange={e=>setDate(e.target.value)} />
-            </div>
-            <button className="btn" onClick={refresh} aria-label="Atualizar" title="Atualizar">
-              <RefreshCw className="w-4 h-4"/>
-              <span className="hidden sm:inline">Atualizar</span>
-            </button>
-            <button className="btn" onClick={exportCSV} aria-label="Exportar" title="Exportar CSV">
-              <Download className="w-4 h-4"/>
-              <span className="hidden sm:inline">Exportar</span>
-            </button>
+            <div className="panel flex items-center gap-2 py-1"><Calendar className="w-4 h-4 muted"/><input type="date" className="outline-none" value={date} onChange={e=>setDate(e.target.value)} /></div>
+            <button className="btn" onClick={refresh}><RefreshCw className="w-4 h-4"/></button>
+            <button className="btn" onClick={exportCSV}><Download className="w-4 h-4"/> Exportar</button>
             {(() => {
               // Hide after first seed per navegador/planta
               const token = localStorage.getItem('token');
@@ -670,12 +648,12 @@ export default function Geracao(){
           )})}
         </div>
         {mode==='DAY' ? (
-          <div className="panel overflow-x-auto">
-            <LineChart series={series.filter(s=> enabled[s.label]!==false)} socXY={socXY} height={isMobile? 320 : 450} xLabels={xLabels}/>
+          <div className="panel">
+            <LineChart series={series.filter(s=> enabled[s.label]!==false)} socXY={socXY} height={450} xLabels={xLabels}/>
           </div>
         ) : (
-          <div className="panel overflow-x-auto">
-            <LineChart series={aggSeries.filter(s=> enabled[s.label]!==false)} height={isMobile? 240 : 320} xLabels={xLabels}/>
+          <div className="panel">
+            <LineChart series={aggSeries.filter(s=> enabled[s.label]!==false)} height={320} xLabels={xLabels}/>
           </div>
         )}
       </div>
