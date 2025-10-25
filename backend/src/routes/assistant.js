@@ -67,6 +67,11 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           const data = await apiJson(`/ai/devices/toggle-priority`, { method:'POST', body: payload });
           return { ok: true, ...data };
         },
+        async devices_toggle_room({ action, room }){
+          const payload = { action: String(action||'').toLowerCase(), room: String(room||'').trim() };
+          const data = await apiJson(`/ai/devices/toggle-room`, { method:'POST', body: payload });
+          return { ok: true, ...data };
+        },
         async get_device_usage_by_hour({ vendor, device_id, window }){
           const v = String(vendor||'').toLowerCase();
           const id = String(device_id||'');
@@ -74,6 +79,11 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
           const data = await apiJson(`/iot/device/${encodeURIComponent(v)}/${encodeURIComponent(id)}/usage-by-hour?window=${encodeURIComponent(w)}`);
           return { ok: true, ...data };
         },
+        // Habits (hábitos)
+        async habits_list(){ const j = await apiJson('/habits'); return { items: j.items || [], total: (j.items||[]).length }; },
+        async habits_logs({ limit, pattern_id }){ const q = new URLSearchParams({ limit: String(limit||50) }); if (pattern_id!=null) q.set('pattern_id', String(pattern_id)); const j = await apiJson(`/habits/logs?${q}`); return { items: j.items || [], total: (j.items||[]).length }; },
+        async habit_set_state({ id, state }){ if(!id||!state) throw new Error('id and state required'); const j = await apiJson(`/habits/${encodeURIComponent(String(id))}/state`, { method:'PUT', body:{ state } }); return j; },
+        async habit_undo({ id }){ if(!id) throw new Error('id required'); const j = await apiJson(`/habits/${encodeURIComponent(String(id))}/undo`, { method:'POST', body:{} }); return j; },
         async cost_projection({ hours, tariff_brl_per_kwh }){
           const h = Number(hours||24);
           const t = Number(tariff_brl_per_kwh|| (process.env.TARIFF_BRL_PER_KWH||1.0));
@@ -300,116 +310,14 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
         { name: 'st_find_device_room', description: 'Encontra o comodo (nome) de um dispositivo SmartThings (por nome ou id).', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
         { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya vinculados (Smart Life e/ou Tuya app).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'habits_list', description: 'Lista habitos detectados (padroes) com estado.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'habits_logs', description: 'Timeline dos habitos (ultimos eventos).', parameters: { type: 'object', properties: { limit: { type: 'number' }, pattern_id: { type: 'number' } }, additionalProperties: false } },
+        { name: 'habit_set_state', description: 'Altera estado de um habito (shadow|suggested|active|paused|retired).', parameters: { type: 'object', properties: { id: { type: 'number' }, state: { type: 'string', enum: ['shadow','suggested','active','paused','retired'] } }, required: ['id','state'], additionalProperties: false } },
+        { name: 'habit_undo', description: 'Desfaz a ultima acao aplicada a um habito.', parameters: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'], additionalProperties: false } },
         { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] } }, required: ['device_id','action'], additionalProperties: false } },
-      ];
-
-      const messages = [
-        { role: 'system', content: 'NUNCA use o caractere * nas respostas. Não use markdown. Ao listar dispositivos, responda apenas os nomes (um por linha). Quando perguntarem o cômodo de um dispositivo, responda no formato "O dispositivo \"NOME\" está no cômodo SALA.". Seja breve, direto e útil.' },
-        { role: 'system', content: 'Para perguntas sobre dispositivos, use get_devices_overview para basear-se em dispositivos realmente vinculados (SmartThings/Tuya); inclua status on/off e, quando disponivel, potencia (W) e energia (kWh). Para ligar/desligar por nome (ex.: "desligue minha TV"), use a ferramenta device_toggle fornecendo name e action. Considere previsao do clima para sugerir evitar dispositivos nao criticos em caso de nebulosidade/chuva.' },
-        ...prev.filter(m => m && m.role && m.content),
-        input ? { role: 'user', content: input } : null,
-      ].filter(Boolean);
-
-      const steps = [];
-      let assistantMsg = null;
-      let attempts = 0;
-      while (attempts < 3) {
-        attempts++;
-        const payload = { model: process.env.OPENAI_MODEL || 'gpt-4o-mini', messages, tools: toolSchemas.map(t => ({ type: 'function', function: t })), tool_choice: 'auto', temperature: 0.2 };
-        const r = await fetch('https://api.openai.com/v1/chat/completions', { method: 'POST', headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
-        if (!r.ok) throw new Error(`OpenAI HTTP ${r.status}`);
-        const data = await r.json();
-        const msg = data?.choices?.[0]?.message;
-        if (!msg) throw new Error('OpenAI: missing message');
-        if (msg.tool_calls && msg.tool_calls.length) {
-          messages.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
-          for (const call of msg.tool_calls) {
-            const name = call.function?.name; let args = {};
-            try { args = JSON.parse(call.function?.arguments || '{}'); } catch {}
-            let result; try { if (typeof tools[name] !== 'function') throw new Error('unknown tool'); const started = Date.now(); result = await tools[name](args || {}); steps.push({ name, args, ok: true, result, ms: Date.now() - started }); } catch (e) { result = { ok: false, error: String(e) }; steps.push({ name, args, ok: false, error: String(e) }); }
-            messages.push({ role: 'tool', tool_call_id: call.id, name, content: JSON.stringify(result) });
-          }
-          continue;
-        }
-        assistantMsg = msg; break;
-      }
-
-      let answer = assistantMsg?.content || '';
-      try {
-        const low = input.toLowerCase();
-        const listIntent = /(lista(r)?|mostrar|ver)\b.*\bdispositiv/.test(low) || /\bdispositivos\b/.test(low);
-        const wantRoom = /(comodo|comodo|sala|localiza|onde|qual)/.test(low);
-        if (listIntent && !wantRoom) {
-          const listStep = steps.find(s => s && s.ok && (s.name === 'st_list_devices' || s.name === 'tuya_list_devices'));
-          if (listStep && listStep.result && Array.isArray(listStep.result.items)) {
-            const names = listStep.result.items.map(d => String(d?.name || '').trim()).filter(Boolean);
-            if (names.length) answer = `No SmartThings vocÃª possui:\n` + names.join('\n');
-          }
-        }
-      } catch {}
-
-      try {
-        const findStep = steps.find(s => s && s.ok && s.name === 'st_find_device_room');
-        if (findStep && findStep.result && findStep.result.ok) {
-          const n = String(findStep.result.name || '').trim();
-          const r = String(findStep.result.roomName || 'local não especificado').trim();
-          if (n) answer = `O dispositivo "${n}" está no cômodo ${r}.`;
-        }
-      } catch {}
-
-      try {
-        const isCmd = (s) => s && (s.name === 'st_command' || s.name === 'tuya_command' || s.name === 'device_toggle');
-        const lastCmd = [...steps].reverse().find(isCmd);
-        if (lastCmd) {
-          if (lastCmd.ok) {
-            const action = String(lastCmd?.args?.action || '').toLowerCase();
-            const verb = action === 'on' ? 'ligado' : 'desligado';
-            const name = (lastCmd?.result && typeof lastCmd.result === 'object' && lastCmd.result.name) ? lastCmd.result.name : '';
-            const label = name ? `Prontinho! Dispositivo "${name}" foi ${verb}.` : `Prontinho! Dispositivo foi ${verb}.`;
-            // substitui resposta para evitar contradiÃ§Ã£o
-            answer = label;
-          } else {
-            // comando falhou -> responda erro claro e nÃ£o acrescente "Prontinho"
-            const err = String(lastCmd.error || 'Falha ao enviar comando');
-            answer = 'Não consegui executar o comando no dispositivo agora. ' + err.replace(/^[A-Z]+:\s*/i,'');
-          }
-        }
-      } catch {}
-
-      if (typeof answer === 'string' && answer.includes('*')) answer = answer.replace(/\*/g, '');
-      // Expand technical units for better clarity (also helpful for TTS)
-      function expandUnitsPtBR(s){
-        if (!s) return s;
-        let out = ' ' + String(s) + ' ';
-        out = out.replace(/\bMWh\b/g, ' megawatt hora ');
-        out = out.replace(/\bMW\b/g, ' megawatt ');
-        out = out.replace(/\bkWh\b/g, ' quilowatt hora ');
-        out = out.replace(/\bkW\b/g, ' quilowatt ');
-        out = out.replace(/\bWh\b/g, ' watt hora ');
-        out = out.replace(/\bW\b/g, ' watt ');
-        out = out.replace(/\bkVAh\b/g, ' quilovolt ampere hora ');
-        out = out.replace(/\bkVA\b/g, ' quilovolt ampere ');
-        out = out.replace(/\bAh\b/g, ' ampere hora ');
-        out = out.replace(/\bA\b/g, ' ampere ');
-        out = out.replace(/\bV\b/g, ' volt ');
-        out = out.replace(/\bHz\b/g, ' hertz ');
-        return out.trim().replace(/\s{2,}/g,' ');
-      }
-      if (typeof answer === 'string') answer = expandUnitsPtBR(answer);
-      res.json({ ok: true, answer, steps });
-    } catch (e) { res.status(500).json({ ok: false, error: String(e) }); }
-  });
-
-  router.get('/assistant/tools', (req, res) => {
-    try {
-      // Fixed tool definitions (replacing a corrupted block)
-      const items = [
-        { name: 'device_toggle', description: 'Liga/Desliga dispositivo por nome (SmartThings/Tuya) com correspondência aproximada.', parameters: { type: 'object', properties: { name: { type: 'string' }, action: { type: 'string', enum: ['on','off'] } }, required: ['name','action'], additionalProperties: false } },
-        { name: 'get_devices_overview', description: 'Lista dispositivos (SmartThings + Tuya) do usuário com status e métricas (quando disponíveis).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'get_forecast', description: 'Previsão de geração e consumo nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number', minimum: 1, maximum: 72 } }, additionalProperties: false } },
-        { name: 'get_recommendations', description: 'Sugestões de economia baseadas no histórico.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-        { name: 'devices_toggle_priority', description: 'Liga/Desliga todos os dispositivos por prioridade (baixa|média). Nunca desliga alta.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['on','off'] }, priority: { type: 'string', enum: ['low','baixa','medium','media'] } }, required: ['action','priority'], additionalProperties: false } },
-        { name: 'get_device_usage_by_hour', description: 'Uso por hora de um dispositivo nas últimas 24h (ou janela definida).', parameters: { type: 'object', properties: { vendor: { type: 'string' }, device_id: { type: 'string' }, window: { type: 'string' } }, required: ['vendor','device_id'], additionalProperties: false } },
+        
+        { name: 'devices_toggle_room', description: 'Liga/Desliga todos os dispositivos de um comodo (ex.: sala, cozinha).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['on','off'] }, room: { type: 'string' } }, required: ['action','room'], additionalProperties: false } },
+        , description: 'Uso por hora de um dispositivo nas últimas 24h (ou janela definida).', parameters: { type: 'object', properties: { vendor: { type: 'string' }, device_id: { type: 'string' }, window: { type: 'string' } }, required: ['vendor','device_id'], additionalProperties: false } },
         { name: 'cost_projection', description: 'Projeção de custo baseado em previsão de consumo/geração.', parameters: { type: 'object', properties: { hours: { type: 'number' }, tariff_brl_per_kwh: { type: 'number' } }, additionalProperties: false } },
         { name: 'battery_strategy', description: 'Janelas ótimas de carga/descarga da bateria nas próximas horas.', parameters: { type: 'object', properties: { hours: { type: 'number' }, min_soc: { type: 'number' }, max_soc: { type: 'number' } }, additionalProperties: false } },
         { name: 'automation_list', description: 'Lista rotinas de energia (automations) do usuário.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -441,6 +349,10 @@ export function registerAssistantRoutes(router, { gw, helpers, dbApi }) {
         { name: 'st_find_device_room', description: 'Encontra o comodo (nome) de um dispositivo SmartThings (por nome ou id).', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
         { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya vinculados (Smart Life e/ou Tuya app).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'habits_list', description: 'Lista habitos detectados (padroes) com estado.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'habits_logs', description: 'Timeline dos habitos (ultimos eventos).', parameters: { type: 'object', properties: { limit: { type: 'number' }, pattern_id: { type: 'number' } }, additionalProperties: false } },
+        { name: 'habit_set_state', description: 'Altera estado de um habito (shadow|suggested|active|paused|retired).', parameters: { type: 'object', properties: { id: { type: 'number' }, state: { type: 'string', enum: ['shadow','suggested','active','paused','retired'] } }, required: ['id','state'], additionalProperties: false } },
+        { name: 'habit_undo', description: 'Desfaz a ultima acao aplicada a um habito.', parameters: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'], additionalProperties: false } },
         { name: 'tuya_command', description: 'Liga/Desliga um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' }, action: { type: 'string', enum: ['on','off'] } }, required: ['device_id','action'], additionalProperties: false } },
       ];
       res.json({ items });
@@ -485,3 +397,5 @@ Regras:
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
 }
+
+

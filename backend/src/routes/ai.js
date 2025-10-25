@@ -57,6 +57,24 @@ export function registerAiRoutes(router, { gw, helpers }){
         items.push({ vendor:'tuya', id, name: d.name, roomName: d.roomName||'', on, power_w, energy_kwh });
       }
     } catch {}
+    // Enrich with local device meta (priority/essential/room) and local rooms
+    try {
+      const metaResp = await api('/device-meta');
+      const metaMap = (metaResp && metaResp.items) ? metaResp.items : (metaResp || {});
+      const roomsResp = await api('/rooms');
+      const roomsArr = Array.isArray(roomsResp?.items) ? roomsResp.items : [];
+      const roomNameById = new Map(); for (const r of roomsArr){ roomNameById.set(Number(r.id), String(r.name||'')); }
+      for (const d of items){
+        const key = `${d.vendor||''}|${d.id||''}`;
+        const mm = metaMap[key] || {};
+        const roomId = (mm.room_id!=null) ? Number(mm.room_id) : null;
+        const localRoomName = roomId ? (roomNameById.get(roomId) || '') : '';
+        d.priority = (mm.priority!=null) ? Number(mm.priority) : null;
+        d.essential = (mm.essential === true || mm.essential === 1) ? true : false;
+        d.roomId = roomId;
+        if (localRoomName) d.roomName = localRoomName; // prefer local mapping
+      }
+    } catch {}
     return { ok: true, items };
   }
 
@@ -160,6 +178,68 @@ export function registerAiRoutes(router, { gw, helpers }){
         } catch (e) { results.push({ vendor:d.vendor, id:d.id, ok:false, error:String(e) }); }
       }
       res.json({ ok:true, count: results.length, results });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
+  // Toggle all devices by local Room (from our DB: /rooms + /device-meta), not vendor rooms
+  router.post('/ai/devices/toggle-room', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const action = String(req.body?.action || req.query?.action || '').toLowerCase();
+      const room = String(req.body?.room || req.query?.room || '').trim();
+      if (!['on','off'].includes(action)) return res.status(422).json({ ok:false, error:'action must be on/off' });
+      if (!room) return res.status(422).json({ ok:false, error:'room required' });
+
+      const authHeader = req.headers['authorization'] || '';
+      const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+      const headers = { 'Authorization': authHeader };
+      const api = async (path) => {
+        const r = await fetch(base + path, { headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+        const j = await r.json().catch(()=>null); if (!r.ok) throw new Error(j?.error || `${r.status}`); return j;
+      };
+
+      // 1) Resolve target room id from our Rooms list
+      function norm(s){ return String(s||'').toLowerCase().normalize('NFKD').replace(/\p{Diacritic}/gu,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+      const target = norm(room);
+      const rooms = await api('/rooms').then(j => Array.isArray(j.items)? j.items: []);
+      let roomId = null;
+      // try exact normalized match, then contains, else numeric id
+      const exact = rooms.find(r => norm(r.name) === target);
+      if (exact) roomId = Number(exact.id);
+      if (!roomId) {
+        const partial = rooms.find(r => norm(r.name).includes(target) || target.includes(norm(r.name)));
+        if (partial) roomId = Number(partial.id);
+      }
+      if (!roomId) {
+        const asNum = Number(room);
+        if (Number.isFinite(asNum) && rooms.some(r => Number(r.id) === asNum)) roomId = asNum;
+      }
+      if (!roomId) return res.status(404).json({ ok:false, error:'room not found' });
+
+      // 2) Fetch device meta map and pick devices linked to this room
+      const metaMap = await api('/device-meta').then(j => (j && j.items) ? j.items : (j || {}));
+      const data = await devicesOverviewInternal(req, helpers);
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const targets = items.filter(d => {
+        const key = `${d.vendor||''}|${d.id||''}`;
+        const mm = metaMap[key];
+        return mm && Number(mm.room_id) === Number(roomId);
+      });
+
+      // 3) Send commands per vendor
+      const results = [];
+      for (const d of targets){
+        try {
+          if (d.vendor === 'smartthings'){
+            const r = await fetch(`${base}/smartthings/device/${encodeURIComponent(d.id)}/${action}`, { method:'POST', headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+            const j = await r.json().catch(()=>null); results.push({ vendor:d.vendor, id:d.id, name:d.name, roomId, ok:r.ok, resp:j });
+          } else if (d.vendor === 'tuya'){
+            const r = await fetch(`${base}/tuya/device/${encodeURIComponent(d.id)}/${action}`, { method:'POST', headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+            const j = await r.json().catch(()=>null); results.push({ vendor:d.vendor, id:d.id, name:d.name, roomId, ok:r.ok, resp:j });
+          }
+        } catch (e) { results.push({ vendor:d.vendor, id:d.id, name:d.name, roomId, ok:false, error:String(e) }); }
+      }
+      res.json({ ok:true, count: results.length, roomId, results });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
