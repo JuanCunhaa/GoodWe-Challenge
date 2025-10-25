@@ -14,6 +14,8 @@ import { registerMetaRoutes } from './meta.js';
 import { registerAutomationsRoutes } from './automations.js';
 import { registerEnergyRoutes } from './energy.js';
 import { registerHabitsRoutes } from './habits.js';
+import { registerAdaptiveRoutineRoutes } from './routines/adaptive.js';
+import { registerMetaRoutineRoutes } from './routines/meta.js';
 
 export function registerAllRoutes(router, { gw, dbApi }) {
   const helpers = createHelpers({ gw, dbApi });
@@ -39,6 +41,8 @@ export function registerAllRoutes(router, { gw, dbApi }) {
   registerAutomationsRoutes(router, { helpers });
   registerEnergyRoutes(router, { helpers });
   registerHabitsRoutes(router, { helpers });
+  registerAdaptiveRoutineRoutes(router, { helpers });
+  registerMetaRoutineRoutes(router, { helpers });
 
   return router;
 }

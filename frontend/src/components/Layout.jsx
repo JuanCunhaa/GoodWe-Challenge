@@ -14,6 +14,7 @@ const NAV = [
   { to: '/geracao', label: 'Geração', icon: Zap },
   //{ to: '/consumo', label: 'Consumo', icon: Activity },
   { to: '/inversores', label: 'Inversores', icon: Factory },
+  { to: '/economia', label: 'Economia', icon: Activity },
   { to: '/sugestoes', label: 'Sugestões', icon: ShieldCheck },
   { to: '/dispositivos', label: 'Dispositivos', icon: Activity },
   { to: '/habitos', label: 'H\u00e1bitos', icon: Activity },
@@ -107,7 +108,7 @@ export default function Layout(){
       </aside>
 
       {/* Main + Right Dock */}
-      <main className="min-h-svh pb-24 lg:pb-0">
+      <main className="min-h-svh">
         {/* Topbar */}
         <div className="sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800/60 bg-gradient-to-r from-red-700 via-red-600 to-white dark:to-black">
           <div className="mx-auto max-w-[1400px] px-6 py-3 flex items-center justify-between">
@@ -124,28 +125,16 @@ export default function Layout(){
           </div>
         </div>
 
-        {/* Mobile bottom tab bar (replaces top quick nav) */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-20 mobile-tabbar surface border-t border-gray-200/60 dark:border-gray-800/60">
-          <div className="mx-auto max-w-[1400px]">
-            <ul className="flex items-stretch justify-between gap-1 px-1">
-              {NAV.map(({ to, label, icon: Icon }) => (
-                <li key={to} className="flex-1">
-                  <NavLink
-                    to={to}
-                    className={({ isActive }) => clsx(
-                      "flex flex-col items-center justify-center gap-1 py-2 text-[11px] leading-none",
-                      isActive && "text-brand font-semibold"
-                    )}
-                    aria-label={label}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="truncate max-w-[72px]">{label}</span>
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
+        {/* Mobile quick nav (below topbar) */}
+        <div className="lg:hidden mx-auto max-w-[1400px] px-4 py-2 overflow-x-auto">
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            {NAV.map(({to,label})=> (
+              <NavLink key={to} to={to} className={({isActive})=> clsx("pill", isActive && "pill-active") }>
+                {label}
+              </NavLink>
+            ))}
           </div>
-        </nav>
+        </div>
 
         {/* Content area */}
         <div className="mx-auto max-w-[1400px] grid lg:grid-cols-[1fr_360px] gap-6 p-4 sm:p-6">
@@ -168,7 +157,7 @@ export default function Layout(){
           )}
         </div>
 
-        <footer className="mx-auto max-w-[1400px] px-6 pb-8 lg:pb-8 text-center text-sm muted">
+        <footer className="mx-auto max-w-[1400px] px-6 pb-8 text-center text-sm muted">
           Grupo 04 • Projeto GoodWe
         </footer>
       </main>
@@ -178,4 +167,5 @@ export default function Layout(){
     </div>
   )
 }
+
 
