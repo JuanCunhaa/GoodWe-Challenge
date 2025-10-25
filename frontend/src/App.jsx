@@ -17,6 +17,7 @@ import Perfil from './pages/Perfil.jsx'
 import Dispositivos from './pages/Dispositivos.jsx'
 import Sugestoes from './pages/Sugestoes.jsx'
 import Habitos from './pages/Habitos.jsx'
+import Economia from './pages/Economia.jsx'
 // Auth pages (new)
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
@@ -49,9 +50,11 @@ export default function App(){
         <Route path="/perfil" element={<Perfil/>} />
         <Route path="/dispositivos" element={<Dispositivos/>} />
         <Route path="/sugestoes" element={<Sugestoes/>} />
-        <Route path="/habitos" element={<Habitos/>} />
+        <Route path="/habitos" element={<Habitos/>} />`n        <Route path="/economia" element={<Economia/>} />
         <Route path="*" element={<Navigate to="/" replace/>} />
       </Route>
     </Routes>
   )
 }
+
+

@@ -17,62 +17,6 @@ export function registerAiRoutes(router, { gw, helpers }){
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
-  // Aggregate endpoint for Sugestões: forecast + recommendations + devices overview + top consumers
-  router.get('/ai/suggestions', async (req, res) => {
-    const user = await requireUser(req, res); if (!user) return;
-    const plant_id = user.powerstation_id;
-    const hours = Number(req.query.hours || 24);
-    const windowTop = String(req.query.topWindow || '60');
-    try {
-      const authHeader = req.headers['authorization'] || '';
-      const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
-      async function api(path){
-        const r = await fetch(base + path, { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS || 30000)) });
-        const j = await r.json().catch(()=>null); if (!r.ok) throw new Error(j?.error || `${r.status}`); return j;
-      }
-
-      const tariff = (req.query.tariff!=null) ? Number(req.query.tariff) : (process.env.TARIFF_BRL_PER_KWH!=null ? Number(process.env.TARIFF_BRL_PER_KWH) : undefined);
-
-      const [forecast, recs, devices, top] = await Promise.all([
-        getForecast({ plant_id, hours, fetchWeather: async () => { try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null } } }),
-        getRecommendations({ plant_id, tariff_brl_per_kwh: tariff, fetchWeather: async () => { try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null } }, fetchDevices: async () => devicesOverviewInternal(req, helpers), fetchDeviceMeta: async () => {
-          try { const r = await api('/device-meta'); const j = (r && r.items) ? r.items : (r || {}); return j; } catch { return {}; }
-        }, fetchRooms: async () => {
-          try { const r = await api('/rooms'); const arr = Array.isArray(r?.items)? r.items : []; return arr; } catch { return []; }
-        } }),
-        devicesOverviewInternal(req, helpers),
-        api(`/iot/top-consumers?window=${encodeURIComponent(windowTop)}`).catch(()=>({ ok:true, items: [] }))
-      ]);
-
-      // Post-process: dicas personalizadas simples baseadas em forecast + dispositivos
-      const recommendations = Array.isArray(recs?.recommendations) ? recs.recommendations.slice() : [];
-      try {
-        const items = Array.isArray(forecast?.items) ? forecast.items : [];
-        const gen = Number(forecast?.total_generation_kwh || 0);
-        const cons = Number(forecast?.total_consumption_kwh || 0);
-        if (items.length >= 4) {
-          // Horas com maior geração nas próximas 24h
-          const ranked = items.map((it, i) => ({ i, t: it.time, g: Number(it.generation_kwh||0) })).sort((a,b)=> b.g-a.g);
-          const best = ranked.slice(0, 3).sort((a,b)=> new Date(a.t)-new Date(b.t));
-          const label = best.map(b => new Date(b.t).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })).join(', ');
-          if (gen > 0) recommendations.push({ text: `Aproveite a geração prevista para concentrar usos pesados (${label}).` });
-        }
-        if (cons > gen * 1.2) {
-          const falta = +(cons - gen).toFixed(1);
-          const custo = (typeof tariff==='number' && tariff>0) ? ` (~R$ ${(falta*tariff).toFixed(2)}/dia)` : '';
-          recommendations.push({ text: `Consumo previsto acima da geração em ~${falta} kWh${custo}. Reduza stand-by, adie lavagens/chuveiro elétrico para janelas com sol e ajuste setpoint do ar-condicionado.` });
-        }
-        const devs = Array.isArray(devices?.items) ? devices.items : [];
-        const pesados = devs.filter(d => Number(d.power_w||0) >= 800);
-        for (const d of pesados.slice(0,3)){
-          recommendations.push({ text: `Dispositivo em alto consumo agora: ${d.name}${d.roomName? ` (${d.roomName})`:''}. Se não for essencial, desligue para economizar.` });
-        }
-      } catch {}
-
-      res.json({ ok:true, forecast, recommendations, devices: devices?.items || [], top_consumers: Array.isArray(top?.items)? top.items : [] });
-    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
-  });
-
   async function devicesOverviewInternal(req, helpers){
     const authHeader = req.headers['authorization'] || '';
     const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
