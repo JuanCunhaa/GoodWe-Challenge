@@ -401,7 +401,12 @@
         answer = 'Certo! Como posso ajudar no painel?';
       }
       return res.json({ ok:true, answer, steps });
-router.get('/assistant/help', (req, res) => {
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: String(e) });
+    }
+  });
+
+  router.get('/assistant/help', (req, res) => {
     const SYSTEM_PROMPT = `Você é o Assistente Virtual deste painel.
 Regras:
 1) Use ferramentas para dados reais (renda, geração, métricas, status, dispositivos).
@@ -434,6 +439,5 @@ Regras:
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
   });
 }
-
 
 
