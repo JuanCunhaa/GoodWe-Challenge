@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { habitsApi } from '../services/habitsApi.js'
+import { automationsApi } from '../services/automationsApi.js'
 import { loadSession } from '../services/authApi.js'
 
 function Badge({ state }){
@@ -24,6 +25,10 @@ export default function Habitos(){
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [autos, setAutos] = useState([])
+  const [autoLoading, setAutoLoading] = useState(false)
+  const [autoError, setAutoError] = useState('')
+  const [simById, setSimById] = useState({})
 
   async function refresh(){
     setLoading(true); setError('')
@@ -39,10 +44,50 @@ export default function Habitos(){
 
   useEffect(()=>{ refresh() },[])
 
+  async function refreshAutos(){
+    setAutoLoading(true); setAutoError('')
+    try{
+      const token = localStorage.getItem('token')
+      const j = await automationsApi.list(token)
+      const arr = Array.isArray(j.items)? j.items : []
+      setAutos(arr)
+    }catch(e){ setAutoError(String(e.message||e)) }
+    finally{ setAutoLoading(false) }
+  }
+
+  useEffect(()=>{ refreshAutos() },[])
+
   async function onState(it, state){
     try{ const token = localStorage.getItem('token'); await habitsApi.setState(token, it.id, state); await refresh() } catch {}
   }
   async function onUndo(it){ try{ const token = localStorage.getItem('token'); await habitsApi.undo(token, it.id); await refresh() } catch {} }
+
+  // Automations helpers/actions
+  function parseJson(s, d={}){ try{ return s? JSON.parse(s): d } catch { return d } }
+  function scheduleStr(a){ const sch = parseJson(a.schedule_json||'{}'); const days = Array.isArray(sch.days)? sch.days.join(','):'0-6'; return `${sch.start||'--:--'} - ${sch.end||'--:--'} (dias: ${days})` }
+  function isExperimental(a){ const cond = parseJson(a.conditions_json||'{}'); return cond.experimental === true }
+  async function simulateAuto(a){
+    try{
+      const token = localStorage.getItem('token')
+      const routine = { name:a.name, kind:a.kind, schedule: parseJson(a.schedule_json||'{}'), actions: parseJson(a.actions_json||'{}') }
+      const r = await automationsApi.simulate(token, routine)
+      setSimById(prev => ({ ...prev, [a.id]: { pct: r.predicted_savings_pct, kwh: r.predicted_savings_kwh } }))
+    }catch(e){ setSimById(prev => ({ ...prev, [a.id]: { error: String(e.message||e) } })) }
+  }
+  async function trainAuto(a, promote=false){
+    try{
+      const token = localStorage.getItem('token')
+      await automationsApi.train(token, { automation_id: a.id, window_days: 7, k: 3, promoteIfReady: !!promote })
+      await simulateAuto(a)
+    }catch(e){ setAutoError(String(e.message||e)) }
+  }
+  async function toggleAuto(a){
+    try{
+      const token = localStorage.getItem('token')
+      await automationsApi.update(token, a.id, { name:a.name, enabled: !a.enabled, kind:a.kind, schedule: parseJson(a.schedule_json||'{}'), conditions: parseJson(a.conditions_json||'{}'), actions: parseJson(a.actions_json||'{}') })
+      await refreshAutos()
+    }catch(e){ setAutoError(String(e.message||e)) }
+  }
 
   const groups = useMemo(()=>{
     const map = new Map()
@@ -56,9 +101,41 @@ export default function Habitos(){
         <div className="h2">Hábitos e Mini‑Rotinas</div>
         <div className="flex items-center gap-2">
           <button className="btn" onClick={refresh} disabled={loading}>{loading? 'Atualizando...' : 'Atualizar'}</button>
+          <button className="btn" onClick={refreshAutos} disabled={autoLoading}>{autoLoading? 'Carregando rotinas...' : 'Atualizar Rotinas'}</button>
         </div>
       </div>
       {error && <div className="text-red-600 text-sm">{error}</div>}
+      {autoError && <div className="text-red-600 text-sm">{autoError}</div>}
+      <div className="card">
+        <div className="h2 mb-2">Rotinas de Energia</div>
+        {autos.length===0 ? (
+          <div className="muted text-sm">Sem rotinas cadastradas.</div>
+        ) : (
+          <div className="grid gap-2">
+            {autos.map(a => {
+              const sim = simById[a.id] || {}
+              return (
+                <div key={a.id} className="panel flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold">{a.name} {a.enabled? <span className="text-emerald-600 text-xs ml-2">Ativa</span> : <span className="text-slate-500 text-xs ml-2">Inativa</span>} {isExperimental(a) && <span className="text-amber-600 text-xs ml-2">Experimental</span>}</div>
+                    <div className="muted text-xs">tipo: {a.kind} • janela: {scheduleStr(a)}</div>
+                    {sim.pct!=null && (
+                      <div className="text-xs mt-0.5">Economia prevista: <span className="font-semibold">{Number(sim.pct).toFixed(1)}%</span> {sim.kwh!=null? `(${Number(sim.kwh).toFixed(2)} kWh)`: ''}</div>
+                    )}
+                    {sim.error && (<div className="text-xs text-red-600">{sim.error}</div>)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button className="btn" onClick={()=> simulateAuto(a)} disabled={autoLoading}>Simular</button>
+                    <button className="btn" onClick={()=> trainAuto(a, false)} disabled={autoLoading}>Treinar</button>
+                    <button className="btn" onClick={()=> trainAuto(a, true)} disabled={autoLoading}>Promover se pronto</button>
+                    <button className="btn btn-ghost" onClick={()=> toggleAuto(a)}>{a.enabled? 'Desativar':'Ativar'}</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
       <div className="grid gap-6">
         {groups.map(([state, list]) => (
           <div key={state} className="card">

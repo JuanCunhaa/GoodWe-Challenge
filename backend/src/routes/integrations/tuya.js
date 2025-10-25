@@ -109,9 +109,13 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
     const row = await dbApi.getLinkedAccount(user.id, 'tuya')
     if (!row) throw Object.assign(new Error('not linked'), { code: 'NOT_LINKED' })
     const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {}
-    const uid = String(meta.uid || '')
+    let uid = String(meta.uid || '')
     const uids = (meta.uids && typeof meta.uids === 'object') ? meta.uids : null
-    if (!uid && (!uids || Object.keys(uids).length === 0)) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' })
+    // Fallback: if meta.uid is empty but we have meta.uids, pick a sensible default
+    if (!uid && uids && Object.keys(uids).length > 0) {
+      uid = String(uids.default || Object.values(uids)[0] || '')
+    }
+    if (!uid) throw Object.assign(new Error('missing uid'), { code: 'MISSING_UID' })
     return { uid, uids, row }
   }
 
@@ -133,7 +137,16 @@ export function registerTuyaRoutes(router, { dbApi, helpers }) {
 
   router.get('/auth/tuya/status', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return
-    try { const row = await dbApi.getLinkedAccount(user.id, 'tuya'); const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {}; const uids = (meta.uids && typeof meta.uids==='object') ? meta.uids : (meta.uid ? { default: meta.uid } : {}); res.json({ ok: true, connected: !!(row && Object.keys(uids).length>0), uid: meta.uid || '', uids }) }
+    try {
+      const row = await dbApi.getLinkedAccount(user.id, 'tuya');
+      const meta = row?.meta ? (JSON.parse(row.meta || '{}') || {}) : {};
+      const uids = (meta.uids && typeof meta.uids==='object') ? meta.uids : (meta.uid ? { default: meta.uid } : {});
+      let uid = String(meta.uid || '');
+      if (!uid && uids && Object.keys(uids).length > 0) {
+        uid = String(uids.default || Object.values(uids)[0] || '');
+      }
+      res.json({ ok: true, connected: !!(row && Object.keys(uids).length>0), uid, uids })
+    }
     catch { res.json({ ok: true, connected: false }) }
   })
 
