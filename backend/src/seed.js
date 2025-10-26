@@ -1,17 +1,19 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Force SQLite for seeding to avoid external DB quotas during build
-process.env.DB_ENGINE = process.env.DB_ENGINE || 'sqlite';
-process.env.ALLOW_DB_FALLBACK = '1';
+// Require Postgres for seeding; no fallback allowed
+if (!process.env.DATABASE_URL || !String(process.env.DATABASE_URL).trim()) {
+  console.error('[seed] DATABASE_URL is required for Postgres and no fallback is allowed. Aborting.');
+  process.exit(1);
+}
 
 const IDS = [
+  '6ef62eb2-7959-4c49-ad0a-0ce75565023a',
   '7f9af1fc-3a9a-4779-a4c0-ca6ec87bd93a',
   // 13th missing in the provided list; can be added later
 ];
 
-// Dynamically import DB after setting env overrides
-const { seedPowerstations, listPowerstations } = await import('./db.js');
+import { seedPowerstations, listPowerstations } from './db.js';
 
 await seedPowerstations(IDS);
 

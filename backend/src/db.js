@@ -1,14 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Select engine via env override DB_ENGINE=pg|sqlite, else: Postgres when DATABASE_URL is present
-const ENGINE = (process.env.DB_ENGINE || '').toLowerCase();
-let USE_PG = ENGINE === 'pg' ? true : ENGINE === 'sqlite' ? false : !!(process.env.DATABASE_URL && String(process.env.DATABASE_URL).trim());
+// Always use Postgres. No fallback allowed.
+const USE_PG = true;
 
 // --------- Postgres (async) ---------
 let pgPool = null;
 async function initPg() {
   if (!USE_PG || pgPool) return;
+  if (!process.env.DATABASE_URL || !String(process.env.DATABASE_URL).trim()) {
+    throw new Error('DATABASE_URL is required for Postgres and no fallback is allowed.');
+  }
   const { Pool } = await import('pg');
   pgPool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -400,24 +402,8 @@ async function initSqlite() {
   try { sqliteDb.prepare('ALTER TABLE automations ADD COLUMN conditions_json TEXT').run(); } catch {}
 }
 
-// Initialize selected engine
-if (USE_PG) {
-  try {
-    await initPg();
-  } catch (e) {
-    // Optional fallback to SQLite when explicitly allowed (e.g., during build/seed)
-    const allowFallback = process.env.ALLOW_DB_FALLBACK === '1' || process.env.DB_FALLBACK === 'sqlite';
-    if (allowFallback) {
-      console.warn(`[db] Postgres init failed: ${e?.message || e}. Falling back to SQLite for this process.`);
-      USE_PG = false;
-      await initSqlite();
-    } else {
-      throw e;
-    }
-  }
-} else {
-  await initSqlite();
-}
+// Initialize Postgres only (no fallback)
+await initPg();
 
 // ---------- Public API (async) ----------
 
