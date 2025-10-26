@@ -153,64 +153,39 @@
           const today = new Date();
           const pad = (n) => String(n).padStart(2, '0');
           const dateLocal = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-          const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9]+/g, '');
-          const mapXY = (arr) => { const m = new Map(); (arr || []).forEach(p => { const k = String(p?.x || ''); if (k) m.set(k, Number(p?.y) || 0) }); return m };
-          const parseGenFromChart = async (refDate) => {
-            const body = { id: psId, date: dateLocal(refDate), range: 2, chartIndexId: '8', isDetailFull: false };
-            const j = await gw.postJson('v2/Charts/GetChartByPlant', body);
-            const lines = j?.data?.lines || [];
-            const by = {}; for (const l of lines) { by[norm(l.label || l.name)] = l.xy || [] }
-            let genArr = by['generationkwh'] || by['generatekwh'] || by['pvgenerationkwh'] || by['pvkwh'] || null;
-            if (!genArr) { const k = Object.keys(by).find(k => k.includes('generation')); if (k) genArr = by[k]; }
-            const genMap = genArr ? mapXY(genArr) : new Map();
-            const inHouseMap = mapXY(by['inhousekwh'] || by['selfusekwh'] || []);
-            const gridSellMap = mapXY(by['gridkwhsell'] || by['gridwkwhsell'] || by['gridsellkwh'] || by['sellkwh'] || []);
-            return { genMap, inHouseMap, gridSellMap };
-          };
+          const startEnd = (days) => { const end = new Date(); const start = new Date(end); start.setDate(end.getDate() - days + 1); return { start: dateLocal(start), end: dateLocal(end) } };
+
+          if (range === 'today' || range === 'yesterday'){
+            const ref = new Date(today);
+            if (range === 'yesterday') ref.setDate(today.getDate()-1);
+            const ds = dateLocal(ref);
+            const j = await apiJson(`/energy/day-aggregates?date=${encodeURIComponent(ds)}`);
+            const kwh = Number(j?.energy?.pv || 0);
+            return { kwh, period: range, source: '/api/energy/day-aggregates' };
+          }
+
+          if (range === 'this_week'){
+            const { start, end } = startEnd(7);
+            const j = await apiJson(`/energy/daily-aggregates?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+            const items = Array.isArray(j?.items) ? j.items : [];
+            const kwh = items.reduce((s,it)=> s + Number(it?.energy?.pv || 0), 0);
+            return { kwh, period: 'this_week', source: '/api/energy/daily-aggregates' };
+          }
+
+          if (range === 'this_month'){
+            const { start, end } = startEnd(30);
+            const j = await apiJson(`/energy/daily-aggregates?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+            const items = Array.isArray(j?.items) ? j.items : [];
+            const kwh = items.reduce((s,it)=> s + Number(it?.energy?.pv || 0), 0);
+            return { kwh, period: 'this_month', source: '/api/energy/daily-aggregates' };
+          }
+
           if (range === 'total') {
             const det = await gw.postForm('v3/PowerStation/GetPlantDetailByPowerstationId', { powerStationId: psId });
             const etotal = Number(det?.data?.kpi?.etotal ?? det?.data?.info?.etotal ?? 0);
             return { kwh: etotal, period: 'total', source: '/api/plant-detail' };
           }
-          if (range === 'this_month') {
-            const { genMap, inHouseMap, gridSellMap } = await parseGenFromChart(today);
-            const ym = dateLocal(today).slice(0, 7);
-            let sum = 0;
-            for (const [k, v] of genMap.entries()) if (k.startsWith(ym)) sum += Number(v) || 0;
-            if (sum === 0) {
-              for (const [k, v] of inHouseMap.entries()) if (k.startsWith(ym)) sum += Number(v) || 0;
-              for (const [k, v] of gridSellMap.entries()) if (k.startsWith(ym)) sum += Number(v) || 0;
-            }
-            return { kwh: sum, period: 'this_month', source: '/api/chart-by-plant?range=2' };
-          }
-          if (range === 'this_week') {
-            const { genMap, inHouseMap, gridSellMap } = await parseGenFromChart(today);
-            const base = new Date(today); const day = base.getDay();
-            const startD = new Date(base); startD.setDate(base.getDate() - day);
-            const endD = new Date(startD); endD.setDate(startD.getDate() + 6);
-            let sum = 0;
-            for (const [k, v] of genMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; }
-            if (sum === 0) {
-              for (const [k, v] of inHouseMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; }
-              for (const [k, v] of gridSellMap.entries()) { const d = new Date(k + 'T00:00:00'); if (d >= startD && d <= endD) sum += Number(v) || 0; }
-            }
-            return { kwh: sum, period: 'this_week', source: '/api/chart-by-plant?range=2' };
-          }
-          if (range === 'yesterday') {
-            const { genMap, inHouseMap, gridSellMap } = await parseGenFromChart(today);
-            const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-            const yKey = dateLocal(yesterday);
-            let sum = 0; sum += Number(genMap.get(yKey) || 0);
-            if (sum === 0) { sum += Number(inHouseMap.get(yKey) || 0); sum += Number(gridSellMap.get(yKey) || 0); }
-            return { kwh: sum, period: 'yesterday', source: '/api/chart-by-plant?range=2' };
-          }
-          if (range === 'today') {
-            const { genMap, inHouseMap, gridSellMap } = await parseGenFromChart(today);
-            const tKey = dateLocal(today);
-            let sum = 0; sum += Number(genMap.get(tKey) || 0);
-            if (sum === 0) { sum += Number(inHouseMap.get(tKey) || 0); sum += Number(gridSellMap.get(tKey) || 0); }
-            return { kwh: sum, period: 'today', source: '/api/chart-by-plant?range=2' };
-          }
+
           return { kwh: 0, period: String(range || 'unknown') };
         },
 
