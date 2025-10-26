@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Select engine: Postgres when DATABASE_URL is present; else SQLite (better-sqlite3)
-const USE_PG = !!(process.env.DATABASE_URL && String(process.env.DATABASE_URL).trim());
+// Select engine via env override DB_ENGINE=pg|sqlite, else: Postgres when DATABASE_URL is present
+const ENGINE = (process.env.DB_ENGINE || '').toLowerCase();
+let USE_PG = ENGINE === 'pg' ? true : ENGINE === 'sqlite' ? false : !!(process.env.DATABASE_URL && String(process.env.DATABASE_URL).trim());
 
 // --------- Postgres (async) ---------
 let pgPool = null;
@@ -401,7 +402,19 @@ async function initSqlite() {
 
 // Initialize selected engine
 if (USE_PG) {
-  await initPg();
+  try {
+    await initPg();
+  } catch (e) {
+    // Optional fallback to SQLite when explicitly allowed (e.g., during build/seed)
+    const allowFallback = process.env.ALLOW_DB_FALLBACK === '1' || process.env.DB_FALLBACK === 'sqlite';
+    if (allowFallback) {
+      console.warn(`[db] Postgres init failed: ${e?.message || e}. Falling back to SQLite for this process.`);
+      USE_PG = false;
+      await initSqlite();
+    } else {
+      throw e;
+    }
+  }
 } else {
   await initSqlite();
 }
