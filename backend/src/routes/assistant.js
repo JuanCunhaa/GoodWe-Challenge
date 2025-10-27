@@ -256,6 +256,72 @@
           let name = ''; try { const devs = await tools.tuya_list_devices(); const found = (devs.items || []).find(d => String(d.id||d.uuid) === String(device_id)); name = found?.name || ''; } catch {}
           return { ok: true, device_id, name, action, status };
         },
+
+        // Energy aggregates (backend analytics)
+        async energy_day({ date }){
+          const ds = String(date || new Date().toISOString().slice(0,10)).slice(0,10);
+          const j = await apiJson(`/energy/day-aggregates?date=${encodeURIComponent(ds)}`);
+          return { ok: true, date: ds, energy: j?.energy || { pv:0, load:0, grid:0, batt:0, gridExp:0 } };
+        },
+        async energy_range({ start, end }){
+          const s = String(start || '').slice(0,10); const e = String(end || s).slice(0,10);
+          const j = await apiJson(`/energy/daily-aggregates?start=${encodeURIComponent(s)}&end=${encodeURIComponent(e)}`);
+          const items = Array.isArray(j?.items) ? j.items : [];
+          return { ok: true, items };
+        },
+
+        // Live overview (instant power + today snapshot)
+        async live_overview(){
+          const pf = await gw.postJson('v2/PowerStation/GetPowerflow', { PowerStationId: psId }).catch(()=>null);
+          const d = pf?.data || pf || {};
+          const norm = (obj) => Number.isFinite(Number(obj)) ? Number(obj) : 0;
+          const pv = norm(d.pv_power ?? d.pv2power ?? d.pv_input);
+          const load = norm(d.load_power ?? d.loadpower ?? d.load);
+          const gridW = norm(d.grid_power ?? d.gridpower ?? d.grid ?? d.pmeter);
+          const battW = norm(d.battery_power ?? d.batterypower ?? d.batt ?? d.pbattery);
+          const soc = norm(d.soc ?? d.battery_soc);
+          const today = await apiJson(`/energy/day-aggregates?date=${encodeURIComponent(new Date().toISOString().slice(0,10))}`).catch(()=>null);
+          return { ok:true, live: { pv_w: pv, load_w: load, grid_w: gridW, battery_w: battW, soc_pct: soc }, today: today?.energy || null };
+        },
+
+        // Devices: top consumers in last N hours (from device_history)
+        async device_top_consumers({ hours=24, limit=5, include_essential=false }){
+          const eng = (await import('../db.js')).getDbEngine();
+          const until = new Date(); const since = new Date(until.getTime() - Math.max(1, Number(hours||24))*3600*1000);
+          let rows = [];
+          if (eng.type === 'pg'){
+            const sql = `SELECT vendor, device_id, name, room, ts, state_on, power_w, energy_wh FROM device_history WHERE ts >= $1 AND ts <= $2 ORDER BY vendor, device_id, ts ASC`;
+            rows = (await eng.pgPool.query(sql, [since, until])).rows;
+          } else {
+            rows = eng.sqliteDb.prepare('SELECT vendor, device_id, name, room, ts, state_on, power_w, energy_wh FROM device_history WHERE ts >= ? AND ts <= ? ORDER BY vendor, device_id, ts ASC').all(since.toISOString(), until.toISOString());
+          }
+          const byDev = new Map();
+          for (const r of rows){ const key = `${r.vendor}|${r.device_id}`; if (!byDev.has(key)) byDev.set(key, []); byDev.get(key).push(r); }
+          // meta map for essential filtering
+          const metaMap = await dbApi.getDeviceMetaMap(user.id).catch(()=>({}));
+          const essentialByName = (nm)=> { const s=String(nm||'').toLowerCase(); return ['geladeira','fridge','refrigerador','freezer'].some(x=> s.includes(x)); };
+          const items = [];
+          for (const [key, samples] of byDev.entries()){
+            let totalMs = 0; let estWh = 0; let lastTs = null; let lastOn = null; let lastPower = null; let firstEnergy = null; let lastEnergy = null; let name=''; let roomName=''; let vendor='', device_id='';
+            for (let i=0;i<samples.length;i++){
+              const s = samples[i];
+              vendor = s.vendor; device_id = s.device_id; name = s.name||name; roomName = s.room||roomName;
+              const ts = new Date(s.ts).getTime();
+              if (firstEnergy==null && s.energy_wh!=null) firstEnergy = Number(s.energy_wh)||0;
+              if (s.energy_wh!=null) lastEnergy = Number(s.energy_wh)||0;
+              if (lastTs!=null){ const dt = Math.max(0, ts - lastTs); if (lastOn===true) totalMs += dt; const p = (Number.isFinite(Number(lastPower)) ? Number(lastPower) : null); if (p!=null) estWh += (p * (dt/3600000)); }
+              lastTs = ts; lastOn = (s.state_on===true || s.state_on===1); lastPower = (Number.isFinite(Number(s.power_w))? Number(s.power_w): null);
+            }
+            let deltaWh = null; if (firstEnergy!=null && lastEnergy!=null && lastEnergy>=firstEnergy) deltaWh = lastEnergy - firstEnergy;
+            const energyWh = (deltaWh!=null) ? deltaWh : estWh;
+            const mm = metaMap[key] || {};
+            const essential = (mm.essential===true) || essentialByName(name);
+            if (!include_essential && essential) continue;
+            items.push({ key, vendor, device_id, name, roomName, energy_kwh: +(energyWh/1000).toFixed(3), on_minutes: Math.round(totalMs/60000), priority: (mm.priority!=null? Number(mm.priority): null), essential });
+          }
+          const sorted = items.sort((a,b)=> (b.energy_kwh||0) - (a.energy_kwh||0));
+          return { ok:true, items: sorted.slice(0, Math.max(1, Number(limit||5))) };
+        },
       };
 
       const toolSchemas = [
@@ -276,6 +342,10 @@
         { name: 'get_power_chart', description: 'Charts/GetPlantPowerChart', parameters: { type: 'object', properties: { date: { type: 'string' }, full_script: { type: 'boolean' } }, additionalProperties: false } },
         { name: 'get_warnings', description: 'warning/PowerstationWarningsQuery', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'list_powerstations', description: 'Lista powerstations locais', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'energy_day', description: 'Energia (kWh) do dia: pv, load, grid, batt, gridExp', parameters: { type: 'object', properties: { date: { type: 'string' } }, additionalProperties: false } },
+        { name: 'energy_range', description: 'Energia (kWh) agregada por dia num intervalo [start,end].', parameters: { type: 'object', properties: { start: { type: 'string' }, end: { type: 'string' } }, additionalProperties: false } },
+        { name: 'live_overview', description: 'Potências instantâneas (W) e snapshot de hoje.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+        { name: 'device_top_consumers', description: 'Top consumidores em N horas (device_history).', parameters: { type: 'object', properties: { hours: { type: 'number', minimum:1, maximum:168 }, limit: { type: 'number', minimum:1, maximum:50 }, include_essential: { type: 'boolean' } }, additionalProperties: false } },
         { name: 'set_powerstation_name', description: 'Define nome comercial local para powerstation', parameters: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string','null'] } }, required: ['id'], additionalProperties: false } },
         { name: 'debug_auth', description: 'Info GoodWe (mascarado)', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'cross_login', description: 'Executa CrossLogin GoodWe', parameters: { type: 'object', properties: {}, additionalProperties: false } },
@@ -412,6 +482,17 @@ Regras:
 
   router.get('/assistant/health', (req, res) => {
     res.json({ ok: true, hasKey: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY) });
+  });
+
+  // Expor nomes das ferramentas para UIs externas (lista simples)
+  router.get('/assistant/tools', (req, res) => {
+    const items = [
+      'device_toggle','get_devices_overview','get_forecast','get_recommendations',
+      'get_income_today','get_total_income','get_generation','get_monitor','get_inverters','get_weather','get_powerflow','get_evcharger_count','get_plant_detail','get_chart_by_plant','get_power_chart','get_warnings','list_powerstations',
+      'energy_day','energy_range','live_overview','device_top_consumers',
+      'devices_toggle_priority','devices_toggle_room','get_device_usage_by_hour','habits_list','habits_logs','habit_set_state','habit_undo'
+    ].map(name => ({ name }));
+    res.json({ ok:true, items });
   });
 }
 
