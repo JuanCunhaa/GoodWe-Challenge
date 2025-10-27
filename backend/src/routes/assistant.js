@@ -53,10 +53,7 @@
           const data = await apiJson(`/ai/forecast?hours=${encodeURIComponent(h)}`);
           return { ok: true, ...data };
         },
-        async get_recommendations(){
-          const data = await apiJson(`/ai/recommendations`);
-          return { ok: true, ...data };
-        },
+        async get_recommendations(){\n          const data = await apiJson(/ai/recommendations);\n          return { ok: true, ...data };\n        },\n        async get_bright_suggestions(){\n          const data = await apiJson(/ai/bright/suggestions);\n          return { ok:true, items: Array.isArray(data?.items)? data.items : [] };\n        },
         async device_toggle({ name, action }){
           const payload = { name: String(name||'').trim(), action: String(action||'').toLowerCase() };
           const data = await apiJson(`/ai/device/toggle`, { method:'POST', body: payload });
@@ -422,7 +419,7 @@
         { name: 'st_find_device_room', description: 'Encontra o comodo (nome) de um dispositivo SmartThings (por nome ou id).', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
         { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya vinculados (Smart Life e/ou Tuya app).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'habit_create', description: 'Cria um padrão de hábito (Quando <gatilho> então <ação>) com período (global/dia/noite) e atraso opcional.', parameters: { type:'object', properties: {
+        { name: 'habit_create','get_bright_suggestions', description: 'Cria um padrão de hábito (Quando <gatilho> então <ação>) com período (global/dia/noite) e atraso opcional.', parameters: { type:'object', properties: {
             trigger_name: { type:'string' }, trigger_device_id: { type:'string' }, trigger_vendor: { type:'string' }, trigger_event: { type:'string', enum:['on','off','ligar','desligar'] },
             action_name: { type:'string' }, action_device_id: { type:'string' }, action_vendor: { type:'string' }, action_event: { type:'string', enum:['on','off','ligar','desligar'] },
             context_period: { type:'string', enum:['global','dia','noite','day','night'] }, delay_s: { type:'number' }
@@ -559,7 +556,7 @@ Regras:
   // Expor nomes das ferramentas para UIs externas (lista simples)
   router.get('/assistant/tools', (req, res) => {
     const items = [
-      'device_toggle','get_devices_overview','get_forecast','get_recommendations','habit_create',
+      'device_toggle','get_devices_overview','get_forecast','get_recommendations','habit_create','get_bright_suggestions',
       'get_income_today','get_total_income','get_generation','get_monitor','get_inverters','get_weather','get_powerflow','get_evcharger_count','get_plant_detail','get_chart_by_plant','get_power_chart','get_warnings','list_powerstations',
       'energy_day','energy_range','live_overview','device_top_consumers',
       'devices_toggle_priority','devices_toggle_room','get_device_usage_by_hour','habits_list','habits_logs','habit_set_state','habit_undo'
@@ -567,5 +564,6 @@ Regras:
     res.json({ ok:true, items });
   });
 }
+
 
 

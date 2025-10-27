@@ -32,4 +32,12 @@ export const aiApi = {
     return request(`/iot/device/${encodeURIComponent(vendor)}/${encodeURIComponent(id)}/usage-by-hour?${q.toString()}`, { token });
   },
   topConsumers: (token, window = '60') => request(`/iot/top-consumers?window=${encodeURIComponent(window)}`, { token }),
+  brightAnalyze: async (token, { hours=24 } = {}) => {
+    const r = await fetch(`${API_BASE}/ai/bright/analyze?hours=${encodeURIComponent(hours)}`,
+      { method:'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type':'application/json' }, body: JSON.stringify({}) });
+    const j = await r.json().catch(()=>null);
+    if (!r.ok) throw new Error(j?.error || `${r.status} ${r.statusText}`);
+    return j;
+  },
+  brightGet: (token) => request(`/ai/bright/suggestions`, { token }),
 };

@@ -11,7 +11,7 @@ export default function Sugestoes(){
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
   const [forecast, setForecast] = useState(null)
-  const [recs, setRecs] = useState([])
+  const [recs, setRecs] = useState([]) // dynamic preview (fallback)\n  const [fixedRecs, setFixedRecs] = useState([]) // saved (Bright)\n  const [brightLoading, setBrightLoading] = useState(false)
   const [devices, setDevices] = useState([])
   const [uptime, setUptime] = useState({})
   const [usage, setUsage] = useState({}) // key -> { kwh, cost_brl? }
@@ -32,7 +32,7 @@ export default function Sugestoes(){
         const items = (f?.items||[]).slice().sort((a,b)=> new Date(a.time)-new Date(b.time))
         setForecast(f? { ...f, items } : null)
         setRecs(Array.isArray(s?.recommendations) ? s.recommendations : [])
-        setDevices(Array.isArray(s?.devices) ? s.devices : [])
+        setDevices(Array.isArray(s?.devices) ? s.devices : [])\n        try { const saved = await aiApi.brightGet(token); setFixedRecs(Array.isArray(saved?.items)? saved.items : []) } catch {}
       } catch (e) {
         // fallback para rotas antigas
         try {
@@ -86,6 +86,26 @@ export default function Sugestoes(){
 
   return (
     <div className="grid gap-4">
+      <div className="card">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="h2">Sugestões de Economia</div>
+            <div className="muted">Previsões + dicas baseadas no seu histórico</div>
+          </div>
+          <div className="shrink-0">
+            <button className="btn btn-primary" disabled={brightLoading} onClick={async ()=>{
+              try{
+                setBrightLoading(true)
+                const token = localStorage.getItem('token')
+                await aiApi.brightAnalyze(token, { hours: 24 })
+                const saved = await aiApi.brightGet(token)
+                setFixedRecs(Array.isArray(saved?.items)? saved.items : [])
+              } catch(e){ alert('Falha ao gerar análise: '+ (e?.message||e)) }
+              finally { setBrightLoading(false) }
+            }}>{brightLoading? 'Gerando...' : 'Criar análise com Bright'}</button>
+          </div>
+        </div>
+      </div>
       <div className="card">
         <div className="h2">Sugestões de Economia</div>
         <div className="muted">Previsões + dicas baseadas no seu histórico</div>
@@ -158,10 +178,10 @@ export default function Sugestoes(){
           <div className="card">
             <div className="h3 mb-1">Dicas personalizadas</div>
             <div className="grid gap-2">
-              {recs.length === 0 && <div className="panel">Nada por aqui por enquanto.</div>}
-              {recs.map((r,idx)=> (
+              {fixedRecs.length === 0 && <div className="panel">Nenhuma dica salva. Clique em "Criar análise com Bright" para gerar sugestões.</div>}
+              {fixedRecs.map((r,idx)=> (
                 <div key={idx} className="panel flex items-start gap-3">
-                  <StatusDot ok={!/acima|alto|pico|nublado|chuva/i.test(r?.text||'')} />
+                  <StatusDot ok={!/acima|alto|pico|nublado|chuva/i.test(String(r?.text||''))} />
                   <div><div>{r.text}</div></div>
                 </div>
               ))}
@@ -172,3 +192,5 @@ export default function Sugestoes(){
     </div>
   )
 }
+
+
