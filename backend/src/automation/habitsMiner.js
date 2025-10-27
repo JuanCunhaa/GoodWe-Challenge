@@ -132,6 +132,35 @@ export function startHabitMiner({ helpers }){
           }
         }
 
+        // helper: get last known friendly device name from history
+        async function getFriendlyName(vendor, device_id){
+          try{
+            if (engine.type==='pg'){
+              const r = await engine.pgPool.query('SELECT name, room FROM device_history WHERE vendor=$1 AND device_id=$2 ORDER BY ts DESC LIMIT 1', [vendor, String(device_id)]);
+              const row = r.rows?.[0];
+              if (!row) return null;
+              const n = row.name||String(device_id);
+              const room = row.room||'';
+              return room? `${n} (${room})` : n;
+            } else {
+              const row = engine.sqliteDb.prepare('SELECT name, room FROM device_history WHERE vendor=? AND device_id=? ORDER BY ts DESC LIMIT 1').get(vendor, String(device_id));
+              if (!row) return null;
+              const n = row.name||String(device_id);
+              const room = row.room||'';
+              return room? `${n} (${room})` : n;
+            }
+          } catch { return null }
+        }
+
+        // helper: send natural language to assistant to toggle by name
+        async function sendAssistantToggle({ action, name }){
+          try{
+            const txt = `${action==='off' ? 'desliga' : 'liga'} ${name}`;
+            const url = `${apiBase}/assistant/chat?powerstation_id=${encodeURIComponent(user.powerstation_id||'')}`;
+            await fetch(url, { method:'POST', headers:{ 'Authorization': `Bearer ${svcToken}`, 'Content-Type':'application/json' }, body: JSON.stringify({ input: txt }), signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) }).then(r=>r.json()).catch(()=>null);
+          } catch {}
+        }
+
         // 2) Execute any ACTIVE manual/learned patterns that match the TRIGGER 'a'
         if (svcToken){
           try{
@@ -139,7 +168,15 @@ export function startHabitMiner({ helpers }){
             for (const p of (match||[])){
               const delay = Number(p.avg_delay_s||0);
               const run = async ()=>{
-                const ok = await execAction({ base: apiBase, token: svcToken, vendor: p.action_vendor, device_id: p.action_device_id, action: p.action_event, user });
+                let ok = false;
+                const useAssistant = !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY);
+                if (useAssistant){
+                  const nm = await getFriendlyName(p.action_vendor, p.action_device_id) || `${p.action_vendor}:${p.action_device_id}`;
+                  await sendAssistantToggle({ action: p.action_event, name: nm });
+                  ok = true; // assume assistant will handle; we log and rely on devices status for feedback later
+                } else {
+                  ok = await execAction({ base: apiBase, token: svcToken, vendor: p.action_vendor, device_id: p.action_device_id, action: p.action_event, user });
+                }
                 try{ await insertHabitLog({ pattern_id: p.id, user_id: user.id, event: 'auto_action_from_pattern', meta: { ok } }) } catch {}
               };
               if (delay>0){ setTimeout(run, Math.round(delay*1000)); } else { run().catch(()=>{}) }
