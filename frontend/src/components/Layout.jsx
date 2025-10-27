@@ -110,7 +110,7 @@ export default function Layout(){
       {/* Main + Right Dock */}
       <main className="min-h-svh pb-24 lg:pb-0">
         {/* Topbar */}
-        <div className="sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800/60 bg-gradient-to-r from-red-700 via-red-600 to-white dark:to-black">
+        <div className="sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800/60 bg-[#e8f0ec] dark:bg-[#0a0e11]">
           <div className="mx-auto max-w-[1400px] px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src={logo} alt="Logo" className="h-8 w-8 rounded-md shadow-md" />
