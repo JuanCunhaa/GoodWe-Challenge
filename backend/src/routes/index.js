@@ -16,6 +16,7 @@ import { registerEnergyRoutes } from './energy.js';
 import { registerHabitsRoutes } from './habits.js';
 import { registerAdaptiveRoutineRoutes } from './routines/adaptive.js';
 import { registerMetaRoutineRoutes } from './routines/meta.js';
+import { registerAlexaRoutes } from './alexa.js';
 
 export function registerAllRoutes(router, { gw, dbApi }) {
   const helpers = createHelpers({ gw, dbApi });
@@ -43,6 +44,7 @@ export function registerAllRoutes(router, { gw, dbApi }) {
   registerHabitsRoutes(router, { helpers });
   registerAdaptiveRoutineRoutes(router, { helpers });
   registerMetaRoutineRoutes(router, { helpers });
+  registerAlexaRoutes(router, { helpers });
 
   return router;
 }
