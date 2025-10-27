@@ -17,6 +17,7 @@ export default function Habitos(){
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const debugAvailable = String(import.meta.env.VITE_DEBUG_HABITS || 'false') === 'true'
   const [debug, setDebug] = useState(false)
   const [logs, setLogs] = useState([])
   const [testing, setTesting] = useState({}) // id => true
@@ -155,10 +156,12 @@ export default function Habitos(){
                 )
               })}
             </div>
-            <label className="ml-auto inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={debug} onChange={e=> setDebug(e.target.checked)} />
-              <span>Modo debug</span>
-            </label>
+            {debugAvailable && (
+              <label className="ml-auto inline-flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={debug} onChange={e=> setDebug(e.target.checked)} />
+                <span>Modo debug</span>
+              </label>
+            )}
           </div>
         </div>
 
@@ -200,14 +203,14 @@ export default function Habitos(){
                           <button className="btn btn-danger" onClick={()=> onRemove(it)}>Remover</button>
                         </>
                       )}
-                      {debug && (
+                      {debugAvailable && debug && (
                         <button className="btn" disabled={!!testing[it.id]} onClick={async ()=>{
                           try{
                             setTesting(v=> ({...v, [it.id]: true}));
                             const token = localStorage.getItem('token');
                             const r = await habitsApi.test(token, it.id);
                             alert((r?.result_ok? 'OK: ':'Falha: ') + (r?.method==='assistant'? 'via Assistente' : 'direto'));
-                            if (debug) {
+                            if (debugAvailable && debug) {
                               try{ const j = await habitsApi.logs(token, { limit: 100 }); setLogs(Array.isArray(j.items)? j.items:[]) } catch{}
                             }
                           } catch (e) { alert('Falha ao disparar: ' + (e?.message||e)); }
@@ -221,7 +224,7 @@ export default function Habitos(){
             </div>
           ))}
 
-          {debug && (
+          {debugAvailable && debug && (
             <div className="card">
               <div className="h2 mb-2">Debug de Rotinas</div>
               <div className="grid gap-2 max-h-[420px] overflow-auto pr-2 text-sm">
