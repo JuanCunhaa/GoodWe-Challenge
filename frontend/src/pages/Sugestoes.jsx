@@ -11,7 +11,9 @@ export default function Sugestoes(){
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
   const [forecast, setForecast] = useState(null)
-  const [recs, setRecs] = useState([]) // dynamic preview (fallback)\n  const [fixedRecs, setFixedRecs] = useState([]) // saved (Bright)\n  const [brightLoading, setBrightLoading] = useState(false)
+  const [recs, setRecs] = useState([]) // dynamic preview (fallback)
+  const [fixedRecs, setFixedRecs] = useState([]) // saved (Bright)
+  const [brightLoading, setBrightLoading] = useState(false)
   const [devices, setDevices] = useState([])
   const [uptime, setUptime] = useState({})
   const [usage, setUsage] = useState({}) // key -> { kwh, cost_brl? }
@@ -32,7 +34,11 @@ export default function Sugestoes(){
         const items = (f?.items||[]).slice().sort((a,b)=> new Date(a.time)-new Date(b.time))
         setForecast(f? { ...f, items } : null)
         setRecs(Array.isArray(s?.recommendations) ? s.recommendations : [])
-        setDevices(Array.isArray(s?.devices) ? s.devices : [])\n        try { const saved = await aiApi.brightGet(token); setFixedRecs(Array.isArray(saved?.items)? saved.items : []) } catch {}
+        setDevices(Array.isArray(s?.devices) ? s.devices : [])
+        try {
+          const saved = await aiApi.brightGet(token);
+          setFixedRecs(Array.isArray(saved?.items)? saved.items : [])
+        } catch {}
       } catch (e) {
         // fallback para rotas antigas
         try {
