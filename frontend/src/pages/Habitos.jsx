@@ -35,6 +35,7 @@ export default function Habitos(){
   const [stateFilter, setStateFilter] = useState('all')
   const [sortKey, setSortKey] = useState('confidence')
   const [showManual, setShowManual] = useState(false)
+  const stateLabels = { all:'Todos', active:'Ativos', suggested:'Sugeridos', paused:'Pausados', shadow:'Observados', retired:'Arquivados' }
   // manual create form
   const [form, setForm] = useState({
     trigger_vendor: 'smartthings', trigger_device_id: '', trigger_event: 'on',
@@ -160,18 +161,28 @@ export default function Habitos(){
             <button className="btn btn-primary" onClick={()=> setShowManual(true)}>Criar padrao</button>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {['all','active','suggested','paused','shadow','retired'].map(k => (
-            <button key={k} onClick={()=> setStateFilter(k)} className={`pill ${stateFilter===k? 'pill-active':''}`}>
-              {k} {k!=='all' && (<span className="ml-1 text-xs muted">({countsByState[k]||0})</span>)}
-            </button>
-          ))}
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <div className="inline-flex items-center rounded-full bg-gray-100/80 dark:bg-gray-800/60 p-1 border border-gray-200/60 dark:border-gray-700/60">
+            {['all','active','suggested','paused','shadow','retired'].map((k) => {
+              const active = stateFilter === k;
+              return (
+                <button
+                  key={k}
+                  onClick={()=> setStateFilter(k)}
+                  className={`px-3 py-1.5 rounded-full text-sm transition ${active ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50'}`}
+                  aria-pressed={active}
+                >
+                  {stateLabels[k] || k}{k !== 'all' && (<span className="ml-1 text-xs muted">({countsByState[k]||0})</span>)}
+                </button>
+              );
+            })}
+          </div>
           <div className="ml-auto flex items-center gap-2 text-sm">
             <span className="muted">Ordenar por</span>
-            <select value={sortKey} onChange={e=>setSortKey(e.target.value)} className="panel px-2 py-1 text-sm">
-              <option value="confidence">confianca</option>
-              <option value="last_seen">ultima ocorrencia</option>
-              <option value="pairs">num pares</option>
+            <select value={sortKey} onChange={e=>setSortKey(e.target.value)} className="panel px-3 py-2 text-sm rounded-full">
+              <option value="confidence">confiança</option>
+              <option value="last_seen">última ocorrência</option>
+              <option value="pairs">nº pares</option>
             </select>
           </div>
         </div>
