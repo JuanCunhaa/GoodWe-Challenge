@@ -34,6 +34,7 @@ export default function Habitos(){
   const [q, setQ] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const [sortKey, setSortKey] = useState('confidence')
+  const [showManual, setShowManual] = useState(false)
   // manual create form
   const [form, setForm] = useState({
     trigger_vendor: 'smartthings', trigger_device_id: '', trigger_event: 'on',
@@ -156,6 +157,7 @@ export default function Habitos(){
           <div className="flex items-center gap-2">
             <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por dispositivo/evento..." className="panel px-3 py-2 text-sm outline-none" />
             <button className="btn" onClick={refresh} disabled={loading}>{loading? 'Atualizando...' : 'Atualizar'}</button>
+            <button className="btn btn-primary" onClick={()=> setShowManual(true)}>Criar padrao</button>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -169,7 +171,7 @@ export default function Habitos(){
             <select value={sortKey} onChange={e=>setSortKey(e.target.value)} className="panel px-2 py-1 text-sm">
               <option value="confidence">confianca</option>
               <option value="last_seen">ultima ocorrencia</option>
-              <option value="pairs">nº pares</option>
+              <option value="pairs">num pares</option>
             </select>
           </div>
         </div>
@@ -178,8 +180,9 @@ export default function Habitos(){
       {error && <div className="text-red-600 text-sm">{error}</div>}
       {autoError && <div className="text-red-600 text-sm">{autoError}</div>}
 
+      {false && (
       <div className="card">
-        <div className="h2 mb-2">Criar padrão manualmente</div>
+        <div className="h2 mb-2">Criar padrao manualmente</div>
         <div className="grid gap-3">
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="panel grid gap-2">
@@ -236,11 +239,12 @@ export default function Habitos(){
                   await habitsApi.createManual(token, payload);
                   await refresh();
                 } catch (e) { alert('Falha ao criar: '+ (e?.message||e)); }
-              }}>Criar padrão</button>
+              }}>Criar padrao</button>
             </div>
           </div>
         </div>
       </div>
+      )}
 
       <div className="card">
         <div className="h2 mb-2">Rotinas de Energia</div>
@@ -337,5 +341,80 @@ export default function Habitos(){
         </div>
       </div>
     </section>
+    {showManual && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={()=> setShowManual(false)}>
+        <div className="absolute inset-0 bg-black/60" />
+        <div className="card relative w-full max-w-3xl" onClick={(e)=> e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="h2">Criar padrao</div>
+            <button className="btn btn-ghost" onClick={()=> setShowManual(false)}>Fechar</button>
+          </div>
+          <div className="grid gap-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="panel grid gap-2">
+                <div className="font-semibold">Gatilho</div>
+                <div className="grid grid-cols-[120px_1fr_120px] gap-2">
+                  <select className="panel" value={form.trigger_vendor} onChange={e=> setForm(v=>({...v, trigger_vendor:e.target.value}))}>
+                    <option value="smartthings">smartthings</option>
+                    <option value="tuya">tuya</option>
+                  </select>
+                  <select className="panel" value={form.trigger_device_id} onChange={e=> setForm(v=>({...v, trigger_device_id:e.target.value}))}>
+                    <option value="">selecione dispositivo...</option>
+                    {deviceOptions.filter(d=> d.vendor===form.trigger_vendor).map(d=> (
+                      <option key={`${d.vendor}|${d.id}`} value={d.id}>{d.name || d.id}</option>
+                    ))}
+                  </select>
+                  <select className="panel" value={form.trigger_event} onChange={e=> setForm(v=>({...v, trigger_event:e.target.value}))}>
+                    <option value="on">on</option>
+                    <option value="off">off</option>
+                  </select>
+                </div>
+              </div>
+              <div className="panel grid gap-2">
+                <div className="font-semibold">Acao</div>
+                <div className="grid grid-cols-[120px_1fr_120px] gap-2">
+                  <select className="panel" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
+                    <option value="smartthings">smartthings</option>
+                    <option value="tuya">tuya</option>
+                  </select>
+                  <select className="panel" value={form.action_device_id} onChange={e=> setForm(v=>({...v, action_device_id:e.target.value}))}>
+                    <option value="">selecione dispositivo...</option>
+                    {deviceOptions.filter(d=> d.vendor===form.action_vendor).map(d=> (
+                      <option key={`${d.vendor}|${d.id}`} value={d.id}>{d.name || d.id}</option>
+                    ))}
+                  </select>
+                  <select className="panel" value={form.action_event} onChange={e=> setForm(v=>({...v, action_event:e.target.value}))}>
+                    <option value="on">on</option>
+                    <option value="off">off</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <select className="panel" value={form.context_key} onChange={e=> setForm(v=>({...v, context_key:e.target.value}))}>
+                <option value="global">contexto: global</option>
+                <option value="day">contexto: day</option>
+                <option value="night">contexto: night</option>
+              </select>
+              <input className="panel" type="number" placeholder="atraso (s) opcional" value={form.delay_s} onChange={e=> setForm(v=>({...v, delay_s:e.target.value}))} />
+              <div className="flex items-center justify-end gap-2">
+                <button className="btn" onClick={()=> setShowManual(false)}>Cancelar</button>
+                <button className="btn btn-primary" onClick={async ()=>{
+                  try{
+                    const token = localStorage.getItem('token');
+                    const payload = { ...form, delay_s: form.delay_s!==''? Number(form.delay_s): null };
+                    if (!payload.trigger_device_id || !payload.action_device_id){ alert('Selecione os dispositivos'); return; }
+                    await habitsApi.createManual(token, payload);
+                    await refresh();
+                    setShowManual(false);
+                  } catch (e) { alert('Falha ao criar: '+ (e?.message||e)); }
+                }}>Criar padrao</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
   )
 }
+
