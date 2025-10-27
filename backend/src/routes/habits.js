@@ -1,5 +1,7 @@
 import { listHabitPatternsByUser, setHabitPatternState, incHabitUndo, insertHabitLog, listHabitLogsByUser, upsertHabitPattern } from '../db.js';
 
+import { listHabitPatternsByUser, setHabitPatternState, incHabitUndo, insertHabitLog, listHabitLogsByUser, upsertHabitPattern } from '../db.js';
+
 export function registerHabitsRoutes(router, { helpers }){
   const { requireUser } = helpers;
 

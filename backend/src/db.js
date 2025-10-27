@@ -655,8 +655,8 @@ export async function upsertHabitPattern({ user_id, trigger_vendor, trigger_devi
       // upsert row
       const sel = await client.query(
         `SELECT id, triggers_total, pairs_total, avg_delay_s FROM habit_patterns
-         WHERE user_id=$1 AND trigger_vendor=$2 AND trigger_device_id=$3 AND trigger_event=$4
-           AND action_vendor=$5 AND action_device_id=$6 AND action_event=$7 AND COALESCE(context_key,'global')=COALESCE($8,'global')
+         WHERE user_id=$1::integer AND trigger_vendor=$2::text AND trigger_device_id=$3::text AND trigger_event=$4::text
+           AND action_vendor=$5::text AND action_device_id=$6::text AND action_event=$7::text AND COALESCE(context_key,'global')=COALESCE($8::text,'global')
          LIMIT 1`, [user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, ctx]
       );
       let id = sel.rows[0]?.id || null;
@@ -666,7 +666,7 @@ export async function upsertHabitPattern({ user_id, trigger_vendor, trigger_devi
       if (!id) {
         const ins = await client.query(
           `INSERT INTO habit_patterns(user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, context_key, triggers_total, pairs_total, avg_delay_s, first_seen, last_seen, confidence, state)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8,0,0,$9, $10, $10, 0.0, 'shadow') RETURNING id`,
+           VALUES($1::integer,$2::text,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,0,0,$9::double precision, $10::timestamptz, $10::timestamptz, 0.0, 'shadow') RETURNING id`,
           [user_id, trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event, ctx, (delay_s!=null? Number(delay_s): null), now]
         );
         id = ins.rows[0].id;
@@ -679,9 +679,9 @@ export async function upsertHabitPattern({ user_id, trigger_vendor, trigger_devi
         pairs += 1;
       }
       const conf = triggers>0 ? (pairs / triggers) : 0;
-      await client.query(`UPDATE habit_patterns SET triggers_total=$1, pairs_total=$2, avg_delay_s=$3, last_seen=$4, confidence=$5,
-        state = CASE WHEN state='shadow' AND $5>=0.6 AND $2>=3 AND $1>=5 THEN 'suggested' ELSE state END
-      WHERE id=$6`, [triggers, pairs, avg, now, conf, id]);
+      await client.query(`UPDATE habit_patterns SET triggers_total=$1::bigint, pairs_total=$2::bigint, avg_delay_s=$3::double precision, last_seen=$4::timestamptz, confidence=$5::double precision,
+        state = CASE WHEN state='shadow' AND ($5::double precision)>=0.6 AND ($2::bigint)>=3 AND ($1::bigint)>=5 THEN 'suggested' ELSE state END
+      WHERE id=$6::bigint`, [triggers, pairs, avg, now, conf, id]);
       await client.query('COMMIT');
       return { id, triggers_total:triggers, pairs_total:pairs, avg_delay_s:avg, confidence: conf };
     } catch (e) { try { await client.query('ROLLBACK') } catch {}; throw e; } finally { client.release(); }
