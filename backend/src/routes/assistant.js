@@ -48,11 +48,7 @@
           const data = await apiJson(`/ai/devices/overview`);
           return { ok: true, ...data };
         },
-        async get_forecast({ hours }){
-          const h = Number(hours || 24);
-          const data = await apiJson(`/ai/forecast?hours=${encodeURIComponent(h)}`);
-          return { ok: true, ...data };
-        async get_recommendations(){
+        async get_forecast({ hours }){\n          const h = Number(hours || 24);\n          const data = await apiJson(/ai/forecast?hours=);\n          return { ok: true, ...data };\n        },\n        },\n        async get_recommendations(){
           const data = await apiJson(`/ai/recommendations`);
           return { ok: true, ...data };
         },
@@ -425,7 +421,7 @@
         { name: 'st_find_device_room', description: 'Encontra o comodo (nome) de um dispositivo SmartThings (por nome ou id).', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
         { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya vinculados (Smart Life e/ou Tuya app).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
-        { name: 'habit_create','get_bright_suggestions', description: 'Cria um padrão de hábito (Quando <gatilho> então <ação>) com período (global/dia/noite) e atraso opcional.', parameters: { type:'object', properties: {
+        { name: 'habit_create', description: 'Cria um padrão de hábito (Quando <gatilho> então <ação>) com período (global/dia/noite) e atraso opcional.', parameters: { type:'object', properties: {
             trigger_name: { type:'string' }, trigger_device_id: { type:'string' }, trigger_vendor: { type:'string' }, trigger_event: { type:'string', enum:['on','off','ligar','desligar'] },
             action_name: { type:'string' }, action_device_id: { type:'string' }, action_vendor: { type:'string' }, action_event: { type:'string', enum:['on','off','ligar','desligar'] },
             context_period: { type:'string', enum:['global','dia','noite','day','night'] }, delay_s: { type:'number' }
@@ -570,6 +566,9 @@ Regras:
     res.json({ ok:true, items });
   });
 }
+
+
+
 
 
 
