@@ -1,4 +1,4 @@
-import { listHabitPatternsByUser, setHabitPatternState, incHabitUndo, insertHabitLog, listHabitLogsByUser, upsertHabitPattern, deleteHabitPattern } from '../db.js';
+import { listHabitPatternsByUser, setHabitPatternState, incHabitUndo, insertHabitLog, listHabitLogsByUser, upsertHabitPattern, deleteHabitPattern, getHabitPatternById, getDbEngine } from '../db.js';
 
 export function registerHabitsRoutes(router, { helpers }){
   const { requireUser } = helpers;
@@ -81,6 +81,73 @@ export function registerHabitsRoutes(router, { helpers }){
       const pid = req.query.pattern_id ? Number(req.query.pattern_id) : null;
       const items = await listHabitLogsByUser(user.id, { limit, pattern_id: pid });
       res.json({ ok:true, items });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
+  // Manual test: trigger a habit action now (for debug)
+  router.post('/habits/:id/test', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const id = Number(req.params.id||0);
+      const row = await getHabitPatternById(id);
+      if (!row || Number(row.user_id)!==Number(user.id)) return res.status(404).json({ ok:false, error:'not found' });
+
+      const eng = getDbEngine();
+      async function getFriendlyName(vendor, device_id){
+        try{
+          if (eng.type==='pg'){
+            const r = await eng.pgPool.query('SELECT name, room FROM device_history WHERE vendor=$1 AND device_id=$2 ORDER BY ts DESC LIMIT 1', [String(vendor), String(device_id)]);
+            const rr = r.rows?.[0];
+            const n = rr?.name || String(device_id);
+            const room = rr?.room || '';
+            return room? `${n} (${room})` : n;
+          } else {
+            const rr = eng.sqliteDb.prepare('SELECT name, room FROM device_history WHERE vendor=? AND device_id=? ORDER BY ts DESC LIMIT 1').get(String(vendor), String(device_id));
+            const n = rr?.name || String(device_id);
+            const room = rr?.room || '';
+            return room? `${n} (${room})` : n;
+          }
+        } catch { return `${vendor}:${device_id}` }
+      }
+
+      const base = (process.env.BASE_URL||'').replace(/\/$/, '') || (`http://127.0.0.1:${process.env.PORT||3000}`);
+      const apiBase = base + '/api';
+      const authHeader = req.headers['authorization'] || '';
+      const svcToken = process.env.ASSIST_TOKEN || '';
+      const useAssistant = !!(process.env.OPENAI_API_KEY || process.env.OPENAI_APIKEY);
+      let method = 'direct';
+      let answer = null; let steps = null; let ok = false; let resp = null;
+
+      if (useAssistant) {
+        method = 'assistant';
+        const name = await getFriendlyName(row.action_vendor, row.action_device_id);
+        const verb = String(row.action_event||'').toLowerCase()==='off' ? 'desliga' : 'liga';
+        const input = `${verb} ${name}`;
+        const url = `${apiBase}/assistant/chat${svcToken? ('?powerstation_id='+ encodeURIComponent(user.powerstation_id||'')) : ''}`;
+        const headers = { 'Content-Type': 'application/json', 'Authorization': svcToken? ('Bearer '+svcToken) : authHeader };
+        const r = await fetch(url, { method:'POST', headers, body: JSON.stringify({ input }), signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+        resp = await r.json().catch(()=>null);
+        ok = !!resp?.ok;
+        answer = resp?.answer || null;
+        steps = resp?.steps || null;
+      } else {
+        const headers = { 'Authorization': authHeader };
+        if (row.action_vendor==='smartthings'){
+          const r = await fetch(`${apiBase}/smartthings/device/${encodeURIComponent(row.action_device_id)}/${encodeURIComponent(row.action_event)}`, { method:'POST', headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+          resp = await r.json().catch(()=>null);
+          ok = r.ok;
+        } else if (row.action_vendor==='tuya'){
+          const r = await fetch(`${apiBase}/tuya/device/${encodeURIComponent(row.action_device_id)}/${encodeURIComponent(row.action_event)}`, { method:'POST', headers, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+          resp = await r.json().catch(()=>null);
+          ok = r.ok;
+        } else {
+          resp = { error: 'unsupported vendor' };
+          ok = false;
+        }
+      }
+
+      try{ await insertHabitLog({ pattern_id: id, user_id: user.id, event: 'manual_test', meta: { method, ok, resp: resp||null } }) } catch {}
+      res.json({ ok:true, method, result_ok: ok, answer, steps, resp });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 }

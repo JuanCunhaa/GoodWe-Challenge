@@ -20,4 +20,5 @@ export const habitsApi = {
   },
   createManual: (token, payload) => request('/habits/manual', { method:'POST', token, body: payload }),
   remove: (token, id) => request(`/habits/${encodeURIComponent(id)}`, { method:'DELETE', token }),
+  test: (token, id) => request(`/habits/${encodeURIComponent(id)}/test`, { method:'POST', token, body: {} }),
 };

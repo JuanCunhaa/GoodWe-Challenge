@@ -810,6 +810,15 @@ export async function deleteHabitPattern(id){
   }
 }
 
+export async function getHabitPatternById(id){
+  if (USE_PG) {
+    const r = await pgPool.query('SELECT * FROM habit_patterns WHERE id=$1', [id]);
+    return r.rows[0] || null;
+  } else {
+    return sqliteDb.prepare('SELECT * FROM habit_patterns WHERE id=?').get(id);
+  }
+}
+
 // Find active habit patterns that match a trigger (optionally by context)
 export async function listActiveHabitPatternsForTrigger({ user_id, trigger_vendor, trigger_device_id, trigger_event, context_key=null }){
   const tv = String(trigger_vendor||'').toLowerCase();

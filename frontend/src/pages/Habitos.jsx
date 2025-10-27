@@ -17,6 +17,9 @@ export default function Habitos(){
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [debug, setDebug] = useState(false)
+  const [logs, setLogs] = useState([])
+  const [testing, setTesting] = useState({}) // id => true
 
   // search and filter
   const [q, setQ] = useState('')
@@ -52,6 +55,18 @@ export default function Habitos(){
   }
 
   useEffect(()=>{ refresh() },[])
+
+  // Debug: poll habit logs when enabled
+  useEffect(()=>{
+    if (!debug) return;
+    let stop = false;
+    async function load(){
+      try{ const token = localStorage.getItem('token'); if (!token) return; const j = await habitsApi.logs(token, { limit: 100 }); if(!stop) setLogs(Array.isArray(j.items)? j.items:[]) } catch{}
+    }
+    load();
+    const id = setInterval(load, 5000);
+    return ()=>{ stop = true; clearInterval(id) };
+  }, [debug])
 
   // load devices for manual create
   useEffect(()=>{
@@ -140,6 +155,10 @@ export default function Habitos(){
                 )
               })}
             </div>
+            <label className="ml-auto inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={debug} onChange={e=> setDebug(e.target.checked)} />
+              <span>Modo debug</span>
+            </label>
           </div>
         </div>
 
@@ -181,12 +200,44 @@ export default function Habitos(){
                           <button className="btn btn-danger" onClick={()=> onRemove(it)}>Remover</button>
                         </>
                       )}
+                      {debug && (
+                        <button className="btn" disabled={!!testing[it.id]} onClick={async ()=>{
+                          try{
+                            setTesting(v=> ({...v, [it.id]: true}));
+                            const token = localStorage.getItem('token');
+                            const r = await habitsApi.test(token, it.id);
+                            alert((r?.result_ok? 'OK: ':'Falha: ') + (r?.method==='assistant'? 'via Assistente' : 'direto'));
+                            if (debug) {
+                              try{ const j = await habitsApi.logs(token, { limit: 100 }); setLogs(Array.isArray(j.items)? j.items:[]) } catch{}
+                            }
+                          } catch (e) { alert('Falha ao disparar: ' + (e?.message||e)); }
+                          finally { setTesting(v=> { const n={...v}; delete n[it.id]; return n; }); }
+                        }}>Disparar (teste)</button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           ))}
+
+          {debug && (
+            <div className="card">
+              <div className="h2 mb-2">Debug de Rotinas</div>
+              <div className="grid gap-2 max-h-[420px] overflow-auto pr-2 text-sm">
+                {logs.length===0 ? (
+                  <div className="muted text-sm">Sem eventos ainda.</div>
+                ) : logs.map(l => (
+                  <div key={l.id} className="panel">
+                    <div className="font-semibold text-xs">{new Date(l.ts||Date.now()).toLocaleString()} • {String(l.event)}</div>
+                    <div className="muted text-xs">
+                      {`${l.trigger_vendor}:${l.trigger_device_id} -> ${String(l.trigger_event||'').toUpperCase()}  =>  ${l.action_vendor}:${l.action_device_id} -> ${String(l.action_event||'').toUpperCase()}`} {l.context_key? ` • ctx:${l.context_key}`:''} {l.state? ` • ${l.state}`:''}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
