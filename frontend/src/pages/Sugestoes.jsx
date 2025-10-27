@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { aiApi } from '../services/aiApi.js'
 
 function StatusDot({ ok }){
@@ -17,6 +17,7 @@ export default function Sugestoes(){
   const [devices, setDevices] = useState([])
   const [uptime, setUptime] = useState({})
   const [usage, setUsage] = useState({}) // key -> { kwh, cost_brl? }
+  const [climate, setClimate] = useState(null)
 
   const totals = useMemo(()=>({
     gen: Number(forecast?.total_generation_kwh||0),
@@ -35,6 +36,7 @@ export default function Sugestoes(){
         setForecast(f? { ...f, items } : null)
         setRecs(Array.isArray(s?.recommendations) ? s.recommendations : [])
         setDevices(Array.isArray(s?.devices) ? s.devices : [])
+        setClimate(s?.climate || null)
         try {
           const saved = await aiApi.brightGet(token);
           setFixedRecs(Array.isArray(saved?.items)? saved.items : [])
@@ -112,10 +114,6 @@ export default function Sugestoes(){
           </div>
         </div>
       </div>
-      <div className="card">
-        <div className="h2">Sugestões de Economia</div>
-        <div className="muted">Previsões + dicas baseadas no seu histórico</div>
-      </div>
       {loading ? (
         <div className="panel">Carregando...</div>
       ) : err ? (
@@ -136,13 +134,12 @@ export default function Sugestoes(){
             <div className="panel">
               <div className="text-xs muted">Clima</div>
               <div className="mt-1 text-sm">
-                {(() => {
-                  const txt = (recs.find(r => {
-                    const t = String(r.text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-                    return /previsao clim|climatica|nublado|chuva/.test(t);
-                  })?.text);
-                  return txt || 'Sem alerta climático no momento.'
-                })()}
+                {climate ? (
+                  <div className="grid gap-1">
+                    <div>Hoje: {climate?.today?.label || '—'}{typeof climate?.today?.cloudrate === 'number' ? ` (${Math.round(climate.today.cloudrate*100)}% nuvens)` : ''}</div>
+                    <div>Amanhã: {climate?.tomorrow?.label || '—'}{typeof climate?.tomorrow?.cloudrate === 'number' ? ` (${Math.round(climate.tomorrow.cloudrate*100)}% nuvens)` : ''}</div>
+                  </div>
+                ) : 'Sem alerta climático no momento.'}
               </div>
             </div>
           </div>
@@ -198,5 +195,4 @@ export default function Sugestoes(){
     </div>
   )
 }
-
 

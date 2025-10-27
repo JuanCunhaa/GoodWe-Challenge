@@ -102,9 +102,9 @@ export default function Habitos(){
   async function onState(it, state){
     try{ const token = localStorage.getItem('token'); await habitsApi.setState(token, it.id, state); await refresh() } catch {}
   }
-  // Removido: ação de desfazer
+  // Removido: aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de desfazer
   async function onRemove(it){
-    if (!confirm('Remover este padrão de hábito? Essa ação não pode ser desfeita.')) return;
+    if (!confirm('Remover este padrÃƒÆ’Ã‚Â£o de hÃƒÆ’Ã‚Â¡bito? Essa aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o nÃƒÆ’Ã‚Â£o pode ser desfeita.')) return;
     try{ const token = localStorage.getItem('token'); await habitsApi.remove(token, it.id); await refresh() } catch {}
   }
 
@@ -131,8 +131,8 @@ export default function Habitos(){
         <div className="card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="h2">Hábitos e Mini-Rotinas</div>
-              <div className="muted text-sm">Fluxo: Observados → Sugeridos → Ativos.</div>
+              <div className="h2">HÃ¡bitos e Mini-Rotinas</div>
+              <div className="muted text-sm">Fluxo: Observados â†’ Sugeridos â†’ Ativos.</div>
             </div>
             <div className="flex items-center gap-2">
               <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por dispositivo/evento..." className="panel px-3 py-2 text-sm outline-none" />
@@ -179,7 +179,7 @@ export default function Habitos(){
                   <div key={it.id} className="panel flex items-start justify-between gap-3">
                     <div className="grid gap-1">
                       <div className="font-semibold">
-                        {`Quando ${deviceLabel(it.trigger_vendor, it.trigger_device_id)} → ${String(it.trigger_event||'').toUpperCase()} então ${deviceLabel(it.action_vendor, it.action_device_id)} → ${String(it.action_event||'').toUpperCase()}`}
+                        {`Quando ${deviceLabel(it.trigger_vendor, it.trigger_device_id)} ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${String(it.trigger_event||'').toUpperCase()} entÃƒÆ’Ã‚Â£o ${deviceLabel(it.action_vendor, it.action_device_id)} ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${String(it.action_event||'').toUpperCase()}`}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -232,9 +232,9 @@ export default function Habitos(){
                   <div className="muted text-sm">Sem eventos ainda.</div>
                 ) : logs.map(l => (
                   <div key={l.id} className="panel">
-                    <div className="font-semibold text-xs">{new Date(l.ts||Date.now()).toLocaleString()} • {String(l.event)}</div>
+                    <div className="font-semibold text-xs">{new Date(l.ts||Date.now()).toLocaleString()} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {String(l.event)}</div>
                     <div className="muted text-xs">
-                      {`${l.trigger_vendor}:${l.trigger_device_id} -> ${String(l.trigger_event||'').toUpperCase()}  =>  ${l.action_vendor}:${l.action_device_id} -> ${String(l.action_event||'').toUpperCase()}`} {l.context_key? ` • ctx:${l.context_key}`:''} {l.state? ` • ${l.state}`:''}
+                      {`${l.trigger_vendor}:${l.trigger_device_id} -> ${String(l.trigger_event||'').toUpperCase()}  =>  ${l.action_vendor}:${l.action_device_id} -> ${String(l.action_event||'').toUpperCase()}`} {l.context_key? ` ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ctx:${l.context_key}`:''} {l.state? ` ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${l.state}`:''}
                     </div>
                   </div>
                 ))}
@@ -249,7 +249,7 @@ export default function Habitos(){
           <div className="absolute inset-0 bg-black/60 z-10" />
           <div className="card relative z-20 w-full max-w-3xl max-h-[90vh] overflow-auto" onClick={(e)=> e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <div className="h2">Criar padrão</div>
+              <div className="h2">Criar padrÃƒÆ’Ã‚Â£o</div>
               <button className="btn btn-ghost" onClick={()=> setShowManual(false)}>Fechar</button>
             </div>
             <div className="grid gap-3">
@@ -274,7 +274,7 @@ export default function Habitos(){
                   </div>
                 </div>
                 <div className="panel grid gap-2">
-                  <div className="font-semibold">Ação</div>
+                  <div className="font-semibold">AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <select className="panel w-full" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
                       <option value="smartthings">smartthings</option>
@@ -311,7 +311,7 @@ export default function Habitos(){
                       await refresh()
                       setShowManual(false)
                     } catch (e) { alert('Falha ao criar: '+ (e?.message||e)) }
-                  }}>Criar padrão</button>
+                  }}>Criar padrÃƒÆ’Ã‚Â£o</button>
                 </div>
               </div>
             </div>
