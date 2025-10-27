@@ -17,8 +17,8 @@ export default function Habitos(){
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const debugAvailable = String(import.meta.env.VITE_DEBUG_HABITS || 'false') === 'true'
-  const [debug, setDebug] = useState(false)
+  const debugAvailable = true
+  const [debug, setDebug] = useState(true)
   const [logs, setLogs] = useState([])
   const [testing, setTesting] = useState({}) // id => true
 
