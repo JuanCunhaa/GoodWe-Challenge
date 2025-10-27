@@ -17,6 +17,81 @@ export function registerAiRoutes(router, { gw, helpers }){
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
+  function parseWindow(q){
+    const m = String(q||'').trim().toLowerCase();
+    if (!m) return 60; // minutes
+    const num = parseFloat(m);
+    if (isNaN(num)) return 60;
+    if (m.includes('h')) return Math.max(1, Math.round(num*60));
+    if (m.includes('d')) return Math.max(1, Math.round(num*60*24));
+    return Math.max(1, Math.round(num));
+  }
+
+  // Aggregate: forecast + actionable recommendations + devices overview
+  router.get('/ai/suggestions', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    const plant_id = user.powerstation_id;
+    try {
+      const hours = Number(req.query.hours || 24);
+      const topWindow = String(req.query.topWindow || '60');
+      const tariff = (req.query.tariff!=null) ? Number(req.query.tariff) : (process.env.TARIFF_BRL_PER_KWH!=null ? Number(process.env.TARIFF_BRL_PER_KWH) : undefined);
+
+      // Forecast (with weather adjustment)
+      const forecast = await getForecast({ plant_id, hours, fetchWeather: async () => {
+        try { return await gw.postForm('v3/PowerStation/GetWeather', { powerStationId: plant_id }); } catch { return null }
+      }}).catch(()=> null);
+
+      // Devices overview (SmartThings + Tuya + local meta)
+      const authHeader = req.headers['authorization'] || '';
+      const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+      const api = async (path) => {
+        const r = await fetch(base + path, { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(Number(process.env.TIMEOUT_MS||30000)) });
+        const j = await r.json().catch(()=>null); if (!r.ok) throw new Error(j?.error || `${r.status}`); return j;
+      };
+      const devices = await api('/ai/devices/overview').catch(()=> ({ items: [] }));
+      const items = Array.isArray(devices?.items) ? devices.items : [];
+
+      // Build actionable, device-specific suggestions
+      const { getDeviceUsageByHour } = await import('../analytics/service.js');
+      const recs = [];
+      const minutes24h = 24*60;
+      for (const d of items.slice(0, 30)){
+        // Skip essential loads
+        if (d.essential === true) continue;
+        // Fetch last 24h usage breakdown per hour
+        let usage = null;
+        try { usage = await getDeviceUsageByHour({ vendor: d.vendor, device_id: d.id, minutes: minutes24h }); } catch { usage = null }
+        const hoursArr = Array.isArray(usage?.hours) ? usage.hours : [];
+        if (!hoursArr.length) continue;
+        // Find a 2-hour window with highest energy
+        let best = { idx: 0, sum: 0 };
+        for (let i=0; i<hoursArr.length; i++){
+          const e0 = Number(hoursArr[i]?.energy_kwh||0);
+          const e1 = Number(hoursArr[(i+1)%hoursArr.length]?.energy_kwh||0);
+          const s = e0 + e1;
+          if (s > best.sum) best = { idx: i, sum: s };
+        }
+        const estKwh = best.sum;
+        if (estKwh < 0.08) continue; // ignore very low impact
+        const h0 = hoursArr[best.idx]?.hour ?? 0;
+        const h1 = (h0+2) % 24;
+        function hhmm(h){ return `${String(h).padStart(2,'0')}:00`; }
+        const start = hhmm(h0); const end = hhmm(h1);
+        const nm = d.roomName ? `${d.name} (${d.roomName})` : d.name;
+        const brl = (typeof tariff==='number' && !Number.isNaN(tariff)) ? +(estKwh*tariff).toFixed(2) : null;
+        const costText = (brl!=null) ? ` (~R$ ${brl.toFixed(2)})` : '';
+        const text = `Sugestão: desligar ${nm} entre ${start} e ${end}. Motivo: consumo de ~${estKwh.toFixed(2)} kWh nesse período nas últimas 24h${costText}.`;
+        recs.push({ text, device: { vendor: d.vendor, device_id: d.id, name: d.name, roomName: d.roomName||'' }, window: { start, end }, est_savings_kwh: +estKwh.toFixed(3), est_savings_brl: (brl!=null? brl: undefined) });
+      }
+
+      // Sort by estimated savings desc and cap
+      recs.sort((a,b)=> (Number(b.est_savings_kwh||0) - Number(a.est_savings_kwh||0)));
+      const topRecs = recs.slice(0, 8);
+
+      res.json({ ok:true, forecast, recommendations: topRecs, devices: items });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
   async function devicesOverviewInternal(req, helpers){
     const authHeader = req.headers['authorization'] || '';
     const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
