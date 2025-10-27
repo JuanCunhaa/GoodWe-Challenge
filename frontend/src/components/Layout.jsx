@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Activity, Zap, Factory, ShieldCheck, User } from 'lucide-react'
 import ThemeToggle from './ThemeToggle.jsx'
-import logoW from '../assets/logoW.png'
+import logo from '../assets/logo.png'
 import CommandPalette from './CommandPalette.jsx'
 import AssistantPanel from './AssistantPanel.jsx'
 import clsx from 'clsx'
@@ -93,7 +93,7 @@ export default function Layout(){
         <div className="p-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="size-8 rounded-2xl bg-brand/20 border border-brand/30 animate-float" />
-            <div className={clsx("font-extrabold text-lg text-gray-900 dark:text-gray-100 transition-all", !open && "lg:opacity-0 lg:w-0 lg:overflow-hidden")}>Grupo 04 • Projeto GoodWe</div>
+            <div className={clsx("font-extrabold text-lg text-gray-900 dark:text-gray-100 transition-all", !open && "lg:opacity-0 lg:w-0 lg:overflow-hidden")}>BrighTech</div>
           </div>
         </div>
         <div className="px-4 pb-4" />
@@ -113,9 +113,9 @@ export default function Layout(){
         <div className="sticky top-0 z-10 border-b border-gray-200/60 dark:border-gray-800/60 bg-gradient-to-r from-red-700 via-red-600 to-white dark:to-black">
           <div className="mx-auto max-w-[1400px] px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img src={logoW} alt="Logo" className="h-8 w-8 rounded-md shadow-md" />
+              <img src={logo} alt="Logo" className="h-8 w-8 rounded-md shadow-md" />
               <div>
-                <h1 className="h1">Grupo 04 • Projeto GoodWe</h1>
+                <h1 className="h1">BrighTech</h1>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -170,7 +170,7 @@ export default function Layout(){
         </div>
 
         <footer className="mx-auto max-w-[1400px] px-6 pb-8 lg:pb-8 text-center text-sm muted">
-          Grupo 04 • Projeto GoodWe
+          BrighTech
         </footer>
       </main>
 
