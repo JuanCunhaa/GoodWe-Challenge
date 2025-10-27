@@ -327,20 +327,19 @@ export default function Habitos(){
                       {`Quando ${deviceLabel(it.trigger_vendor, it.trigger_device_id)} -> ${String(it.trigger_event||'').toUpperCase()} entao ${deviceLabel(it.action_vendor, it.action_device_id)} -> ${String(it.action_event||'').toUpperCase()}`}
                     </div>
                     <div className="muted text-xs flex flex-wrap items-center gap-2">
-                      <span>conf: {(Number(it.confidence)||0).toFixed(2)}</span>
+                      <span>Confian�a: {(Number(it.confidence)||0).toFixed(2)}</span>
                       <span>• pares: {it.pairs_total}</span>
                       <span>• disparos: {it.triggers_total}</span>
                       <span>• atraso medio: {it.avg_delay_s? Number(it.avg_delay_s).toFixed(1): '-' } s</span>
                       {it.context_key ? <span>• ctx: {it.context_key}</span> : null}
-                      {it.last_seen ? <span>• visto: {new Date(it.last_seen).toLocaleDateString()}</span> : null}
+                      {it.last_seen ? <span>• �ltima vez: {new Date(it.last_seen).toLocaleDateString()}</span> : null}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {it.state==='suggested' && (
                       <button className="btn btn-primary" onClick={()=> onState(it, 'active')}>Ativar</button>
                     )}
-                    {it.state==='shadow' && (
-                      <button className="btn" onClick={()=> onState(it, 'suggested')}>Promover</button>
+                    >Promover</button>
                     )}
                     {it.state==='active' && (
                       <>
@@ -455,6 +454,8 @@ export default function Habitos(){
       </>
   )
 }
+
+
 
 
 

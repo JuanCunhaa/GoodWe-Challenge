@@ -34,8 +34,10 @@ export function registerHabitsRoutes(router, { helpers }){
         delay_s: (delay_s!=null ? Number(delay_s) : null),
       };
       const r = await upsertHabitPattern(payload);
+      // Manual criação deve entrar em produção imediatamente
+      try { await setHabitPatternState(r.id, 'active'); } catch {}
       await insertHabitLog({ pattern_id: r.id, user_id: user.id, event: 'manual_create', meta: payload });
-      res.json({ ok:true, id: r.id, pattern: { ...payload, id: r.id } });
+      res.json({ ok:true, id: r.id, pattern: { ...payload, id: r.id, state: 'active' } });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
