@@ -187,18 +187,18 @@ export default function Habitos(){
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="panel grid gap-2">
               <div className="font-semibold">Gatilho</div>
-              <div className="grid grid-cols-[120px_1fr_120px] gap-2">
-                <select className="panel" value={form.trigger_vendor} onChange={e=> setForm(v=>({...v, trigger_vendor:e.target.value}))}>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <select className="panel w-full" value={form.trigger_vendor} onChange={e=> setForm(v=>({...v, trigger_vendor:e.target.value}))}>
                   <option value="smartthings">smartthings</option>
                   <option value="tuya">tuya</option>
                 </select>
-                <select className="panel" value={form.trigger_device_id} onChange={e=> setForm(v=>({...v, trigger_device_id:e.target.value}))}>
+                <select className="panel w-full" value={form.trigger_device_id} onChange={e=> setForm(v=>({...v, trigger_device_id:e.target.value}))}>
                   <option value="">selecione dispositivo...</option>
                   {deviceOptions.filter(d=> d.vendor===form.trigger_vendor).map(d=> (
                     <option key={`${d.vendor}|${d.id}`} value={d.id}>{d.name || d.id}</option>
                   ))}
                 </select>
-                <select className="panel" value={form.trigger_event} onChange={e=> setForm(v=>({...v, trigger_event:e.target.value}))}>
+                <select className="panel w-full" value={form.trigger_event} onChange={e=> setForm(v=>({...v, trigger_event:e.target.value}))}>
                   <option value="on">on</option>
                   <option value="off">off</option>
                 </select>
@@ -206,18 +206,18 @@ export default function Habitos(){
             </div>
             <div className="panel grid gap-2">
               <div className="font-semibold">Ação</div>
-              <div className="grid grid-cols-[120px_1fr_120px] gap-2">
-                <select className="panel" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <select className="panel w-full" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
                   <option value="smartthings">smartthings</option>
                   <option value="tuya">tuya</option>
                 </select>
-                <select className="panel" value={form.action_device_id} onChange={e=> setForm(v=>({...v, action_device_id:e.target.value}))}>
+                <select className="panel w-full" value={form.action_device_id} onChange={e=> setForm(v=>({...v, action_device_id:e.target.value}))}>
                   <option value="">selecione dispositivo...</option>
                   {deviceOptions.filter(d=> d.vendor===form.action_vendor).map(d=> (
                     <option key={`${d.vendor}|${d.id}`} value={d.id}>{d.name || d.id}</option>
                   ))}
                 </select>
-                <select className="panel" value={form.action_event} onChange={e=> setForm(v=>({...v, action_event:e.target.value}))}>
+                <select className="panel w-full" value={form.action_event} onChange={e=> setForm(v=>({...v, action_event:e.target.value}))}>
                   <option value="on">on</option>
                   <option value="off">off</option>
                 </select>
@@ -225,12 +225,12 @@ export default function Habitos(){
             </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
-            <select className="panel" value={form.context_key} onChange={e=> setForm(v=>({...v, context_key:e.target.value}))}>
+            <select className="panel w-full" value={form.context_key} onChange={e=> setForm(v=>({...v, context_key:e.target.value}))}>
               <option value="global">contexto: global</option>
               <option value="day">contexto: day</option>
               <option value="night">contexto: night</option>
             </select>
-            <input className="panel" type="number" placeholder="atraso (s) opcional" value={form.delay_s} onChange={e=> setForm(v=>({...v, delay_s:e.target.value}))} />
+            <input className="panel w-full" type="number" placeholder="atraso (s) opcional" value={form.delay_s} onChange={e=> setForm(v=>({...v, delay_s:e.target.value}))} />
             <div className="flex items-center">
               <button className="btn btn-primary" onClick={async ()=>{
                 try{
@@ -342,8 +342,8 @@ export default function Habitos(){
     </section>
     {showManual && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={()=> setShowManual(false)}>
-        <div className="absolute inset-0 bg-black/60" />
-        <div className="card relative w-full max-w-3xl" onClick={(e)=> e.stopPropagation()}>
+        <div className="absolute inset-0 bg-black/60 z-10" />
+        <div className="card relative z-20 w-full max-w-3xl max-h-[90vh] overflow-auto" onClick={(e)=> e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">
             <div className="h2">Criar padrao</div>
             <button className="btn btn-ghost" onClick={()=> setShowManual(false)}>Fechar</button>
@@ -352,18 +352,18 @@ export default function Habitos(){
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="panel grid gap-2">
                 <div className="font-semibold">Gatilho</div>
-                <div className="grid grid-cols-[120px_1fr_120px] gap-2">
-                  <select className="panel" value={form.trigger_vendor} onChange={e=> setForm(v=>({...v, trigger_vendor:e.target.value}))}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <select className="panel w-full" value={form.trigger_vendor} onChange={e=> setForm(v=>({...v, trigger_vendor:e.target.value}))}>
                     <option value="smartthings">smartthings</option>
                     <option value="tuya">tuya</option>
                   </select>
-                  <select className="panel" value={form.trigger_device_id} onChange={e=> setForm(v=>({...v, trigger_device_id:e.target.value}))}>
+                  <select className="panel w-full" value={form.trigger_device_id} onChange={e=> setForm(v=>({...v, trigger_device_id:e.target.value}))}>
                     <option value="">selecione dispositivo...</option>
                     {deviceOptions.filter(d=> d.vendor===form.trigger_vendor).map(d=> (
                       <option key={`${d.vendor}|${d.id}`} value={d.id}>{d.name || d.id}</option>
                     ))}
                   </select>
-                  <select className="panel" value={form.trigger_event} onChange={e=> setForm(v=>({...v, trigger_event:e.target.value}))}>
+                  <select className="panel w-full" value={form.trigger_event} onChange={e=> setForm(v=>({...v, trigger_event:e.target.value}))}>
                     <option value="on">on</option>
                     <option value="off">off</option>
                   </select>
@@ -371,18 +371,18 @@ export default function Habitos(){
               </div>
               <div className="panel grid gap-2">
                 <div className="font-semibold">Acao</div>
-                <div className="grid grid-cols-[120px_1fr_120px] gap-2">
-                  <select className="panel" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <select className="panel w-full" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
                     <option value="smartthings">smartthings</option>
                     <option value="tuya">tuya</option>
                   </select>
-                  <select className="panel" value={form.action_device_id} onChange={e=> setForm(v=>({...v, action_device_id:e.target.value}))}>
+                  <select className="panel w-full" value={form.action_device_id} onChange={e=> setForm(v=>({...v, action_device_id:e.target.value}))}>
                     <option value="">selecione dispositivo...</option>
                     {deviceOptions.filter(d=> d.vendor===form.action_vendor).map(d=> (
                       <option key={`${d.vendor}|${d.id}`} value={d.id}>{d.name || d.id}</option>
                     ))}
                   </select>
-                  <select className="panel" value={form.action_event} onChange={e=> setForm(v=>({...v, action_event:e.target.value}))}>
+                  <select className="panel w-full" value={form.action_event} onChange={e=> setForm(v=>({...v, action_event:e.target.value}))}>
                     <option value="on">on</option>
                     <option value="off">off</option>
                   </select>
@@ -390,12 +390,12 @@ export default function Habitos(){
               </div>
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
-              <select className="panel" value={form.context_key} onChange={e=> setForm(v=>({...v, context_key:e.target.value}))}>
+              <select className="panel w-full" value={form.context_key} onChange={e=> setForm(v=>({...v, context_key:e.target.value}))}>
                 <option value="global">contexto: global</option>
                 <option value="day">contexto: day</option>
                 <option value="night">contexto: night</option>
               </select>
-              <input className="panel" type="number" placeholder="atraso (s) opcional" value={form.delay_s} onChange={e=> setForm(v=>({...v, delay_s:e.target.value}))} />
+              <input className="panel w-full" type="number" placeholder="atraso (s) opcional" value={form.delay_s} onChange={e=> setForm(v=>({...v, delay_s:e.target.value}))} />
               <div className="flex items-center justify-end gap-2">
                 <button className="btn" onClick={()=> setShowManual(false)}>Cancelar</button>
                 <button className="btn btn-primary" onClick={async ()=>{
@@ -417,6 +417,7 @@ export default function Habitos(){
       </>
   )
 }
+
 
 
 
