@@ -52,8 +52,14 @@
           const h = Number(hours || 24);
           const data = await apiJson(`/ai/forecast?hours=${encodeURIComponent(h)}`);
           return { ok: true, ...data };
+        async get_recommendations(){
+          const data = await apiJson(`/ai/recommendations`);
+          return { ok: true, ...data };
         },
-        async get_recommendations(){\n          const data = await apiJson(/ai/recommendations);\n          return { ok: true, ...data };\n        },\n        async get_bright_suggestions(){\n          const data = await apiJson(/ai/bright/suggestions);\n          return { ok:true, items: Array.isArray(data?.items)? data.items : [] };\n        },
+        async get_bright_suggestions(){
+          const data = await apiJson(`/ai/bright/suggestions`);
+          return { ok:true, items: Array.isArray(data?.items)? data.items : [] };
+        },
         async device_toggle({ name, action }){
           const payload = { name: String(name||'').trim(), action: String(action||'').toLowerCase() };
           const data = await apiJson(`/ai/device/toggle`, { method:'POST', body: payload });
@@ -564,6 +570,9 @@ Regras:
     res.json({ ok:true, items });
   });
 }
+
+
+
 
 
 
