@@ -132,9 +132,9 @@ export default function Habitos(){
       });
     }
     arr.sort((a,b)=>{
-      if (sortKey==='pairs') return (\n    <>\nb.pairs_total||0) - (a.pairs_total||0);
+      if (sortKey==='pairs') return (b.pairs_total||0) - (a.pairs_total||0);
       if (sortKey==='last_seen') return new Date(b.last_seen||0) - new Date(a.last_seen||0);
-      return (\n    <>\nb.confidence||0) - (a.confidence||0);
+      return (b.confidence||0) - (a.confidence||0);
     });
     return arr;
   }, [items, q, stateFilter, sortKey])
@@ -146,7 +146,8 @@ export default function Habitos(){
     return Array.from(map.entries()).sort((a,b)=> order.indexOf(a[0]) - order.indexOf(b[0]))
   }, [filtered])
 
-  return (\n    <>\n<section className="grid gap-4">
+  return (<>
+<section className="grid gap-4">
       <div className="card">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -253,7 +254,7 @@ export default function Habitos(){
           <div className="grid gap-2">
             {autos.map(a => {
               const sim = simById[a.id] || {}
-              return (\n    <>\n<div key={a.id} className="panel flex items-center justify-between gap-3">
+              return (<div key={a.id} className="panel flex items-center justify-between gap-3">
                   <div>
                     <div className="font-semibold">{a.name} {a.enabled? <span className="text-emerald-600 text-xs ml-2">Ativa</span> : <span className="text-slate-500 text-xs ml-2">Inativa</span>} {isExperimental(a) && <span className="text-amber-600 text-xs ml-2">Experimental</span>}</div>
                     <div className="muted text-xs">tipo: {a.kind} • janela: {scheduleStr(a)}</div>
@@ -413,4 +414,11 @@ export default function Habitos(){
         </div>
       </div>
     )}
-      </>\n  )\n}\n
+      </>
+  )
+}
+
+
+
+
+
