@@ -17,7 +17,7 @@ function Badge({ state }){
 function rowTitle(it){
   const trig = `${it.trigger_vendor}:${it.trigger_device_id}`
   const act = `${it.action_vendor}:${it.action_device_id}`
-  return `Quando ${trig} → ${it.trigger_event.toUpperCase()} então ${act} → ${it.action_event.toUpperCase()}`
+  return `Quando ${trig} -> ${String(it.trigger_event||'').toUpperCase()} entao ${act} -> ${String(it.action_event||'').toUpperCase()}`
 }
 
 export default function Habitos(){
@@ -29,6 +29,10 @@ export default function Habitos(){
   const [autoLoading, setAutoLoading] = useState(false)
   const [autoError, setAutoError] = useState('')
   const [simById, setSimById] = useState({})
+  // filtros e ordenacao
+  const [q, setQ] = useState('')
+  const [stateFilter, setStateFilter] = useState('all')
+  const [sortKey, setSortKey] = useState('confidence')
 
   async function refresh(){
     setLoading(true); setError('')
@@ -89,23 +93,70 @@ export default function Habitos(){
     }catch(e){ setAutoError(String(e.message||e)) }
   }
 
+  const countsByState = useMemo(()=>{
+    const c = { shadow:0, suggested:0, active:0, paused:0, retired:0 };
+    for (const it of items){ const k=String(it.state||'shadow'); if (c[k]!=null) c[k]++ }
+    return c;
+  }, [items])
+
+  const filtered = useMemo(()=>{
+    const needle = q.trim().toLowerCase();
+    let arr = items.slice();
+    if (stateFilter !== 'all') arr = arr.filter(it => String(it.state) === stateFilter);
+    if (needle) {
+      arr = arr.filter(it => {
+        const s = `${it.trigger_vendor}:${it.trigger_device_id} ${it.action_vendor}:${it.action_device_id} ${it.trigger_event} ${it.action_event} ${it.context_key||''}`.toLowerCase();
+        return s.includes(needle);
+      });
+    }
+    arr.sort((a,b)=>{
+      if (sortKey==='pairs') return (b.pairs_total||0) - (a.pairs_total||0);
+      if (sortKey==='last_seen') return new Date(b.last_seen||0) - new Date(a.last_seen||0);
+      return (b.confidence||0) - (a.confidence||0);
+    });
+    return arr;
+  }, [items, q, stateFilter, sortKey])
+
   const groups = useMemo(()=>{
     const map = new Map()
-    for (const it of items){ const k=String(it.state||'shadow'); if(!map.has(k)) map.set(k, []); map.get(k).push(it) }
-    return Array.from(map.entries()).sort((a,b)=> a[0].localeCompare(b[0]))
-  }, [items])
+    for (const it of filtered){ const k=String(it.state||'shadow'); if(!map.has(k)) map.set(k, []); map.get(k).push(it) }
+    const order = ['active','suggested','paused','shadow','retired'];
+    return Array.from(map.entries()).sort((a,b)=> order.indexOf(a[0]) - order.indexOf(b[0]))
+  }, [filtered])
 
   return (
     <section className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <div className="h2">Hábitos e Mini‑Rotinas</div>
-        <div className="flex items-center gap-2">
-          <button className="btn" onClick={refresh} disabled={loading}>{loading? 'Atualizando...' : 'Atualizar'}</button>
-          <button className="btn" onClick={refreshAutos} disabled={autoLoading}>{autoLoading? 'Carregando rotinas...' : 'Atualizar Rotinas'}</button>
+      <div className="card">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="h2">Habitos e Mini-Rotinas</div>
+            <div className="muted text-sm">Padroes detectados a partir do historico de dispositivos; ative, pause ou arquive.</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por dispositivo/evento..." className="panel px-3 py-2 text-sm outline-none" />
+            <button className="btn" onClick={refresh} disabled={loading}>{loading? 'Atualizando...' : 'Atualizar'}</button>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {['all','active','suggested','paused','shadow','retired'].map(k => (
+            <button key={k} onClick={()=> setStateFilter(k)} className={`pill ${stateFilter===k? 'pill-active':''}`}>
+              {k} {k!=='all' && (<span className="ml-1 text-xs muted">({countsByState[k]||0})</span>)}
+            </button>
+          ))}
+          <div className="ml-auto flex items-center gap-2 text-sm">
+            <span className="muted">Ordenar por</span>
+            <select value={sortKey} onChange={e=>setSortKey(e.target.value)} className="panel px-2 py-1 text-sm">
+              <option value="confidence">confianca</option>
+              <option value="last_seen">ultima ocorrencia</option>
+              <option value="pairs">nº pares</option>
+            </select>
+          </div>
         </div>
       </div>
+
       {error && <div className="text-red-600 text-sm">{error}</div>}
       {autoError && <div className="text-red-600 text-sm">{autoError}</div>}
+
       <div className="card">
         <div className="h2 mb-2">Rotinas de Energia</div>
         {autos.length===0 ? (
@@ -136,6 +187,7 @@ export default function Habitos(){
           </div>
         )}
       </div>
+
       <div className="grid gap-6">
         {groups.map(([state, list]) => (
           <div key={state} className="card">
@@ -145,10 +197,17 @@ export default function Habitos(){
             </div>
             <div className="grid gap-2">
               {list.map(it => (
-                <div key={it.id} className="panel flex items-center justify-between gap-3">
-                  <div>
+                <div key={it.id} className="panel flex items-start justify-between gap-3">
+                  <div className="grid gap-1">
                     <div className="font-semibold">{rowTitle(it)}</div>
-                    <div className="muted text-xs">conf: {(Number(it.confidence)||0).toFixed(2)} • pares: {it.pairs_total} • disparos: {it.triggers_total} • atraso médio: {it.avg_delay_s? Number(it.avg_delay_s).toFixed(1): '-'} s • ctx: {it.context_key||'global'}</div>
+                    <div className="muted text-xs flex flex-wrap items-center gap-2">
+                      <span>conf: {(Number(it.confidence)||0).toFixed(2)}</span>
+                      <span>• pares: {it.pairs_total}</span>
+                      <span>• disparos: {it.triggers_total}</span>
+                      <span>• atraso medio: {it.avg_delay_s? Number(it.avg_delay_s).toFixed(1): '-' } s</span>
+                      {it.context_key ? <span>• ctx: {it.context_key}</span> : null}
+                      {it.last_seen ? <span>• visto: {new Date(it.last_seen).toLocaleDateString()}</span> : null}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {it.state==='suggested' && (
@@ -173,8 +232,9 @@ export default function Habitos(){
             </div>
           </div>
         ))}
+
         <div className="card">
-          <div className="h2 mb-2">Timeline de decisões</div>
+          <div className="h2 mb-2">Timeline de decisoes</div>
           <div className="grid gap-2 max-h-[420px] overflow-auto pr-2">
             {logs.length===0 ? (
               <div className="muted text-sm">Sem eventos ainda.</div>
@@ -183,7 +243,7 @@ export default function Habitos(){
                 <div>
                   <div className="font-semibold text-sm">{new Date(l.ts||l.time||Date.now()).toLocaleString()} • {String(l.event)}</div>
                   <div className="muted text-xs">
-                    {`${l.trigger_vendor}:${l.trigger_device_id} → ${String(l.trigger_event||'').toUpperCase()}  ⇒  ${l.action_vendor}:${l.action_device_id} → ${String(l.action_event||'').toUpperCase()}`} {l.context_key? ` • ctx:${l.context_key}`:''} {l.state? ` • ${l.state}`:''}
+                    {`${l.trigger_vendor}:${l.trigger_device_id} -> ${String(l.trigger_event||'').toUpperCase()}  =>  ${l.action_vendor}:${l.action_device_id} -> ${String(l.action_event||'').toUpperCase()}`} {l.context_key? ` • ctx:${l.context_key}`:''} {l.state? ` • ${l.state}`:''}
                   </div>
                 </div>
               </div>
@@ -194,3 +254,4 @@ export default function Habitos(){
     </section>
   )
 }
+
