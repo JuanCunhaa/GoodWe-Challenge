@@ -17,5 +17,6 @@ export const habitsApi = {
   logs: (token, { limit=50, pattern_id=null }={}) => {
     const q = new URLSearchParams({ limit: String(limit), ...(pattern_id? { pattern_id: String(pattern_id) } : {}) }).toString();
     return request(`/habits/logs?${q}`, { token });
-  }
+  },
+  createManual: (token, payload) => request('/habits/manual', { method:'POST', token, body: payload }),
 };

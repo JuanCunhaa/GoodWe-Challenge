@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { habitsApi } from '../services/habitsApi.js'
 import { automationsApi } from '../services/automationsApi.js'
 import { loadSession } from '../services/authApi.js'
+import { integrationsApi } from '../services/integrationsApi.js'
 
 function Badge({ state }){
   const cls = {
@@ -33,6 +34,13 @@ export default function Habitos(){
   const [q, setQ] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const [sortKey, setSortKey] = useState('confidence')
+  // manual create form
+  const [form, setForm] = useState({
+    trigger_vendor: 'smartthings', trigger_device_id: '', trigger_event: 'on',
+    action_vendor: 'smartthings', action_device_id: '', action_event: 'off',
+    context_key: 'global', delay_s: ''
+  })
+  const [deviceOptions, setDeviceOptions] = useState([]) // [{vendor,id,name}]
 
   async function refresh(){
     setLoading(true); setError('')
@@ -60,6 +68,19 @@ export default function Habitos(){
   }
 
   useEffect(()=>{ refreshAutos() },[])
+
+  // load devices for manual create
+  useEffect(()=>{
+    (async ()=>{
+      try{
+        const token = localStorage.getItem('token'); if (!token) return;
+        const out = [];
+        try { const st = await integrationsApi.stDevices(token); (st.items||[]).forEach(d=> out.push({ vendor:'smartthings', id:d.id, name:d.name })) } catch {}
+        try { const tu = await integrationsApi.tuyaDevices(token); (tu.items||[]).forEach(d=> out.push({ vendor:'tuya', id:(d.id||d.device_id||d.devId), name:d.name })) } catch {}
+        setDeviceOptions(out);
+      } catch {}
+    })();
+  },[])
 
   async function onState(it, state){
     try{ const token = localStorage.getItem('token'); await habitsApi.setState(token, it.id, state); await refresh() } catch {}
@@ -158,6 +179,70 @@ export default function Habitos(){
       {autoError && <div className="text-red-600 text-sm">{autoError}</div>}
 
       <div className="card">
+        <div className="h2 mb-2">Criar padrão manualmente</div>
+        <div className="grid gap-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="panel grid gap-2">
+              <div className="font-semibold">Gatilho</div>
+              <div className="grid grid-cols-[120px_1fr_120px] gap-2">
+                <select className="panel" value={form.trigger_vendor} onChange={e=> setForm(v=>({...v, trigger_vendor:e.target.value}))}>
+                  <option value="smartthings">smartthings</option>
+                  <option value="tuya">tuya</option>
+                </select>
+                <select className="panel" value={form.trigger_device_id} onChange={e=> setForm(v=>({...v, trigger_device_id:e.target.value}))}>
+                  <option value="">selecione dispositivo...</option>
+                  {deviceOptions.filter(d=> d.vendor===form.trigger_vendor).map(d=> (
+                    <option key={`${d.vendor}|${d.id}`} value={d.id}>{d.name || d.id}</option>
+                  ))}
+                </select>
+                <select className="panel" value={form.trigger_event} onChange={e=> setForm(v=>({...v, trigger_event:e.target.value}))}>
+                  <option value="on">on</option>
+                  <option value="off">off</option>
+                </select>
+              </div>
+            </div>
+            <div className="panel grid gap-2">
+              <div className="font-semibold">Ação</div>
+              <div className="grid grid-cols-[120px_1fr_120px] gap-2">
+                <select className="panel" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
+                  <option value="smartthings">smartthings</option>
+                  <option value="tuya">tuya</option>
+                </select>
+                <select className="panel" value={form.action_device_id} onChange={e=> setForm(v=>({...v, action_device_id:e.target.value}))}>
+                  <option value="">selecione dispositivo...</option>
+                  {deviceOptions.filter(d=> d.vendor===form.action_vendor).map(d=> (
+                    <option key={`${d.vendor}|${d.id}`} value={d.id}>{d.name || d.id}</option>
+                  ))}
+                </select>
+                <select className="panel" value={form.action_event} onChange={e=> setForm(v=>({...v, action_event:e.target.value}))}>
+                  <option value="on">on</option>
+                  <option value="off">off</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <select className="panel" value={form.context_key} onChange={e=> setForm(v=>({...v, context_key:e.target.value}))}>
+              <option value="global">contexto: global</option>
+              <option value="day">contexto: day</option>
+              <option value="night">contexto: night</option>
+            </select>
+            <input className="panel" type="number" placeholder="atraso (s) opcional" value={form.delay_s} onChange={e=> setForm(v=>({...v, delay_s:e.target.value}))} />
+            <div className="flex items-center">
+              <button className="btn btn-primary" onClick={async ()=>{
+                try{
+                  const token = localStorage.getItem('token');
+                  const payload = { ...form, delay_s: form.delay_s!==''? Number(form.delay_s): null };
+                  await habitsApi.createManual(token, payload);
+                  await refresh();
+                } catch (e) { alert('Falha ao criar: '+ (e?.message||e)); }
+              }}>Criar padrão</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
         <div className="h2 mb-2">Rotinas de Energia</div>
         {autos.length===0 ? (
           <div className="muted text-sm">Sem rotinas cadastradas.</div>
@@ -254,4 +339,3 @@ export default function Habitos(){
     </section>
   )
 }
-
