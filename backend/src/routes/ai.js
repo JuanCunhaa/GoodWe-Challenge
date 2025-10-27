@@ -91,6 +91,92 @@ export function registerAiRoutes(router, { gw, helpers }){
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
 
+  // Generate and persist fixed suggestions (Bright)
+  async function buildBrightSuggestions({ req, helpers, user, hours }){
+    const plant_id = user.powerstation_id;
+    const tariff = (req.query.tariff!=null) ? Number(req.query.tariff) : (process.env.TARIFF_BRL_PER_KWH!=null ? Number(process.env.TARIFF_BRL_PER_KWH) : undefined);
+    // Devices overview
+    const devices = await devicesOverviewInternal(req, helpers).catch(()=> ({ items: [] }));
+    const items = Array.isArray(devices?.items) ? devices.items : [];
+    const { getDeviceUsageByHour } = await import('../analytics/service.js');
+    const minutes = Math.max(60, Number(hours||24)*60);
+    const out = [];
+    for (const d of items.slice(0, 60)){
+      if (d.essential === true) continue;
+      let usage = null;
+      try { usage = await getDeviceUsageByHour({ vendor: d.vendor, device_id: d.id, minutes }); } catch { usage = null }
+      const hoursArr = Array.isArray(usage?.hours) ? usage.hours : [];
+      if (!hoursArr.length) continue;
+      let best = { idx: 0, sum: 0 };
+      for (let i=0; i<hoursArr.length; i++){
+        const e0 = Number(hoursArr[i]?.energy_kwh||0);
+        const e1 = Number(hoursArr[(i+1)%hoursArr.length]?.energy_kwh||0);
+        const s = e0 + e1; if (s > best.sum) best = { idx: i, sum: s };
+      }
+      const estKwh = best.sum;
+      if (estKwh < 0.08) continue;
+      const h0 = hoursArr[best.idx]?.hour ?? 0;
+      const h1 = (h0+2) % 24;
+      const hh = (h)=> `${String(h).padStart(2,'0')}:00`;
+      const start = hh(h0); const end = hh(h1);
+      const nm = d.roomName ? `${d.name} (${d.roomName})` : d.name;
+      const brl = (typeof tariff==='number' && !Number.isNaN(tariff)) ? +(estKwh*tariff).toFixed(2) : null;
+      const text = `Sugestão: desligar ${nm} entre ${start} e ${end}. Motivo: consumo de ~${estKwh.toFixed(2)} kWh nesse período nas últimas 24h${brl!=null? ` (~R$ ${brl.toFixed(2)})`:''}.`;
+      out.push({
+        text,
+        device_vendor: d.vendor,
+        device_id: d.id,
+        device_name: d.name,
+        room_name: d.roomName||'',
+        start_hh: start,
+        end_hh: end,
+        est_savings_kwh: +estKwh.toFixed(3),
+        est_savings_brl: (brl!=null? brl: null),
+      });
+    }
+    // sort and cap
+    out.sort((a,b)=> (Number(b.est_savings_kwh||0) - Number(a.est_savings_kwh||0)));
+    return out.slice(0, 20);
+  }
+
+  // POST analyze (and allow GET for convenience)
+  router.post('/ai/bright/analyze', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try{
+      const hours = Number(req.query.hours || req.body?.hours || 24);
+      const items = await buildBrightSuggestions({ req, helpers, user, hours });
+      await replaceBrightSuggestions(user.id, items);
+      res.json({ ok:true, count: items.length, items });
+    } catch(e){ res.status(500).json({ ok:false, error: String(e) }); }
+  });
+  router.get('/ai/bright/analyze', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try{
+      const hours = Number(req.query.hours || 24);
+      const items = await buildBrightSuggestions({ req, helpers, user, hours });
+      await replaceBrightSuggestions(user.id, items);
+      res.json({ ok:true, count: items.length, items });
+    } catch(e){ res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
+  // GET saved Bright suggestions
+  router.get('/ai/bright/suggestions', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try{
+      const rows = await listBrightSuggestionsByUser(user.id);
+      // Normalize payload for UI
+      const items = rows.map(r => ({
+        text: r.text,
+        device: { vendor: r.device_vendor, device_id: r.device_id, name: r.device_name, roomName: r.room_name||'' },
+        window: { start: r.start_hh, end: r.end_hh },
+        est_savings_kwh: (r.est_savings_kwh!=null? Number(r.est_savings_kwh): undefined),
+        est_savings_brl: (r.est_savings_brl!=null? Number(r.est_savings_brl): undefined),
+        created_at: r.created_at || null,
+      }));
+      res.json({ ok:true, items });
+    } catch(e){ res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
   async function devicesOverviewInternal(req, helpers){
     const authHeader = req.headers['authorization'] || '';
     const base = helpers.deriveBaseUrl(req).replace(/\/$/, '') + '/api';
