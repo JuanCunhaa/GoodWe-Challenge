@@ -44,22 +44,25 @@ export function registerAlexaRoutes(router, { helpers }){
   router.all(`/alexa/${SKILL_ID}`, async (req, res) => {
     try{
       const input = String(req.query?.q || extractUtterance(req.body) || '').trim();
+      const debugFlag = (String(process.env.ALEXA_DEBUG||'')==='1') || /^(1|true)$/i.test(String(req.query?.debug||''));
       if (!input) return res.status(400).json({ ok:false, error:'input required' });
       const { answer, steps } = await callAssistant(req, { input });
 
       // If payload looks like Alexa request, shape Alexa response
       const looksAlexa = !!(req.body && typeof req.body==='object' && (req.body.session || req.body.context) && req.body.request);
-      if (looksAlexa){
+      if (looksAlexa && !debugFlag){
         return res.json({
           version: '1.0',
           response: { outputSpeech: { type: 'PlainText', text: answer }, shouldEndSession: true },
           sessionAttributes: {}
         });
       }
-      return res.json({ ok:true, answer, steps });
+      if (debugFlag){
+        try{ console.log('[alexa][debug]', { method:req.method, path:req.path, query:req.query, headers: { 'user-agent': req.headers['user-agent'] }, body: req.body, input, answer }); } catch {}
+      }
+      return res.json({ ok:true, input, answer, steps, received: debugFlag ? { method:req.method, query:req.query, body:req.body } : undefined });
     } catch (e) {
       return res.status(500).json({ ok:false, error: String(e) });
     }
   });
 }
-
