@@ -23,40 +23,54 @@ function integrateToIntervals(xy, baseDateStr){
 function safeNumber(v, d = null){ const n = Number(v); return Number.isFinite(n) ? n : d; }
 
 export function createGoodWeCollector(repo){
+  function firstXY(byKey, keys){
+    for (const k of keys){
+      const xy = byKey[String(k).toLowerCase()]?.xy;
+      if (Array.isArray(xy) && xy.length) return xy;
+    }
+    return [];
+  }
   async function handlePowerChart({ plant_id, date, response }){
     try {
       const lines = response?.data?.lines || [];
       const byKey = Object.fromEntries(lines.map(l => [String(l?.key||'').toLowerCase(), l]));
-      const pv = byKey['pcurve_power_pv']?.xy || byKey['pcurve_power_pvtotal']?.xy || [];
-      const load = byKey['pcurve_power_load']?.xy || [];
-      const batt = byKey['pcurve_power_battery']?.xy || [];
-      const grid = byKey['pcurve_power_meter']?.xy || [];
-      const soc = byKey['pcurve_power_soc']?.xy || [];
+      const pv = firstXY(byKey, ['pcurve_power_pv','pcurve_power_pvtotal']);
+      const load = firstXY(byKey, ['pcurve_power_load','pcurve_power_user','pcurve_power_house','pcurve_power_household']);
+      const batt = firstXY(byKey, ['pcurve_power_battery','pcurve_power_batt']);
+      const grid = firstXY(byKey, ['pcurve_power_meter','pcurve_power_grid','pcurve_power_pgrid','pcurve_power_pmeter']);
+      const soc = firstXY(byKey, ['pcurve_power_soc','pcurve_soc']);
 
       const genInts = integrateToIntervals(pv, date);
       const loadInts = integrateToIntervals(load, date);
       if (genInts.length) await repo.insertGenerationBatch(genInts.map(s => ({ plant_id, ...s })));
       if (loadInts.length) await repo.insertConsumptionBatch(loadInts.map(s => ({ plant_id, ...s })));
 
-      // Battery power (instant-based): store as samples (no kWh accumulation here)
+      // Battery SOC series (optional) and power series from chart: write multiple samples across the day
       if (Array.isArray(soc) && soc.length){
-        const last = soc[soc.length-1];
-        const ts = parseHM(date, last.x); const socPct = safeNumber(last.y);
-        await repo.insertBatterySample({ plant_id, timestamp: ts || new Date(), soc: socPct, power_kw: null });
+        for (const pt of soc){
+          const ts = parseHM(date, pt.x);
+          const socPct = safeNumber(pt.y);
+          if (ts && socPct != null) await repo.insertBatterySample({ plant_id, timestamp: ts, soc: socPct, power_kw: null });
+        }
       }
       if (Array.isArray(batt) && batt.length){
-        const last = batt[batt.length-1];
-        const ts = parseHM(date, last.x); const p = safeNumber(last.y, 0) / 1000;
-        await repo.insertBatterySample({ plant_id, timestamp: ts || new Date(), soc: null, power_kw: p });
+        for (const pt of batt){
+          const ts = parseHM(date, pt.x);
+          const p = safeNumber(pt.y, 0) / 1000; // W -> kW
+          if (ts) await repo.insertBatterySample({ plant_id, timestamp: ts, soc: null, power_kw: p });
+        }
       }
       // Grid instantaneous (import/export sign by convention: >0 import, <0 export)
       if (Array.isArray(grid) && grid.length){
-        const last = grid[grid.length-1];
-        const ts = parseHM(date, last.x); const w = safeNumber(last.y, 0);
-        const power_kw = Math.abs(w)/1000;
-        const import_kw = w > 0 ? Math.abs(w)/1000 : 0;
-        const export_kw = w < 0 ? Math.abs(w)/1000 : 0;
-        await repo.insertGridSample({ plant_id, timestamp: ts || new Date(), power_kw, import_kw, export_kw });
+        for (const pt of grid){
+          const ts = parseHM(date, pt.x);
+          const w = safeNumber(pt.y, 0);
+          if (!ts || !Number.isFinite(w)) continue;
+          const power_kw = Math.abs(w)/1000;
+          const import_kw = w > 0 ? Math.abs(w)/1000 : 0;
+          const export_kw = w < 0 ? Math.abs(w)/1000 : 0;
+          await repo.insertGridSample({ plant_id, timestamp: ts, power_kw, import_kw, export_kw });
+        }
       }
     } catch (e) {
       console.warn('[collector] handlePowerChart failed:', e?.message || e);
