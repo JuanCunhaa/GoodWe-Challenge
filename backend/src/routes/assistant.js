@@ -72,6 +72,73 @@
           const data = await apiJson(`/ai/devices/toggle-room`, { method:'POST', body: payload });
           return { ok: true, ...data };
         },
+        async habit_create({
+          trigger_name, trigger_device_id, trigger_vendor, trigger_event,
+          action_name, action_device_id, action_vendor, action_event,
+          context_period, delay_s
+        }){
+          // Resolve names to device ids/vendors via devices overview
+          const overview = await devicesOverviewInternal(req, helpers);
+          const items = Array.isArray(overview?.items) ? overview.items : [];
+          function norm(s){ return String(s||'').toLowerCase().normalize('NFKD').replace(/\p{Diacritic}/gu,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+          function pickByName(name){
+            const q = norm(name);
+            const ranked = items.map(d=>{
+              const n = norm(d.name);
+              let sc = 0;
+              if (n === q) sc = 100;
+              else if (n.includes(q)) sc = 80;
+              else {
+                const parts = q.split(' ').filter(Boolean);
+                let hit = 0; for (const p of parts){ if (n.includes(p)) hit++; }
+                sc = hit * 10 + (d.roomName && norm(d.roomName).includes(q) ? 5 : 0);
+              }
+              return { d, s: sc };
+            }).sort((a,b)=> b.s-a.s);
+            return ranked[0] && ranked[0].s>=10 ? ranked[0].d : null;
+          }
+
+          // Events mapping (pt -> api)
+          function mapEvent(x){
+            const v = String(x||'').toLowerCase();
+            if (['on','ligar','liga','1','true'].includes(v)) return 'on';
+            if (['off','desligar','desliga','0','false'].includes(v)) return 'off';
+            return v || 'on';
+          }
+          function mapContext(x){
+            const v = String(x||'').toLowerCase();
+            if (['global','sempre','qualquer','todos'].includes(v)) return 'global';
+            if (['day','dia','manha','tarde'].includes(v)) return 'day';
+            if (['night','noite','madrugada'].includes(v)) return 'night';
+            return 'global';
+          }
+
+          // Build trigger
+          let t_vendor = String(trigger_vendor||'').toLowerCase().trim();
+          let t_id = String(trigger_device_id||'').trim();
+          if (!t_id && trigger_name){ const match = pickByName(trigger_name); if (match) { t_id = String(match.id); t_vendor = String(match.vendor||t_vendor); } }
+          // Build action
+          let a_vendor = String(action_vendor||'').toLowerCase().trim();
+          let a_id = String(action_device_id||'').trim();
+          if (!a_id && action_name){ const match = pickByName(action_name); if (match) { a_id = String(match.id); a_vendor = String(match.vendor||a_vendor); } }
+
+          const te = mapEvent(trigger_event||'on');
+          const ae = mapEvent(action_event||'off');
+          const ctx = mapContext(context_period||'global');
+          const delay = (delay_s!=null && delay_s!=='') ? Number(delay_s) : null;
+
+          if (!t_vendor || !t_id || !te || !a_vendor || !a_id || !ae){
+            return { ok:false, error:'missing fields after resolution (trigger/action id/vendor and events)' };
+          }
+
+          const payload = {
+            trigger_vendor: t_vendor, trigger_device_id: t_id, trigger_event: te,
+            action_vendor: a_vendor, action_device_id: a_id, action_event: ae,
+            context_key: ctx, delay_s: delay
+          };
+          const data = await apiJson('/habits/manual', { method:'POST', body: payload });
+          return { ok:true, created: data?.pattern || { id: data?.id, ...payload, state:'active' } };
+        },
         async get_device_usage_by_hour({ vendor, device_id, window }){
           const v = String(vendor||'').toLowerCase();
           const id = String(device_id||'');
@@ -355,6 +422,11 @@
         { name: 'st_find_device_room', description: 'Encontra o comodo (nome) de um dispositivo SmartThings (por nome ou id).', parameters: { type: 'object', properties: { query: { type: 'string' }, device_id: { type: 'string' } }, additionalProperties: false } },
         { name: 'tuya_list_devices', description: 'Lista dispositivos Tuya vinculados (Smart Life e/ou Tuya app).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'tuya_device_status', description: 'Status de um device Tuya.', parameters: { type: 'object', properties: { device_id: { type: 'string' } }, required: ['device_id'], additionalProperties: false } },
+        { name: 'habit_create', description: 'Cria um padrão de hábito (Quando <gatilho> então <ação>) com período (global/dia/noite) e atraso opcional.', parameters: { type:'object', properties: {
+            trigger_name: { type:'string' }, trigger_device_id: { type:'string' }, trigger_vendor: { type:'string' }, trigger_event: { type:'string', enum:['on','off','ligar','desligar'] },
+            action_name: { type:'string' }, action_device_id: { type:'string' }, action_vendor: { type:'string' }, action_event: { type:'string', enum:['on','off','ligar','desligar'] },
+            context_period: { type:'string', enum:['global','dia','noite','day','night'] }, delay_s: { type:'number' }
+          }, additionalProperties: false } },
         { name: 'habits_list', description: 'Lista habitos detectados (padroes) com estado.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
         { name: 'habits_logs', description: 'Timeline dos habitos (ultimos eventos).', parameters: { type: 'object', properties: { limit: { type: 'number' }, pattern_id: { type: 'number' } }, additionalProperties: false } },
         { name: 'habit_set_state', description: 'Altera estado de um habito (shadow|suggested|active|paused|retired).', parameters: { type: 'object', properties: { id: { type: 'number' }, state: { type: 'string', enum: ['shadow','suggested','active','paused','retired'] } }, required: ['id','state'], additionalProperties: false } },
@@ -487,7 +559,7 @@ Regras:
   // Expor nomes das ferramentas para UIs externas (lista simples)
   router.get('/assistant/tools', (req, res) => {
     const items = [
-      'device_toggle','get_devices_overview','get_forecast','get_recommendations',
+      'device_toggle','get_devices_overview','get_forecast','get_recommendations','habit_create',
       'get_income_today','get_total_income','get_generation','get_monitor','get_inverters','get_weather','get_powerflow','get_evcharger_count','get_plant_detail','get_chart_by_plant','get_power_chart','get_warnings','list_powerstations',
       'energy_day','energy_range','live_overview','device_top_consumers',
       'devices_toggle_priority','devices_toggle_room','get_device_usage_by_hour','habits_list','habits_logs','habit_set_state','habit_undo'
