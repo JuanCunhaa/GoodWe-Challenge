@@ -121,7 +121,7 @@ export function registerEnergyRoutes(router, { helpers }){
         battKWh = +absWh.toFixed(3);
       }
 
-      const energy = { pv: +gen.toFixed(3), load: +load.toFixed(3), grid: +(gridImpKWh + gridExpKWh).toFixed(3), batt: battKWh, gridExp: gridExpKWh };
+      const energy = { pv: +gen.toFixed(3), load: +load.toFixed(3), grid: +(gridImpKWh + gridExpKWh).toFixed(3), batt: battKWh, gridExp: gridExpKWh, gridImp: gridImpKWh };
       res.json({ ok:true, date, energy });
     } catch (e) {
       res.status(500).json({ ok:false, error: String(e) });
@@ -189,7 +189,7 @@ export function registerEnergyRoutes(router, { helpers }){
           const absWh = integrateSeries({ prev, list }, start, end, (r)=> Math.abs(Number(r.power_kw||0)));
           battKWh = +absWh.toFixed(3);
         }
-        items.push({ date: ds, energy: { pv:+gen.toFixed(3), load:+load.toFixed(3), grid:+(gridImpKWh+gridExpKWh).toFixed(3), batt:battKWh, gridExp:gridExpKWh } });
+        items.push({ date: ds, energy: { pv:+gen.toFixed(3), load:+load.toFixed(3), grid:+(gridImpKWh+gridExpKWh).toFixed(3), batt:battKWh, gridExp:gridExpKWh, gridImp:gridImpKWh } });
       }
       res.json({ ok:true, items });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
