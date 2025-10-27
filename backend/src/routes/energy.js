@@ -40,7 +40,7 @@ function integrateSeries(rows, start, end, pick){
 }
 
 export function registerEnergyRoutes(router, { helpers }){
-  const { requireUser } = helpers;
+  const { requireUser, deriveBaseUrl } = helpers;
 
   router.get('/energy/day-aggregates', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
@@ -82,6 +82,25 @@ export function registerEnergyRoutes(router, { helpers }){
         const expWh = integrateSeries(rows, start, end, (r)=> Number(r.export_kw||0));
         gridImpKWh = +(impWh).toFixed(3); // since import_kw is kW, integrate gives kWh
         gridExpKWh = +(expWh).toFixed(3);
+      }
+
+      // Fallback: if no grid samples available (both zero), try computing from GoodWe day chart directly
+      if ((gridImpKWh === 0 && gridExpKWh === 0)){
+        try {
+          const base = deriveBaseUrl(req).replace(/\/$/, '') + '/api';
+          const authHeader = req.headers['authorization'] || '';
+          const url = `${base}/power-chart?id=${encodeURIComponent(plant_id)}&date=${encodeURIComponent(date)}&full_script=true`;
+          const r = await fetch(url, { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(20000) });
+          const j = await r.json().catch(()=>null);
+          const lines = j?.data?.lines || [];
+          const byKey = Object.fromEntries(lines.map(l => [String(l?.key||'').toLowerCase(), l]));
+          const grid = (byKey['pcurve_power_meter']?.xy || byKey['pcurve_power_grid']?.xy || byKey['pcurve_power_pgrid']?.xy || []);
+          function parseHM(hm){ try{ const [h,m]=String(hm).split(':').map(Number); return h*60+m }catch{return null} }
+          function integrateFiltered(xy, pred){ if(!Array.isArray(xy)||xy.length<2) return 0; let kwh=0; for(let i=1;i<xy.length;i++){ const a=xy[i-1], b=xy[i]; const m0=parseHM(a.x), m1=parseHM(b.x); if(m0==null||m1==null) continue; const dtH=Math.max(0,(m1-m0)/60); const y=Number(a.y)||0; if(pred(y)) kwh+=(Math.abs(y)*dtH)/1000; } return kwh; }
+          const imp = integrateFiltered(grid, y=> y>0);
+          const exp = integrateFiltered(grid, y=> y<0);
+          if (Number.isFinite(imp) && Number.isFinite(exp)) { gridImpKWh = +imp.toFixed(3); gridExpKWh = +exp.toFixed(3); }
+        } catch {}
       }
 
       // Battery charge/discharge energy (approx) from power_kw samples
