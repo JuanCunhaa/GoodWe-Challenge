@@ -810,6 +810,52 @@ export async function deleteHabitPattern(id){
   }
 }
 
+// Find active habit patterns that match a trigger (optionally by context)
+export async function listActiveHabitPatternsForTrigger({ user_id, trigger_vendor, trigger_device_id, trigger_event, context_key=null }){
+  const tv = String(trigger_vendor||'').toLowerCase();
+  const td = String(trigger_device_id||'');
+  const te = String(trigger_event||'').toLowerCase();
+  if (USE_PG) {
+    if (context_key) {
+      const r = await pgPool.query(
+        `SELECT id, action_vendor, action_device_id, action_event, COALESCE(avg_delay_s, 0) AS avg_delay_s
+         FROM habit_patterns
+         WHERE user_id=$1 AND trigger_vendor=$2 AND trigger_device_id=$3 AND trigger_event=$4 AND state='active' AND COALESCE(context_key,'global')=COALESCE($5,'global')
+         ORDER BY confidence DESC, last_seen DESC
+         LIMIT 5`, [user_id, tv, td, te, String(context_key||'global')]
+      );
+      return r.rows;
+    } else {
+      const r = await pgPool.query(
+        `SELECT id, action_vendor, action_device_id, action_event, COALESCE(avg_delay_s, 0) AS avg_delay_s
+         FROM habit_patterns
+         WHERE user_id=$1 AND trigger_vendor=$2 AND trigger_device_id=$3 AND trigger_event=$4 AND state='active'
+         ORDER BY confidence DESC, last_seen DESC
+         LIMIT 5`, [user_id, tv, td, te]
+      );
+      return r.rows;
+    }
+  } else {
+    if (context_key) {
+      return sqliteDb.prepare(
+        `SELECT id, action_vendor, action_device_id, action_event, COALESCE(avg_delay_s, 0) AS avg_delay_s
+         FROM habit_patterns
+         WHERE user_id=? AND trigger_vendor=? AND trigger_device_id=? AND trigger_event=? AND state='active' AND COALESCE(context_key,'global')=COALESCE(?, 'global')
+         ORDER BY confidence DESC, last_seen DESC
+         LIMIT 5`
+      ).all(user_id, tv, td, te, String(context_key||'global'));
+    } else {
+      return sqliteDb.prepare(
+      `SELECT id, action_vendor, action_device_id, action_event, COALESCE(avg_delay_s, 0) AS avg_delay_s
+         FROM habit_patterns
+         WHERE user_id=? AND trigger_vendor=? AND trigger_device_id=? AND trigger_event=? AND state='active'
+         ORDER BY confidence DESC, last_seen DESC
+         LIMIT 5`
+      ).all(user_id, tv, td, te);
+    }
+  }
+}
+
 // --------- Rooms + Device Meta (CRUD) ---------
 export async function listRoomsByUser(user_id){
   if (USE_PG) {

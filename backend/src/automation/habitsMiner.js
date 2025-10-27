@@ -1,4 +1,4 @@
-import { getDbEngine, getAnyUser, upsertHabitPattern, insertHabitLog, setHabitPatternState, getDeviceMetaMap } from '../db.js';
+import { getDbEngine, getAnyUser, upsertHabitPattern, insertHabitLog, setHabitPatternState, getDeviceMetaMap, listActiveHabitPatternsForTrigger } from '../db.js';
 
 function toDate(d){ return (d instanceof Date)? d : new Date(String(d)); }
 function hourPeriod(ts){ try{ const h = toDate(ts).getHours(); return (h>=6 && h<18)? 'day':'night' }catch{ return 'unknown' } }
@@ -114,9 +114,7 @@ export function startHabitMiner({ helpers }){
           delay_s: (found? delayS : null)
         });
         await insertHabitLog({ pattern_id: res.id, user_id: user.id, event: found? 'pair':'trigger', meta: { t0, t1: found? toDate(found.ts).getTime(): null } });
-        // if active and pair exists, execute action
-        // fetch state cheaply via confidence heuristic on client? Keep simple: rely on res; state not returned.
-        // We re-fetch only when executing
+        // 1) If we DETECT a pair and this pattern is active, we can log auto_action (mostly for reinforcement)
         if (found && svcToken){
           // try to execute only for patterns that are 'active'
           // Light DB check
@@ -132,6 +130,21 @@ export function startHabitMiner({ helpers }){
             const ok = await execAction({ base: apiBase, token: svcToken, vendor: found.vendor, device_id: found.device_id, action: found.event, user });
             await insertHabitLog({ pattern_id: res.id, user_id: user.id, event: 'auto_action', meta: { ok } });
           }
+        }
+
+        // 2) Execute any ACTIVE manual/learned patterns that match the TRIGGER 'a'
+        if (svcToken){
+          try{
+            const match = await listActiveHabitPatternsForTrigger({ user_id: user.id, trigger_vendor: a.vendor, trigger_device_id: a.device_id, trigger_event: a.event, context_key: ctx });
+            for (const p of (match||[])){
+              const delay = Number(p.avg_delay_s||0);
+              const run = async ()=>{
+                const ok = await execAction({ base: apiBase, token: svcToken, vendor: p.action_vendor, device_id: p.action_device_id, action: p.action_event, user });
+                try{ await insertHabitLog({ pattern_id: p.id, user_id: user.id, event: 'auto_action_from_pattern', meta: { ok } }) } catch {}
+              };
+              if (delay>0){ setTimeout(run, Math.round(delay*1000)); } else { run().catch(()=>{}) }
+            }
+          } catch {}
         }
       } catch {}
       lastTs = Math.max(lastTs, t0);
