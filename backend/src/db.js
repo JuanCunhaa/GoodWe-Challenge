@@ -800,6 +800,16 @@ export async function listHabitLogsByUser(user_id, { limit=50, pattern_id=null }
   }
 }
 
+// Delete a habit pattern (and its logs via cascade)
+export async function deleteHabitPattern(id){
+  if (USE_PG) {
+    await pgPool.query('DELETE FROM habit_patterns WHERE id=$1', [id]);
+  } else {
+    try { sqliteDb.prepare('DELETE FROM habit_logs WHERE pattern_id=?').run(id); } catch {}
+    sqliteDb.prepare('DELETE FROM habit_patterns WHERE id=?').run(id);
+  }
+}
+
 // --------- Rooms + Device Meta (CRUD) ---------
 export async function listRoomsByUser(user_id){
   if (USE_PG) {

@@ -1,4 +1,4 @@
-import { listHabitPatternsByUser, setHabitPatternState, incHabitUndo, insertHabitLog, listHabitLogsByUser, upsertHabitPattern } from '../db.js';
+import { listHabitPatternsByUser, setHabitPatternState, incHabitUndo, insertHabitLog, listHabitLogsByUser, upsertHabitPattern, deleteHabitPattern } from '../db.js';
 
 export function registerHabitsRoutes(router, { helpers }){
   const { requireUser } = helpers;
@@ -57,6 +57,18 @@ export function registerHabitsRoutes(router, { helpers }){
       const id = Number(req.params.id||0);
       await incHabitUndo(id);
       await insertHabitLog({ pattern_id: id, user_id: user.id, event: 'undo', meta: {} });
+      res.json({ ok:true });
+    } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
+  });
+
+  // Delete a habit pattern
+  router.delete('/habits/:id', async (req, res) => {
+    const user = await requireUser(req, res); if (!user) return;
+    try {
+      const id = Number(req.params.id||0);
+      // Optional: log before deletion
+      try { await insertHabitLog({ pattern_id: id, user_id: user.id, event: 'delete', meta: {} }); } catch {}
+      await deleteHabitPattern(id);
       res.json({ ok:true });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });

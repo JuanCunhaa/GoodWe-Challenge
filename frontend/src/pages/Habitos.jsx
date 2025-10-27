@@ -87,6 +87,10 @@ export default function Habitos(){
     try{ const token = localStorage.getItem('token'); await habitsApi.setState(token, it.id, state); await refresh() } catch {}
   }
   async function onUndo(it){ try{ const token = localStorage.getItem('token'); await habitsApi.undo(token, it.id); await refresh() } catch {} }
+  async function onRemove(it){
+    if (!confirm('Remover este padrão de hábito? Essa ação não pode ser desfeita.')) return;
+    try{ const token = localStorage.getItem('token'); await habitsApi.remove(token, it.id); await refresh() } catch {}
+  }
 
   const filtered = useMemo(()=>{
     let arr = Array.isArray(items)? items.slice(): []
@@ -111,13 +115,13 @@ export default function Habitos(){
         <div className="card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="h2">Habitos e Mini-Rotinas</div>
-              <div className="muted text-sm">Fluxo: Observados -> Sugeridos -> Ativos.</div>
+              <div className="h2">Hábitos e Mini-Rotinas</div>
+              <div className="muted text-sm">Fluxo: Observados → Sugeridos → Ativos.</div>
             </div>
             <div className="flex items-center gap-2">
               <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por dispositivo/evento..." className="panel px-3 py-2 text-sm outline-none" />
               <button className="btn" onClick={refresh} disabled={loading}>{loading? 'Atualizando...' : 'Atualizar'}</button>
-              <button className="btn btn-primary" onClick={()=> setShowManual(true)}>Criar padrao</button>
+              <button className="btn btn-primary" onClick={()=> setShowManual(true)}>Criar padrão</button>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -153,7 +157,7 @@ export default function Habitos(){
                   <div key={it.id} className="panel flex items-start justify-between gap-3">
                     <div className="grid gap-1">
                       <div className="font-semibold">
-                        {`Quando ${deviceLabel(it.trigger_vendor, it.trigger_device_id)} -> ${String(it.trigger_event||'').toUpperCase()} entao ${deviceLabel(it.action_vendor, it.action_device_id)} -> ${String(it.action_event||'').toUpperCase()}`}
+                        {`Quando ${deviceLabel(it.trigger_vendor, it.trigger_device_id)} → ${String(it.trigger_event||'').toUpperCase()} então ${deviceLabel(it.action_vendor, it.action_device_id)} → ${String(it.action_event||'').toUpperCase()}`}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -173,7 +177,10 @@ export default function Habitos(){
                         <button className="btn btn-ghost" onClick={()=> onState(it, 'retired')}>Arquivar</button>
                       )}
                       {it.state==='retired' && (
-                        <button className="btn" onClick={()=> onState(it, 'active')}>Desarquivar</button>
+                        <>
+                          <button className="btn" onClick={()=> onState(it, 'active')}>Desarquivar</button>
+                          <button className="btn btn-danger" onClick={()=> onRemove(it)}>Remover</button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -189,7 +196,7 @@ export default function Habitos(){
           <div className="absolute inset-0 bg-black/60 z-10" />
           <div className="card relative z-20 w-full max-w-3xl max-h-[90vh] overflow-auto" onClick={(e)=> e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <div className="h2">Criar padrao</div>
+              <div className="h2">Criar padrão</div>
               <button className="btn btn-ghost" onClick={()=> setShowManual(false)}>Fechar</button>
             </div>
             <div className="grid gap-3">
@@ -208,13 +215,13 @@ export default function Habitos(){
                       ))}
                     </select>
                     <select className="panel w-full" value={form.trigger_event} onChange={e=> setForm(v=>({...v, trigger_event:e.target.value}))}>
-                      <option value="on">on</option>
-                      <option value="off">off</option>
+                      <option value="on">ligar</option>
+                      <option value="off">desligar</option>
                     </select>
                   </div>
                 </div>
                 <div className="panel grid gap-2">
-                  <div className="font-semibold">Acao</div>
+                  <div className="font-semibold">Ação</div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <select className="panel w-full" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
                       <option value="smartthings">smartthings</option>
@@ -227,8 +234,8 @@ export default function Habitos(){
                       ))}
                     </select>
                     <select className="panel w-full" value={form.action_event} onChange={e=> setForm(v=>({...v, action_event:e.target.value}))}>
-                      <option value="on">on</option>
-                      <option value="off">off</option>
+                      <option value="on">ligar</option>
+                      <option value="off">desligar</option>
                     </select>
                   </div>
                 </div>
@@ -236,8 +243,8 @@ export default function Habitos(){
               <div className="grid gap-2 sm:grid-cols-3">
                 <select className="panel w-full" value={form.context_key} onChange={e=> setForm(v=>({...v, context_key:e.target.value}))}>
                   <option value="global">contexto: global</option>
-                  <option value="day">contexto: day</option>
-                  <option value="night">contexto: night</option>
+                  <option value="day">contexto: dia</option>
+                  <option value="night">contexto: noite</option>
                 </select>
                 <input className="panel w-full" type="number" placeholder="atraso (s) opcional" value={form.delay_s} onChange={e=> setForm(v=>({...v, delay_s:e.target.value}))} />
                 <div className="flex items-center justify-end gap-2">
@@ -251,7 +258,7 @@ export default function Habitos(){
                       await refresh()
                       setShowManual(false)
                     } catch (e) { alert('Falha ao criar: '+ (e?.message||e)) }
-                  }}>Criar padrao</button>
+                  }}>Criar padrão</button>
                 </div>
               </div>
             </div>
@@ -261,4 +268,3 @@ export default function Habitos(){
     </>
   )
 }
-
