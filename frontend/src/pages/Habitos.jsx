@@ -22,12 +22,12 @@ export default function Habitos(){
   const [logs, setLogs] = useState([])
   const [testing, setTesting] = useState({}) // id => true
 
-  // search and filter
+  // busca e filtro
   const [q, setQ] = useState('')
   const [stateFilter, setStateFilter] = useState('all')
   const stateLabels = { all:'Todos', active:'Ativos', suggested:'Sugeridos', paused:'Pausados', shadow:'Observados', retired:'Arquivados' }
 
-  // manual create
+  // criação manual
   const [showManual, setShowManual] = useState(false)
   const [form, setForm] = useState({
     trigger_vendor: 'smartthings', trigger_device_id: '', trigger_event: 'on',
@@ -57,7 +57,7 @@ export default function Habitos(){
 
   useEffect(()=>{ refresh() },[])
 
-  // Debug: poll habit logs when enabled
+  // Debug: poll de logs quando habilitado
   useEffect(()=>{
     if (!debug) return;
     let stop = false;
@@ -69,7 +69,7 @@ export default function Habitos(){
     return ()=>{ stop = true; clearInterval(id) };
   }, [debug])
 
-  // load devices for manual create
+  // carregar dispositivos para criação manual
   useEffect(()=>{
     (async ()=>{
       try{
@@ -88,7 +88,7 @@ export default function Habitos(){
     })()
   },[])
 
-  // quick label map vendor|id -> { name, roomName }
+  // mapa vendor|id -> { name, roomName }
   useEffect(()=>{
     const m = {}
     for (const d of deviceOptions){
@@ -102,9 +102,9 @@ export default function Habitos(){
   async function onState(it, state){
     try{ const token = localStorage.getItem('token'); await habitsApi.setState(token, it.id, state); await refresh() } catch {}
   }
-  // Removido: aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o de desfazer
+  // Removido: ação de desfazer
   async function onRemove(it){
-    if (!confirm('Remover este padrÃƒÆ’Ã‚Â£o de hÃƒÆ’Ã‚Â¡bito? Essa aÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o nÃƒÆ’Ã‚Â£o pode ser desfeita.')) return;
+    if (!confirm('Remover este padrão de hábito? Essa ação não pode ser desfeita.')) return;
     try{ const token = localStorage.getItem('token'); await habitsApi.remove(token, it.id); await refresh() } catch {}
   }
 
@@ -122,7 +122,7 @@ export default function Habitos(){
     const map = new Map()
     for (const it of filtered){ const k=String(it.state||'shadow'); if(!map.has(k)) map.set(k, []); map.get(k).push(it) }
     const order = ['active','suggested','paused','shadow','retired']
-    return Array.from(map.entries()).sort((a,b)=> order.indexOf(a[0]) - order.indexOf(b[0]))
+    return order.filter(k=> map.has(k)).map(k => [k, map.get(k)])
   }, [filtered])
 
   return (
@@ -131,8 +131,8 @@ export default function Habitos(){
         <div className="card">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="h2">HÃ¡bitos e Mini-Rotinas</div>
-              <div className="muted text-sm">Fluxo: Observados â†’ Sugeridos â†’ Ativos.</div>
+              <div className="h2">Hábitos e Mini-Rotinas</div>
+              <div className="muted text-sm">Fluxo: Observados → Sugeridos → Ativos.</div>
             </div>
             <div className="flex items-center gap-2">
               <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por dispositivo/evento..." className="panel px-3 py-2 text-sm outline-none" />
@@ -148,7 +148,7 @@ export default function Habitos(){
                   <button
                     key={k}
                     onClick={()=> setStateFilter(k)}
-                    className={`px-3 py-1.5 rounded-full text-sm transition ${active ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50'}`}
+                    className={`px-3 py-1.5 rounded-full text-sm transition ${active ? 'bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300 hover:bg-white/50 dark:hoverbg-gray-700/50'}`}
                     aria-pressed={active}
                   >
                     {stateLabels[k] || k}
@@ -179,7 +179,7 @@ export default function Habitos(){
                   <div key={it.id} className="panel flex items-start justify-between gap-3">
                     <div className="grid gap-1">
                       <div className="font-semibold">
-                        {`Quando ${deviceLabel(it.trigger_vendor, it.trigger_device_id)} ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${String(it.trigger_event||'').toUpperCase()} entÃƒÆ’Ã‚Â£o ${deviceLabel(it.action_vendor, it.action_device_id)} ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${String(it.action_event||'').toUpperCase()}`}
+                        {`Quando ${deviceLabel(it.trigger_vendor, it.trigger_device_id)} → ${String(it.trigger_event||'').toUpperCase()} então ${deviceLabel(it.action_vendor, it.action_device_id)} → ${String(it.action_event||'').toUpperCase()}`}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -232,9 +232,9 @@ export default function Habitos(){
                   <div className="muted text-sm">Sem eventos ainda.</div>
                 ) : logs.map(l => (
                   <div key={l.id} className="panel">
-                    <div className="font-semibold text-xs">{new Date(l.ts||Date.now()).toLocaleString()} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {String(l.event)}</div>
+                    <div className="font-semibold text-xs">{new Date(l.ts||Date.now()).toLocaleString()} • {String(l.event)}</div>
                     <div className="muted text-xs">
-                      {`${l.trigger_vendor}:${l.trigger_device_id} -> ${String(l.trigger_event||'').toUpperCase()}  =>  ${l.action_vendor}:${l.action_device_id} -> ${String(l.action_event||'').toUpperCase()}`} {l.context_key? ` ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ctx:${l.context_key}`:''} {l.state? ` ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ ${l.state}`:''}
+                      {`${l.trigger_vendor}:${l.trigger_device_id} -> ${String(l.trigger_event||'').toUpperCase()}  =>  ${l.action_vendor}:${l.action_device_id} -> ${String(l.action_event||'').toUpperCase()}`} {l.context_key? ` • ctx:${l.context_key}`:''} {l.state? ` • ${l.state}`:''}
                     </div>
                   </div>
                 ))}
@@ -249,7 +249,7 @@ export default function Habitos(){
           <div className="absolute inset-0 bg-black/60 z-10" />
           <div className="card relative z-20 w-full max-w-3xl max-h-[90vh] overflow-auto" onClick={(e)=> e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <div className="h2">Criar padrÃƒÆ’Ã‚Â£o</div>
+              <div className="h2">Criar padrão</div>
               <button className="btn btn-ghost" onClick={()=> setShowManual(false)}>Fechar</button>
             </div>
             <div className="grid gap-3">
@@ -274,7 +274,7 @@ export default function Habitos(){
                   </div>
                 </div>
                 <div className="panel grid gap-2">
-                  <div className="font-semibold">AÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â£o</div>
+                  <div className="font-semibold">Ação</div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <select className="panel w-full" value={form.action_vendor} onChange={e=> setForm(v=>({...v, action_vendor:e.target.value}))}>
                       <option value="smartthings">smartthings</option>
@@ -311,7 +311,7 @@ export default function Habitos(){
                       await refresh()
                       setShowManual(false)
                     } catch (e) { alert('Falha ao criar: '+ (e?.message||e)) }
-                  }}>Criar padrÃƒÆ’Ã‚Â£o</button>
+                  }}>Criar padrão</button>
                 </div>
               </div>
             </div>
@@ -321,3 +321,4 @@ export default function Habitos(){
     </>
   )
 }
+
