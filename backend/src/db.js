@@ -846,18 +846,21 @@ export async function getHabitPatternById(id){
   if (USE_PG) {
     const r = await pgPool.query('SELECT * FROM habit_patterns WHERE id=$1', [id]);
     return r.rows[0] || null;
+  } else {
+    return sqliteDb.prepare('SELECT * FROM habit_patterns WHERE id=?').get(id);
   }
+}
+
 // -------- Bright suggestions (persisted) --------
 export async function replaceBrightSuggestions(user_id, items){
   if (USE_PG) {
     const client = await pgPool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('DELETE FROM bright_suggestions WHERE user_id=', [user_id]);
+      await client.query('DELETE FROM bright_suggestions WHERE user_id=$1', [user_id]);
       for (const it of (Array.isArray(items)? items: [])){
         await client.query(
-          INSERT INTO bright_suggestions(user_id, text, device_vendor, device_id, device_name, room_name, start_hh, end_hh, est_savings_kwh, est_savings_brl)
-           VALUES(,,,,,,,,,),
+          'INSERT INTO bright_suggestions(user_id, text, device_vendor, device_id, device_name, room_name, start_hh, end_hh, est_savings_kwh, est_savings_brl) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
           [user_id, String(it.text||''), it.device_vendor||null, it.device_id||null, it.device_name||null, it.room_name||null, it.start_hh||null, it.end_hh||null, (it.est_savings_kwh!=null? Number(it.est_savings_kwh): null), (it.est_savings_brl!=null? Number(it.est_savings_brl): null)]
         );
       }
@@ -865,7 +868,7 @@ export async function replaceBrightSuggestions(user_id, items){
     } catch (e){ try{ await client.query('ROLLBACK') } catch{}; throw e } finally { client.release() }
   } else {
     try { sqliteDb.prepare('DELETE FROM bright_suggestions WHERE user_id=?').run(user_id); } catch {}
-    const stmt = sqliteDb.prepare(INSERT INTO bright_suggestions(user_id, created_at, text, device_vendor, device_id, device_name, room_name, start_hh, end_hh, est_savings_kwh, est_savings_brl) VALUES(?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?));
+    const stmt = sqliteDb.prepare("INSERT INTO bright_suggestions(user_id, created_at, text, device_vendor, device_id, device_name, room_name, start_hh, end_hh, est_savings_kwh, est_savings_brl) VALUES(?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     for (const it of (Array.isArray(items)? items: [])){
       try { stmt.run(user_id, String(it.text||''), it.device_vendor||null, it.device_id||null, it.device_name||null, it.room_name||null, it.start_hh||null, it.end_hh||null, (it.est_savings_kwh!=null? Number(it.est_savings_kwh): null), (it.est_savings_brl!=null? Number(it.est_savings_brl): null)); } catch {}
     }
@@ -874,13 +877,10 @@ export async function replaceBrightSuggestions(user_id, items){
 
 export async function listBrightSuggestionsByUser(user_id){
   if (USE_PG) {
-    const r = await pgPool.query('SELECT * FROM bright_suggestions WHERE user_id= ORDER BY est_savings_kwh DESC NULLS LAST, created_at DESC', [user_id]);
+    const r = await pgPool.query('SELECT * FROM bright_suggestions WHERE user_id=$1 ORDER BY est_savings_kwh DESC NULLS LAST, created_at DESC', [user_id]);
     return r.rows;
   } else {
     return sqliteDb.prepare('SELECT * FROM bright_suggestions WHERE user_id=? ORDER BY est_savings_kwh DESC, created_at DESC').all(user_id);
-  }
-} else {
-    return sqliteDb.prepare('SELECT * FROM habit_patterns WHERE id=?').get(id);
   }
 }
 
