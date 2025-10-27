@@ -42,7 +42,8 @@ export default function Habitos(){
     action_vendor: 'smartthings', action_device_id: '', action_event: 'off',
     context_key: 'global', delay_s: ''
   })
-  const [deviceOptions, setDeviceOptions] = useState([]) // [{vendor,id,name}]
+  const [deviceOptions, setDeviceOptions] = useState([]) // [{vendor,id,name,roomName?}]
+  const [nameByKey, setNameByKey] = useState({}) // key => { name, roomName }
 
   async function refresh(){
     setLoading(true); setError('')
@@ -77,12 +78,36 @@ export default function Habitos(){
       try{
         const token = localStorage.getItem('token'); if (!token) return;
         const out = [];
-        try { const st = await integrationsApi.stDevices(token); (st.items||[]).forEach(d=> out.push({ vendor:'smartthings', id:d.id, name:d.name })) } catch {}
-        try { const tu = await integrationsApi.tuyaDevices(token); (tu.items||[]).forEach(d=> out.push({ vendor:'tuya', id:(d.id||d.device_id||d.devId), name:d.name })) } catch {}
+        try {
+          const st = await integrationsApi.stDevices(token);
+          (st.items||[]).forEach(d=> out.push({ vendor:'smartthings', id:d.id, name:d.name, roomName: d.roomName||'' }))
+        } catch {}
+        try {
+          const tu = await integrationsApi.tuyaDevices(token);
+          (tu.items||[]).forEach(d=> out.push({ vendor:'tuya', id:(d.id||d.device_id||d.devId), name:d.name, roomName: d.roomName||'' }))
+        } catch {}
         setDeviceOptions(out);
       } catch {}
     })();
   },[])
+
+  // Build quick label map vendor|id -> { name, roomName }
+  useEffect(()=>{
+    const m = {};
+    for (const d of deviceOptions){
+      const key = `${String(d.vendor||'').toLowerCase()}|${String(d.id||'')}`;
+      if (!key.includes('|')) continue;
+      m[key] = { name: d.name||String(d.id||''), roomName: d.roomName||'' };
+    }
+    setNameByKey(m);
+  }, [deviceOptions]);
+
+  function deviceLabel(vendor, id){
+    const key = `${String(vendor||'').toLowerCase()}|${String(id||'')}`;
+    const it = nameByKey[key];
+    if (!it) return `${vendor}:${id}`;
+    return it.roomName ? `${it.name} (${it.roomName})` : it.name;
+  }
 
   async function onState(it, state){
     try{ const token = localStorage.getItem('token'); await habitsApi.setState(token, it.id, state); await refresh() } catch {}
@@ -153,7 +178,7 @@ export default function Habitos(){
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="h2">Habitos e Mini-Rotinas</div>
-            <div className="muted text-sm">Padroes detectados a partir do historico de dispositivos; ative, pause ou arquive.</div>
+            <div className="muted text-sm">Fluxo: Observados -> Sugeridos -> Ativos. O sistema detecta padroes a partir de ligas/desligas dos dispositivos.</div>
           </div>
           <div className="flex items-center gap-2">
             <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar por dispositivo/evento..." className="panel px-3 py-2 text-sm outline-none" />
@@ -298,7 +323,9 @@ export default function Habitos(){
               {list.map(it => (
                 <div key={it.id} className="panel flex items-start justify-between gap-3">
                   <div className="grid gap-1">
-                    <div className="font-semibold">{rowTitle(it)}</div>
+                    <div className="font-semibold">
+                      {`Quando ${deviceLabel(it.trigger_vendor, it.trigger_device_id)} -> ${String(it.trigger_event||'').toUpperCase()} entao ${deviceLabel(it.action_vendor, it.action_device_id)} -> ${String(it.action_event||'').toUpperCase()}`}
+                    </div>
                     <div className="muted text-xs flex flex-wrap items-center gap-2">
                       <span>conf: {(Number(it.confidence)||0).toFixed(2)}</span>
                       <span>• pares: {it.pairs_total}</span>
