@@ -86,7 +86,7 @@ export default function Habitos(){
   async function onState(it, state){
     try{ const token = localStorage.getItem('token'); await habitsApi.setState(token, it.id, state); await refresh() } catch {}
   }
-  async function onUndo(it){ try{ const token = localStorage.getItem('token'); await habitsApi.undo(token, it.id); await refresh() } catch {} }
+  // Removido: ação de desfazer
   async function onRemove(it){
     if (!confirm('Remover este padrão de hábito? Essa ação não pode ser desfeita.')) return;
     try{ const token = localStorage.getItem('token'); await habitsApi.remove(token, it.id); await refresh() } catch {}
@@ -167,7 +167,6 @@ export default function Habitos(){
                       {it.state==='active' && (
                         <>
                           <button className="btn" onClick={()=> onState(it, 'paused')}>Pausar</button>
-                          <button className="btn btn-ghost" onClick={()=> onUndo(it)}>Desfazer</button>
                         </>
                       )}
                       {it.state==='paused' && (
