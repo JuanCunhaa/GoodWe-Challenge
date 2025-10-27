@@ -6,7 +6,15 @@ export function registerHabitsRoutes(router, { helpers }){
   router.get('/habits', async (req, res) => {
     const user = await requireUser(req, res); if (!user) return;
     try {
-      const items = await listHabitPatternsByUser(user.id);
+      let items = await listHabitPatternsByUser(user.id);
+      // Filter out degenerate patterns: same device and same event (ex.: TV ON -> TV ON)
+      items = (Array.isArray(items)? items: []).filter(it => {
+        const sameDevice = String(it.trigger_vendor||'').toLowerCase() === String(it.action_vendor||'').toLowerCase()
+          && String(it.trigger_device_id||'') === String(it.action_device_id||'');
+        const sameEvent = String(it.trigger_event||'').toLowerCase() === String(it.action_event||'').toLowerCase();
+        // Allow same device only if events differ (ex.: ON -> OFF). Block same device + same event.
+        return !(sameDevice && sameEvent);
+      });
       res.json({ ok:true, items });
     } catch (e) { res.status(500).json({ ok:false, error: String(e) }); }
   });
@@ -22,6 +30,11 @@ export function registerHabitsRoutes(router, { helpers }){
       } = req.body || {};
       const reqFields = [trigger_vendor, trigger_device_id, trigger_event, action_vendor, action_device_id, action_event];
       if (reqFields.some(v => v == null || String(v).trim() === '')) return res.status(422).json({ ok:false, error:'missing fields' });
+      // Reject degenerate patterns: same device and same event
+      const sameDevice = String(trigger_vendor).toLowerCase() === String(action_vendor).toLowerCase()
+        && String(trigger_device_id) === String(action_device_id);
+      const sameEvent = String(trigger_event).toLowerCase() === String(action_event).toLowerCase();
+      if (sameDevice && sameEvent) return res.status(422).json({ ok:false, error:'invalid pattern: trigger equals action (same device and event)' });
       const payload = {
         user_id: user.id,
         trigger_vendor: String(trigger_vendor).toLowerCase(),

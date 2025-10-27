@@ -102,18 +102,20 @@ export function startHabitMiner({ helpers }){
       }
       const ctx = hourPeriod(a.ts);
       try {
+        // Only upsert when we actually find a pair on a different device.
+        if (!found) { lastTs = Math.max(lastTs, t0); continue; }
         const res = await upsertHabitPattern({
           user_id: user.id,
           trigger_vendor: a.vendor,
           trigger_device_id: String(a.device_id),
           trigger_event: a.event,
-          action_vendor: found? found.vendor : a.vendor,
-          action_device_id: found? String(found.device_id) : String(a.device_id),
-          action_event: found? found.event : a.event,
+          action_vendor: found.vendor,
+          action_device_id: String(found.device_id),
+          action_event: found.event,
           context_key: ctx,
-          delay_s: (found? delayS : null)
+          delay_s: delayS
         });
-        await insertHabitLog({ pattern_id: res.id, user_id: user.id, event: found? 'pair':'trigger', meta: { t0, t1: found? toDate(found.ts).getTime(): null } });
+        await insertHabitLog({ pattern_id: res.id, user_id: user.id, event: 'pair', meta: { t0, t1: toDate(found.ts).getTime() } });
         // 1) If we DETECT a pair and this pattern is active, we can log auto_action (mostly for reinforcement)
         if (found && svcToken){
           // try to execute only for patterns that are 'active'
